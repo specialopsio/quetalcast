@@ -38,23 +38,27 @@ export function useSignaling(url: string): UseSignalingReturn {
       wsRef.current = ws;
 
       ws.onopen = () => {
+        console.log('[WS] Connected');
         setConnected(true);
         reconnectDelayRef.current = 1000; // reset backoff on success
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
+        console.log(`[WS] Closed (code: ${event.code}, reason: ${event.reason || 'none'})`);
         setConnected(false);
         // Auto-reconnect with exponential backoff
         if (shouldReconnectRef.current) {
           const delay = reconnectDelayRef.current;
           reconnectDelayRef.current = Math.min(delay * 2, 15000); // max 15s
+          console.log(`[WS] Reconnecting in ${delay}ms...`);
           reconnectTimerRef.current = setTimeout(() => {
             if (shouldReconnectRef.current) connect();
           }, delay);
         }
       };
 
-      ws.onerror = () => {
+      ws.onerror = (event) => {
+        console.warn('[WS] Error:', event);
         // onclose will fire after onerror, which handles reconnect
       };
 
