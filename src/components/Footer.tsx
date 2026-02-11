@@ -62,12 +62,23 @@ export function Footer() {
               </section>
 
               <section>
+                <h3 className="text-foreground font-semibold mb-1">Level Meter</h3>
+                <p>
+                  The stereo level meter shows your audio input in real time with separate
+                  left (L) and right (R) channels. It's calibrated in <strong className="text-foreground">dBFS</strong> (decibels
+                  relative to full scale). The meter turns green, yellow, then red as
+                  levels increase. A <strong className="text-foreground">CLIP</strong> warning
+                  appears if audio hits the maximum. Aim to keep levels in the green,
+                  peaking into yellow.
+                </p>
+              </section>
+
+              <section>
                 <h3 className="text-foreground font-semibold mb-1">Going On Air</h3>
                 <p>
                   Press <strong className="text-foreground">Go On Air</strong> to start
-                  broadcasting. Your audio will begin streaming to anyone who joins with
-                  your Room ID. Copy the receiver link using the button in the top right
-                  to share it.
+                  broadcasting. A timer will show how long you've been live. Copy the
+                  receiver link using the button in the top right to share with listeners.
                 </p>
               </section>
 
@@ -75,9 +86,13 @@ export function Footer() {
                 <h3 className="text-foreground font-semibold mb-1">Mixer Controls</h3>
                 <p>
                   While on air, you'll see controls for your microphone volume, a mute
-                  button, and two special modes:
+                  button, and several tools:
                 </p>
                 <ul className="list-disc list-inside mt-1 space-y-1 pl-1">
+                  <li>
+                    <strong className="text-foreground">Mute</strong> — Instantly silence
+                    your mic without changing the volume slider.
+                  </li>
                   <li>
                     <strong className="text-foreground">Listen</strong> — Hear what's
                     being broadcast through your own speakers (off by default to prevent
@@ -87,6 +102,13 @@ export function Footer() {
                     <strong className="text-foreground">Cue</strong> — Preview mode.
                     Nothing is sent to listeners. Soundboard audio plays only for you so
                     you can preview clips before sending them on air.
+                  </li>
+                  <li>
+                    <strong className="text-foreground">Limiter</strong> — Prevents
+                    the broadcast output from exceeding the selected level. Choose 0 dB
+                    (default, catches only clipping), -3 dB, -6 dB, or -12 dB for
+                    progressively more aggressive limiting. Useful for taming loud
+                    soundboard clips or sudden mic peaks.
                   </li>
                 </ul>
               </section>
@@ -100,7 +122,7 @@ export function Footer() {
                 <ul className="list-disc list-inside mt-1 space-y-1 pl-1">
                   <li>Tap the pad to <strong className="text-foreground">play</strong> or <strong className="text-foreground">stop</strong> the clip.</li>
                   <li>Use the <strong className="text-foreground">loop icon</strong> (top right) to toggle looping.</li>
-                  <li>Use the <strong className="text-foreground">gear icon</strong> (bottom right) to rename the pad or adjust its volume (up to 300%).</li>
+                  <li>Use the <strong className="text-foreground">gear icon</strong> (bottom right) to rename the pad or adjust its volume (up to 300% for quiet files).</li>
                   <li>Use the <strong className="text-foreground">X</strong> (top left) to remove the clip.</li>
                 </ul>
                 <p className="mt-1">
@@ -131,18 +153,19 @@ export function Footer() {
               <section>
                 <h3 className="text-foreground font-semibold mb-1">Listening</h3>
                 <p>
-                  After joining, you'll see a <strong className="text-foreground">Click to
-                  Listen</strong> button. Browsers require a click before they can play
-                  audio — this is normal. Tap it and you'll start hearing the broadcast.
+                  After joining, you'll see a <strong className="text-foreground">Tap to
+                  Listen</strong> button. Your browser needs a tap before it can play
+                  audio — just press the button and you'll start hearing the broadcast.
                 </p>
               </section>
 
               <section>
                 <h3 className="text-foreground font-semibold mb-1">Audio Level</h3>
                 <p>
-                  Once audio is playing, a level meter shows the incoming audio strength
-                  in real time. If you see the meter moving but hear nothing, check your
-                  device volume and speaker output.
+                  Once audio is playing, a stereo level meter shows the incoming audio
+                  strength on left (L) and right (R) channels in real time, measured in
+                  dB. If you see the meter moving but hear nothing, check your device
+                  volume and speaker output.
                 </p>
               </section>
 
@@ -150,7 +173,8 @@ export function Footer() {
                 <h3 className="text-foreground font-semibold mb-1">When the Broadcast Ends</h3>
                 <p>
                   If the broadcaster goes off air, you'll see a message letting you know.
-                  You can paste a new Room ID to join a different broadcast at any time.
+                  You can tap <strong className="text-foreground">Retry this broadcast</strong> to
+                  refresh, or paste a new Room ID to join a different broadcast.
                 </p>
               </section>
             </TabsContent>
