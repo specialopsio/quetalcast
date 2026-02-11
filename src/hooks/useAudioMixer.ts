@@ -21,14 +21,14 @@ export interface UseAudioMixerReturn {
  *   micSource → micGain → broadcastBus
  *   soundboardBus → sbToBroadcastGain → broadcastBus
  *   soundboardBus → sbLocalGain → ctx.destination
- *   broadcastBus → limiter → clipper → dest (→ mixedStream → WebRTC)
+ *   broadcastBus → broadcastOutGain → limiter → clipper → dest (→ mixedStream → WebRTC)
  *   broadcastBus → listenGain → ctx.destination
  *
  * Gain state table:
- *   Default  (listen OFF, cue OFF): micGain=vol, broadcastBus=1, sbToBroadcast=1, sbLocal=1, listen=0
- *   Listen ON (cue OFF):            micGain=vol, broadcastBus=1, sbToBroadcast=1, sbLocal=0, listen=1
- *   Cue ON:                         micGain=vol, broadcastBus=0, sbToBroadcast=0, sbLocal=1, listen=0
- *                                   (nothing reaches receiver; soundboard plays locally only)
+ *   Default  (listen OFF, cue OFF): micGain=vol, broadcastOutGain=1, sbToBroadcast=1, sbLocal=1, listen=0
+ *   Listen ON (cue OFF):            micGain=vol, broadcastOutGain=1, sbToBroadcast=1, sbLocal=0, listen=1
+ *   Cue ON:                         micGain=vol, broadcastOutGain=0, sbToBroadcast=0, sbLocal=1, listen=1
+ *                                   (nothing reaches receiver; soundboard + mic/effects play locally)
  */
 export function useAudioMixer(): UseAudioMixerReturn {
   const ctxRef = useRef<AudioContext | null>(null);
@@ -44,6 +44,7 @@ export function useAudioMixer(): UseAudioMixerReturn {
   const sbToBroadcastGainRef = useRef<GainNode | null>(null);
   const sbLocalGainRef = useRef<GainNode | null>(null);
   const listenGainRef = useRef<GainNode | null>(null);
+  const broadcastOutGainRef = useRef<GainNode | null>(null);
   const limiterRef = useRef<DynamicsCompressorNode | null>(null);
   const clipperRef = useRef<WaveShaperNode | null>(null);
 
@@ -87,6 +88,7 @@ export function useAudioMixer(): UseAudioMixerReturn {
     const sbToBroadcastGain = ctx.createGain(); // 0 in cue mode
     const sbLocalGain = ctx.createGain(); // soundboard → local speakers
     const listenGain = ctx.createGain(); // broadcast → local speakers
+    const broadcastOutGain = ctx.createGain(); // gates audio to WebRTC (0 in cue mode)
 
     // Force broadcastBus to always process in stereo so a mono mic
     // is properly upmixed to both L and R channels before output.
@@ -100,6 +102,7 @@ export function useAudioMixer(): UseAudioMixerReturn {
     sbToBroadcastGain.gain.value = 1;
     sbLocalGain.gain.value = 1;
     listenGain.gain.value = 0; // listen off by default
+    broadcastOutGain.gain.value = 1;
 
     // Output limiter: compressor (smooth gain reduction) + clipper (hard ceiling)
     const limiter = ctx.createDynamicsCompressor();
@@ -122,8 +125,9 @@ export function useAudioMixer(): UseAudioMixerReturn {
     // soundboardBus → sbLocalGain → ctx.destination
     soundboardBus.connect(sbLocalGain);
     sbLocalGain.connect(ctx.destination);
-    // broadcastBus → limiter → clipper → dest (WebRTC output)
-    broadcastBus.connect(limiter);
+    // broadcastBus → broadcastOutGain → limiter → clipper → dest (WebRTC output)
+    broadcastBus.connect(broadcastOutGain);
+    broadcastOutGain.connect(limiter);
     limiter.connect(clipper);
     clipper.connect(dest);
     // broadcastBus → listenGain → ctx.destination
@@ -139,6 +143,7 @@ export function useAudioMixer(): UseAudioMixerReturn {
     sbToBroadcastGainRef.current = sbToBroadcastGain;
     sbLocalGainRef.current = sbLocalGain;
     listenGainRef.current = listenGain;
+    broadcastOutGainRef.current = broadcastOutGain;
     limiterRef.current = limiter;
     clipperRef.current = clipper;
 
@@ -228,20 +233,24 @@ export function useAudioMixer(): UseAudioMixerReturn {
   }, []);
 
   const setCueMode = useCallback((on: boolean) => {
-    // Mute the entire broadcast output in cue mode so receiver hears nothing
-    if (broadcastBusRef.current) {
-      broadcastBusRef.current.gain.value = on ? 0 : 1;
+    // Mute only the WebRTC output path in cue mode — broadcastBus stays live
+    // so mic + effects can still be monitored locally via listenGain.
+    if (broadcastOutGainRef.current) {
+      broadcastOutGainRef.current.gain.value = on ? 0 : 1;
     }
     if (sbToBroadcastGainRef.current) {
       sbToBroadcastGainRef.current.gain.value = on ? 0 : 1;
     }
-    // In cue mode: sbLocal=1 (hear soundboard locally)
-    // When cue off: defer to the listen state set by setListening
     if (on) {
+      // Enable local monitoring for mic/effects and soundboard
+      if (listenGainRef.current) {
+        listenGainRef.current.gain.value = 1;
+      }
       if (sbLocalGainRef.current) {
         sbLocalGainRef.current.gain.value = 1;
       }
     }
+    // When cue off: defer to the listen state set by setListening
   }, []);
 
   const setLimiterThreshold = useCallback((db: LimiterThreshold) => {
