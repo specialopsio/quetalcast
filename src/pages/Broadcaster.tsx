@@ -8,7 +8,7 @@ import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
-import { Copy, Mic, MicOff, Radio, Headphones, Music, Sparkles, Zap, Plug2, Circle, Square, Users, Disc3, Keyboard } from 'lucide-react';
+import { Copy, Mic, MicOff, Radio, Headphones, Music, Sparkles, Zap, Plug2, Circle, Square, Users, Disc3, Keyboard, ListMusic, Trash2 } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import {
   Select,
@@ -27,6 +27,8 @@ import { ChatPanel } from '@/components/ChatPanel';
 import { IntegrationsSheet } from '@/components/IntegrationsSheet';
 import { useIntegrationStream } from '@/hooks/useIntegrationStream';
 import { getIntegration, type IntegrationConfig } from '@/lib/integrations';
+import { getPresets, savePreset, deletePreset, type Preset } from '@/lib/presets';
+import { type EffectName, CHAIN_ORDER } from '@/hooks/useMicEffects';
 import { useRecorder } from '@/hooks/useRecorder';
 import { useKeyboardShortcuts, SHORTCUT_MAP } from '@/hooks/useKeyboardShortcuts';
 import {
@@ -61,6 +63,9 @@ const Broadcaster = () => {
   const [listenerCount, setListenerCount] = useState(0);
   const [nowPlaying, setNowPlaying] = useState('');
   const nowPlayingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [presets, setPresets] = useState(() => getPresets());
+  const [savePresetOpen, setSavePresetOpen] = useState(false);
+  const [newPresetName, setNewPresetName] = useState('');
   const [qualityMode, setQualityMode] = useState<AudioQuality>('auto');
   const audioRef = useRef<HTMLAudioElement>(null);
 
@@ -343,6 +348,48 @@ const Broadcaster = () => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const handleApplyPreset = (preset: Preset) => {
+    handleMicVolumeChange(preset.micVolume);
+    handleLimiterChange(String(preset.limiterDb));
+    handleQualityChange(preset.qualityMode);
+    // Apply effects
+    for (const effectName of CHAIN_ORDER) {
+      const effectState = preset.effects[effectName];
+      if (effectState) {
+        // Toggle to match preset state
+        if (micEffects.effects[effectName].enabled !== effectState.enabled) {
+          micEffects.toggleEffect(effectName);
+        }
+        // Update params
+        for (const [param, value] of Object.entries(effectState.params)) {
+          micEffects.updateEffect(effectName, param, value);
+        }
+      }
+    }
+    addLog(`Preset loaded: ${preset.name}`);
+  };
+
+  const handleSavePreset = () => {
+    const name = newPresetName.trim();
+    if (!name) return;
+    savePreset(name, {
+      micVolume,
+      limiterDb,
+      qualityMode,
+      effects: { ...micEffects.effects } as Record<EffectName, { enabled: boolean; params: Record<string, number> }>,
+    });
+    setPresets(getPresets());
+    setSavePresetOpen(false);
+    setNewPresetName('');
+    addLog(`Preset saved: ${name}`);
+  };
+
+  const handleDeletePreset = (name: string) => {
+    deletePreset(name);
+    setPresets(getPresets());
+    addLog(`Preset deleted: ${name}`);
   };
 
   const handleNowPlayingChange = (value: string) => {
@@ -652,6 +699,56 @@ const Broadcaster = () => {
               </Select>
             </div>
 
+            {/* Presets */}
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+              <div className="flex flex-col">
+                <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <ListMusic className="h-3 w-3" />
+                  Presets
+                </span>
+                <span className="text-[10px] text-muted-foreground">
+                  Save and recall mixer + effects profiles
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Select onValueChange={(val) => {
+                  if (val === '__save__') {
+                    setSavePresetOpen(true);
+                  } else {
+                    const preset = presets.find((p) => p.name === val);
+                    if (preset) handleApplyPreset(preset);
+                  }
+                }}>
+                  <SelectTrigger className="w-[140px] h-7 bg-secondary border-border text-xs font-mono shrink-0">
+                    <SelectValue placeholder="Load preset…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {presets.map((p) => (
+                      <SelectItem key={p.name} value={p.name} className="text-xs font-mono">
+                        <div className="flex items-center justify-between w-full gap-2">
+                          <span>{p.name}</span>
+                          {!p.builtIn && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeletePreset(p.name);
+                              }}
+                              className="text-muted-foreground/40 hover:text-destructive transition-colors"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="__save__" className="text-xs font-mono text-primary">
+                      Save Current…
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             {/* Recording */}
             <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
               <div className="flex flex-col">
@@ -771,6 +868,38 @@ const Broadcaster = () => {
         selectedIntegration={selectedIntegration}
         onSelectIntegration={setSelectedIntegration}
       />
+
+      {/* Save preset dialog */}
+      <Dialog open={savePresetOpen} onOpenChange={setSavePresetOpen}>
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Save Preset</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Save current mixer settings and effects as a preset.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            <input
+              value={newPresetName}
+              onChange={(e) => setNewPresetName(e.target.value)}
+              placeholder="Preset name…"
+              maxLength={40}
+              autoFocus
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSavePreset(); }}
+              className="w-full bg-input border border-border rounded-md px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            <div className="flex justify-end">
+              <button
+                onClick={handleSavePreset}
+                disabled={newPresetName.trim().length === 0}
+                className="bg-primary text-primary-foreground rounded-md px-6 py-2 text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Keyboard shortcuts dialog */}
       <Dialog open={showHelp} onOpenChange={setShowHelp}>
