@@ -44,6 +44,7 @@ const Broadcaster = () => {
   const [cueMode, setCueMode] = useState(false);
   const [limiterDb, setLimiterDb] = useState<0 | -3 | -6 | -12>(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [boardTab, setBoardTab] = useState('sounds');
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const addLog = useCallback((msg: string, level: LogEntry['level'] = 'info') => {
@@ -429,9 +430,9 @@ const Broadcaster = () => {
 
         {/* Soundboard / Effects */}
         <div className="panel">
-          <Tabs defaultValue="sounds">
+          <Tabs value={boardTab} onValueChange={setBoardTab}>
             <div className="flex items-center justify-between mb-3">
-              <div className="panel-header !mb-0">Soundboard</div>
+              <div className="panel-header !mb-0">{boardTab === 'sounds' ? 'Soundboard' : 'Effects'}</div>
               <TabsList>
                 <TabsTrigger value="sounds" className="px-2.5">
                   <Music className="h-3.5 w-3.5" />
