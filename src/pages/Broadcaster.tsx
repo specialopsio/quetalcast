@@ -8,7 +8,7 @@ import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
-import { Copy, Mic, MicOff, Radio, Headphones, Clock, Music, Sparkles, Zap } from 'lucide-react';
+import { Copy, Mic, MicOff, Radio, Headphones, Clock, Music, Sparkles, Zap, Plug2 } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import {
   Select,
@@ -23,6 +23,9 @@ import { SoundBoard } from '@/components/SoundBoard';
 import { EffectsBoard } from '@/components/EffectsBoard';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Footer } from '@/components/Footer';
+import { IntegrationsSheet } from '@/components/IntegrationsSheet';
+import { useIntegrationStream } from '@/hooks/useIntegrationStream';
+import { getIntegration, type IntegrationConfig } from '@/lib/integrations';
 
 const WS_URL = import.meta.env.VITE_WS_URL || (
   window.location.protocol === 'https:'
@@ -47,6 +50,11 @@ const Broadcaster = () => {
   const [boardTab, setBoardTab] = useState('sounds');
   const [qualityMode, setQualityMode] = useState<AudioQuality>('auto');
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  // Integration state
+  const [selectedIntegration, setSelectedIntegration] = useState<IntegrationConfig | null>(null);
+  const [integrationsOpen, setIntegrationsOpen] = useState(false);
+  const integrationStream = useIntegrationStream();
 
   const addLog = useCallback((msg: string, level: LogEntry['level'] = 'info') => {
     setLogs((prev) => [...prev.slice(-100), createLogEntry(msg, level)]);
@@ -160,22 +168,28 @@ const Broadcaster = () => {
 
       addLog('Mic connected');
 
-      // Create room first if needed
-      if (!webrtc.roomId) {
-        webrtc.createRoom();
-        addLog('Setting up room…');
+      if (selectedIntegration) {
+        // Integration mode — stream to external server, no room
+        const integrationInfo = getIntegration(selectedIntegration.integrationId);
+        addLog(`Connecting to ${integrationInfo?.name || 'integration'}…`);
+        setIsOnAir(true);
+      } else {
+        // Native mode — create room and use WebRTC
+        if (!webrtc.roomId) {
+          webrtc.createRoom();
+          addLog('Setting up room…');
+        }
+        broadcastStartedRef.current = false;
+        setIsOnAir(true);
       }
-
-      broadcastStartedRef.current = false;
-      setIsOnAir(true);
     } catch (e) {
       addLog('Couldn\'t start broadcast — check mic permissions', 'error');
     }
   };
 
-  // Start broadcast once room is ready and we have a mixed stream
+  // Start broadcast once room is ready and we have a mixed stream (native mode)
   useEffect(() => {
-    if (isOnAir && mixer.mixedStream && webrtc.roomId && !broadcastStartedRef.current) {
+    if (isOnAir && !selectedIntegration && mixer.mixedStream && webrtc.roomId && !broadcastStartedRef.current) {
       broadcastStartedRef.current = true;
       webrtc.startBroadcast(mixer.mixedStream);
       addLog('You\'re live!');
@@ -183,14 +197,47 @@ const Broadcaster = () => {
     if (!isOnAir) {
       broadcastStartedRef.current = false;
     }
-  }, [isOnAir, mixer.mixedStream, webrtc.roomId, webrtc.startBroadcast, addLog]);
+  }, [isOnAir, selectedIntegration, mixer.mixedStream, webrtc.roomId, webrtc.startBroadcast, addLog]);
+
+  // Start integration stream once we have a mixed stream (integration mode)
+  const integrationStartedRef = useRef(false);
+  useEffect(() => {
+    if (isOnAir && selectedIntegration && mixer.mixedStream && !integrationStartedRef.current) {
+      integrationStartedRef.current = true;
+      integrationStream.startStream(mixer.mixedStream, selectedIntegration).then(() => {
+        const integrationInfo = getIntegration(selectedIntegration.integrationId);
+        addLog(`Live on ${integrationInfo?.name || 'integration'}!`);
+      }).catch(() => {
+        addLog('Failed to connect to streaming server', 'error');
+        setIsOnAir(false);
+      });
+    }
+    if (!isOnAir) {
+      integrationStartedRef.current = false;
+    }
+  }, [isOnAir, selectedIntegration, mixer.mixedStream, integrationStream, addLog]);
+
+  // Log integration stream errors
+  useEffect(() => {
+    if (integrationStream.error) {
+      addLog(integrationStream.error, 'error');
+    }
+  }, [integrationStream.error, addLog]);
 
   const handleEndBroadcast = () => {
     micEffects.removeFromChain();
     localStream?.getTracks().forEach((t) => t.stop());
     setLocalStream(null);
     mixer.disconnectMic();
-    webrtc.stop();
+
+    if (selectedIntegration) {
+      // Integration mode — stop the integration stream
+      integrationStream.stopStream();
+    } else {
+      // Native mode — stop WebRTC
+      webrtc.stop();
+    }
+
     setIsOnAir(false);
     addLog('Off air');
   };
@@ -291,9 +338,15 @@ const Broadcaster = () => {
     }
   };
 
+  const integrationInfo = selectedIntegration ? getIntegration(selectedIntegration.integrationId) : null;
+
   return (
     <div className="min-h-[100dvh] bg-background flex flex-col">
-      <StatusBar status={webrtc.status} roomId={webrtc.roomId} />
+      <StatusBar
+        status={selectedIntegration && isOnAir ? 'on-air' : webrtc.status}
+        roomId={webrtc.roomId}
+        integrationName={isOnAir && integrationInfo ? integrationInfo.name : undefined}
+      />
 
       <div className="flex-1 p-4 max-w-4xl mx-auto w-full space-y-4">
         {/* Header */}
@@ -302,7 +355,22 @@ const Broadcaster = () => {
             <Radio className="h-5 w-5 text-primary" />
             Broadcaster
           </h1>
-          {webrtc.roomId && (
+          {/* Before on-air: show Integrations button */}
+          {!isOnAir && (
+            <button
+              onClick={() => setIntegrationsOpen(true)}
+              className={`flex items-center gap-1.5 text-xs font-mono transition-colors px-3 py-1.5 rounded-md ${
+                selectedIntegration
+                  ? 'text-primary bg-primary/10 hover:bg-primary/20'
+                  : 'text-muted-foreground hover:text-foreground bg-secondary'
+              }`}
+            >
+              <Plug2 className="h-3 w-3" />
+              {selectedIntegration ? integrationInfo?.name : 'Integrations'}
+            </button>
+          )}
+          {/* On-air native mode: show Copy Receiver Link */}
+          {isOnAir && !selectedIntegration && webrtc.roomId && (
             <button
               onClick={copyReceiverLink}
               className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-foreground transition-colors bg-secondary px-3 py-1.5 rounded-md"
@@ -310,6 +378,13 @@ const Broadcaster = () => {
               <Copy className="h-3 w-3" />
               {copied ? 'Copied!' : 'Copy Receiver Link'}
             </button>
+          )}
+          {/* On-air integration mode: show "Live on X" */}
+          {isOnAir && selectedIntegration && integrationInfo && (
+            <span className="flex items-center gap-1.5 text-xs font-mono text-primary bg-primary/10 px-3 py-1.5 rounded-md">
+              <Radio className="h-3 w-3" />
+              Live on {integrationInfo.name}
+            </span>
           )}
         </div>
 
@@ -353,7 +428,7 @@ const Broadcaster = () => {
         <div className="flex gap-3">
           <button
             onClick={handleGoOnAir}
-            disabled={isOnAir || !signaling.connected}
+            disabled={isOnAir || (!selectedIntegration && !signaling.connected)}
             className={`flex-1 flex items-center justify-center gap-2 py-4 rounded-md text-sm font-semibold transition-all ${
               isOnAir
                 ? 'bg-muted text-muted-foreground cursor-not-allowed'
@@ -548,6 +623,13 @@ const Broadcaster = () => {
       </div>
 
       <Footer />
+
+      <IntegrationsSheet
+        open={integrationsOpen}
+        onOpenChange={setIntegrationsOpen}
+        selectedIntegration={selectedIntegration}
+        onSelectIntegration={setSelectedIntegration}
+      />
     </div>
   );
 };

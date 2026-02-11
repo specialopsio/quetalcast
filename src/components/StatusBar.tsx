@@ -4,6 +4,7 @@ import { Radio, Wifi, WifiOff, AlertCircle, Headphones } from 'lucide-react';
 interface StatusBarProps {
   status: ConnectionStatus;
   roomId?: string | null;
+  integrationName?: string;
 }
 
 const statusConfig: Record<ConnectionStatus, { label: string; className: string; icon: typeof Radio }> = {
@@ -15,7 +16,7 @@ const statusConfig: Record<ConnectionStatus, { label: string; className: string;
   error: { label: 'OFFLINE', className: 'status-error', icon: AlertCircle },
 };
 
-export function StatusBar({ status, roomId }: StatusBarProps) {
+export function StatusBar({ status, roomId, integrationName }: StatusBarProps) {
   const config = statusConfig[status];
   const Icon = config.icon;
 
@@ -26,11 +27,15 @@ export function StatusBar({ status, roomId }: StatusBarProps) {
           <Radio className="h-4 w-4 text-primary" />
           <span>QUETAL CAST</span>
         </div>
-        {roomId && (
+        {integrationName ? (
+          <span className="text-xs font-mono text-primary">
+            LIVE ON {integrationName.toUpperCase()}
+          </span>
+        ) : roomId ? (
           <span className="text-xs font-mono text-muted-foreground">
             ROOM: {roomId}
           </span>
-        )}
+        ) : null}
       </div>
       <div className={`status-badge flex items-center gap-1.5 ${config.className}`}>
         <Icon className="h-3 w-3" />

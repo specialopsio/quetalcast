@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import { createLogger } from './logger.js';
 import { RoomManager } from './room-manager.js';
 import { SessionManager } from './auth.js';
+import { testConnection, connectToServer } from './integration-relay.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -164,6 +165,25 @@ app.get('/admin/rooms', requireAuth, (req, res) => {
   res.json({ rooms: rooms.listRooms() });
 });
 
+// Integration test — verify streaming credentials without starting a stream
+const integrationTestLimiter = rateLimit({ windowMs: 60000, max: 10, message: { error: 'Too many test attempts' } });
+
+app.post('/api/integration-test', requireAuth, integrationTestLimiter, async (req, res) => {
+  const { type, credentials } = req.body;
+  if (!type || !credentials) {
+    return res.status(400).json({ ok: false, error: 'Missing type or credentials' });
+  }
+
+  const validTypes = ['icecast', 'shoutcast', 'radio-co'];
+  if (!validTypes.includes(type)) {
+    return res.status(400).json({ ok: false, error: 'Invalid integration type' });
+  }
+
+  logger.info({ type }, 'Integration test requested');
+  const result = await testConnection(type, credentials, logger);
+  res.json(result);
+});
+
 // Serve static frontend (production)
 const staticPath = path.join(__dirname, '..', 'dist');
 app.use(express.static(staticPath));
@@ -176,7 +196,28 @@ app.get('*', (req, res, next) => {
 const server = http.createServer(app);
 
 // Fix #6: Set maxPayload to prevent memory exhaustion
-const wss = new WebSocketServer({ server, maxPayload: 64 * 1024 }); // 64KB max
+// Signaling WSS — handles room/peer signaling
+const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 }); // 64KB max
+
+// Integration stream WSS — handles MP3 relay to Icecast/Shoutcast/Radio.co
+// Higher maxPayload to accommodate MP3 chunks
+const integrationWss = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
+
+// Route WebSocket upgrades by URL path
+server.on('upgrade', (request, socket, head) => {
+  const { pathname } = new URL(request.url, `http://${request.headers.host}`);
+
+  if (pathname === '/integration-stream') {
+    integrationWss.handleUpgrade(request, socket, head, (ws) => {
+      integrationWss.emit('connection', ws, request);
+    });
+  } else {
+    // Default: signaling WebSocket
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  }
+});
 
 // WebSocket keep-alive — ping every 25s to prevent Fly.io proxy timeout (default ~60s)
 const WS_PING_INTERVAL = 25000;
@@ -469,6 +510,106 @@ wss.on('connection', (ws, req) => {
 
   ws.on('error', (err) => {
     logger.error({ ip, error: err.message }, 'WebSocket error');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Integration stream WebSocket — relays MP3 audio to external streaming servers
+// ---------------------------------------------------------------------------
+integrationWss.on('connection', (ws, req) => {
+  const ip = req.socket.remoteAddress || 'unknown';
+
+  // Authenticate via session cookie
+  const cookies = parseCookies(req.headers.cookie);
+  const sessionToken = cookies.session || null;
+  const sessionData = sessionToken ? sessions.validate(sessionToken) : null;
+
+  if (!sessionData) {
+    logger.warn({ ip }, 'Unauthenticated integration-stream attempt');
+    ws.close(4001, 'Authentication required');
+    return;
+  }
+
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; });
+
+  let sourceSocket = null;
+  let initialized = false;
+
+  logger.info({ ip }, 'Integration stream WebSocket connected');
+
+  ws.on('message', async (raw, isBinary) => {
+    // First message should be JSON with integration config
+    if (!initialized) {
+      try {
+        const msg = JSON.parse(raw.toString());
+        const { type, credentials } = msg;
+
+        if (!type || !credentials) {
+          ws.send(JSON.stringify({ type: 'error', error: 'Missing type or credentials' }));
+          ws.close();
+          return;
+        }
+
+        logger.info({ type, ip }, 'Integration stream: connecting to server');
+
+        try {
+          sourceSocket = await connectToServer(type, credentials, logger);
+
+          // Handle source socket errors/close
+          sourceSocket.on('error', (err) => {
+            logger.error({ error: err.message }, 'Integration source socket error');
+            ws.send(JSON.stringify({ type: 'error', error: `Stream error: ${err.message}` }));
+            ws.close();
+          });
+          sourceSocket.on('close', () => {
+            logger.info('Integration source socket closed');
+            if (ws.readyState === ws.OPEN) {
+              ws.send(JSON.stringify({ type: 'error', error: 'Stream server disconnected' }));
+              ws.close();
+            }
+          });
+
+          initialized = true;
+          ws.send(JSON.stringify({ type: 'connected' }));
+          logger.info({ type, ip }, 'Integration stream: connected and relaying');
+        } catch (err) {
+          logger.warn({ type, error: err.message }, 'Integration stream: connection failed');
+          ws.send(JSON.stringify({ type: 'error', error: err.message }));
+          ws.close();
+        }
+      } catch {
+        // Not JSON — ignore before initialization
+        return;
+      }
+      return;
+    }
+
+    // After initialization, relay binary MP3 data to the source socket
+    if (sourceSocket && !sourceSocket.destroyed) {
+      try {
+        const data = isBinary ? raw : Buffer.from(raw);
+        sourceSocket.write(data);
+      } catch (err) {
+        logger.error({ error: err.message }, 'Failed to write to source socket');
+      }
+    }
+  });
+
+  ws.on('close', () => {
+    if (sourceSocket && !sourceSocket.destroyed) {
+      sourceSocket.destroy();
+      sourceSocket = null;
+    }
+    logger.info({ ip }, 'Integration stream WebSocket closed');
+  });
+
+  ws.on('error', (err) => {
+    logger.error({ ip, error: err.message }, 'Integration stream WebSocket error');
+    if (sourceSocket && !sourceSocket.destroyed) {
+      sourceSocket.destroy();
+      sourceSocket = null;
+    }
   });
 });
 
