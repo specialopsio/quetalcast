@@ -5,8 +5,8 @@ Real-time audio broadcasting application built with WebRTC, React, and Node.js. 
 ## Features
 
 - **High-fidelity audio** — Opus codec at up to 510 kbps stereo with adaptive quality (High / Auto / Low)
-- **Soundboard** — 5x2 pad grid with MP3 loading, loop toggle, per-pad volume (up to 300%), and broadcast mixing
-- **Mic effects** — Tone/EQ, pitch shift, delay, and reverb with per-effect settings
+- **Soundboard** — 4x2 pad grid with MP3 loading, loop toggle, per-pad volume (up to 300%), and broadcast mixing
+- **Mic effects** — Enhance (noise gate, rumble filter, clarity boost), tone/EQ, compressor, pitch shift, delay, and reverb with per-effect settings
 - **Stereo VU meter** — Calibrated dBFS metering with peak hold
 - **Output limiter** — Selectable ceiling (0 dB, -3 dB, -6 dB, -12 dB)
 - **Broadcast timer** — Elapsed time display while on air
@@ -131,14 +131,15 @@ fly deploy
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `VITE_WS_URL` | auto-detected | WebSocket signaling URL |
+| `VITE_DEBUG` | `false` | Enable verbose debug logging in browser console |
 
 ## Project Structure
 
 ```
 ├── src/                        # React frontend (Vite + TypeScript)
 │   ├── components/
-│   │   ├── EffectsBoard.tsx    # Mic effects UI (tone, pitch, delay, reverb)
-│   │   ├── SoundBoard.tsx      # 5x2 soundboard pad grid
+│   │   ├── EffectsBoard.tsx    # Mic effects UI (enhance, tone, compressor, pitch, delay, reverb)
+│   │   ├── SoundBoard.tsx      # 4x2 soundboard pad grid
 │   │   ├── LevelMeter.tsx      # Stereo VU meter with dBFS scale
 │   │   ├── StatusBar.tsx       # Room ID, timer, connection status
 │   │   ├── HealthPanel.tsx     # RTT, packet loss, jitter display
@@ -150,9 +151,10 @@ fly deploy
 │   │   ├── useWebRTC.ts        # WebRTC peer connections + adaptive quality
 │   │   ├── useAudioMixer.ts    # Web Audio API mixing graph
 │   │   ├── useAudioAnalyser.ts # Audio level analysis
-│   │   └── useMicEffects.ts    # Mic effect chain (incl. AudioWorklet pitch shift)
+│   │   └── useMicEffects.ts    # Mic effect chain (enhance, compressor, pitch shift worklets)
 │   ├── lib/
 │   │   ├── auth.ts             # Client-side session management
+│   │   ├── debug.ts            # VITE_DEBUG-gated console logging
 │   │   └── webrtc-stats.ts     # Stats parsing utilities
 │   └── pages/
 │       ├── Login.tsx           # Broadcaster authentication
@@ -165,7 +167,8 @@ fly deploy
 │   ├── auth.js                 # Session management with expiry
 │   └── logger.js               # Pino JSON logging
 ├── public/
-│   └── pitch-shift-processor.js  # AudioWorklet for real-time pitch shifting
+│   ├── pitch-shift-processor.js  # AudioWorklet for real-time pitch shifting
+│   └── noise-gate-processor.js   # AudioWorklet for noise gate (Enhance effect)
 ├── Dockerfile                  # Multi-stage production build
 ├── fly.toml                    # Fly.io deployment config
 └── docker-compose.yml          # Local Docker setup
