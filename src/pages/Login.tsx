@@ -33,7 +33,7 @@ const Login = () => {
             <Radio className="h-8 w-8 text-primary" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">QueTal Cast</h1>
-          <p className="text-sm text-muted-foreground mt-1">WebRTC peer-to-peer audio</p>
+          <p className="text-sm text-muted-foreground mt-1">101.5 KTAL-LP</p>
         </div>
 
         <form onSubmit={handleSubmit} className="panel space-y-4">
