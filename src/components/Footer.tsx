@@ -116,6 +116,39 @@ export function Footer() {
               </section>
 
               <section>
+                <h3 className="text-foreground font-semibold mb-1">Audio Quality</h3>
+                <p>
+                  Below the audio input selector you'll find the quality setting.
+                  There are three options:
+                </p>
+                <ul className="list-disc list-inside mt-1 space-y-1 pl-1">
+                  <li>
+                    <strong className="text-foreground">High</strong> — Sends the
+                    highest quality audio possible (510 kbps stereo). Best when you
+                    have a solid internet connection.
+                  </li>
+                  <li>
+                    <strong className="text-foreground">Auto</strong> — Starts at
+                    high quality and automatically adjusts if your connection gets
+                    shaky. It will drop to low bandwidth when needed and switch
+                    back to high once things stabilize. This is the default and
+                    recommended for most situations.
+                  </li>
+                  <li>
+                    <strong className="text-foreground">Low</strong> — Uses minimal
+                    bandwidth (32 kbps mono). Choose this if you're on a slow or
+                    unreliable connection and want to make sure the stream doesn't
+                    cut out.
+                  </li>
+                </ul>
+                <p className="mt-1">
+                  You can change this setting before or during a broadcast. When set
+                  to Auto, a label below the dropdown shows whether you're currently
+                  streaming in high quality or low bandwidth.
+                </p>
+              </section>
+
+              <section>
                 <h3 className="text-foreground font-semibold mb-1">Soundboard</h3>
                 <p>
                   The grid of pads below the controls is your soundboard. Tap an empty
