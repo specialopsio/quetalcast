@@ -171,9 +171,8 @@ const Receiver = () => {
         {/* Level meter */}
         {audioStarted && (
           <LevelMeter
-            level={audioAnalysis.level}
-            peak={audioAnalysis.peak}
-            clipping={audioAnalysis.clipping}
+            left={audioAnalysis.left}
+            right={audioAnalysis.right}
             label="Output Level"
           />
         )}

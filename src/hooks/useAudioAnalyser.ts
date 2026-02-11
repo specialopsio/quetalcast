@@ -1,12 +1,17 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
-export interface AudioAnalysis {
+export interface ChannelAnalysis {
   level: number;   // dBFS RMS level (e.g. -60 to 0)
   peak: number;    // dBFS peak hold
   clipping: boolean;
 }
 
-const MIN_DB = -60; // floor of the meter
+export interface AudioAnalysis {
+  left: ChannelAnalysis;
+  right: ChannelAnalysis;
+}
+
+const MIN_DB = -60;
 
 /** Convert a linear amplitude (0–1) to dBFS, clamped to MIN_DB */
 function toDbfs(linear: number): number {
@@ -15,53 +20,86 @@ function toDbfs(linear: number): number {
   return Math.max(MIN_DB, db);
 }
 
+const EMPTY_CHANNEL: ChannelAnalysis = { level: MIN_DB, peak: MIN_DB, clipping: false };
+const EMPTY_ANALYSIS: AudioAnalysis = { left: { ...EMPTY_CHANNEL }, right: { ...EMPTY_CHANNEL } };
+
+function analyseChannel(analyser: AnalyserNode, data: Float32Array) {
+  analyser.getFloatTimeDomainData(data);
+
+  let sum = 0;
+  let max = 0;
+  for (let i = 0; i < data.length; i++) {
+    const abs = Math.abs(data[i]);
+    sum += abs * abs;
+    if (abs > max) max = abs;
+  }
+
+  const rms = Math.sqrt(sum / data.length);
+  return {
+    rmsDb: toDbfs(rms),
+    peakDb: toDbfs(max),
+    clipping: max >= 0.99,
+  };
+}
+
 export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
-  const [analysis, setAnalysis] = useState<AudioAnalysis>({ level: MIN_DB, peak: MIN_DB, clipping: false });
+  const [analysis, setAnalysis] = useState<AudioAnalysis>(EMPTY_ANALYSIS);
   const contextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
+  const leftAnalyserRef = useRef<AnalyserNode | null>(null);
+  const rightAnalyserRef = useRef<AnalyserNode | null>(null);
   const rafRef = useRef<number>(0);
-  const peakDbRef = useRef(MIN_DB);
-  const peakDecayRef = useRef(0);
+
+  // Per-channel peak state
+  const leftPeakRef = useRef(MIN_DB);
+  const leftDecayRef = useRef(0);
+  const rightPeakRef = useRef(MIN_DB);
+  const rightDecayRef = useRef(0);
 
   const tick = useCallback(() => {
-    const analyser = analyserRef.current;
-    if (!analyser) return;
+    const leftAnalyser = leftAnalyserRef.current;
+    const rightAnalyser = rightAnalyserRef.current;
+    if (!leftAnalyser || !rightAnalyser) return;
 
-    const data = new Float32Array(analyser.fftSize);
-    analyser.getFloatTimeDomainData(data);
+    const bufSize = leftAnalyser.fftSize;
+    const dataL = new Float32Array(bufSize);
+    const dataR = new Float32Array(bufSize);
 
-    let sum = 0;
-    let max = 0;
-    for (let i = 0; i < data.length; i++) {
-      const abs = Math.abs(data[i]);
-      sum += abs * abs;
-      if (abs > max) max = abs;
-    }
+    const left = analyseChannel(leftAnalyser, dataL);
+    const right = analyseChannel(rightAnalyser, dataR);
 
-    const rms = Math.sqrt(sum / data.length);
-    const clipping = max >= 0.99;
-
-    const rmsDb = toDbfs(rms);
-    const peakDb = toDbfs(max);
-
-    // Peak hold with decay (in dB space — drop 0.5 dB per frame after hold)
-    if (peakDb > peakDbRef.current) {
-      peakDbRef.current = peakDb;
-      peakDecayRef.current = 0;
+    // Peak hold with decay — left
+    if (left.peakDb > leftPeakRef.current) {
+      leftPeakRef.current = left.peakDb;
+      leftDecayRef.current = 0;
     } else {
-      peakDecayRef.current++;
-      if (peakDecayRef.current > 30) {
-        peakDbRef.current = Math.max(MIN_DB, peakDbRef.current - 0.5);
+      leftDecayRef.current++;
+      if (leftDecayRef.current > 30) {
+        leftPeakRef.current = Math.max(MIN_DB, leftPeakRef.current - 0.5);
       }
     }
 
-    setAnalysis({ level: rmsDb, peak: peakDbRef.current, clipping });
+    // Peak hold with decay — right
+    if (right.peakDb > rightPeakRef.current) {
+      rightPeakRef.current = right.peakDb;
+      rightDecayRef.current = 0;
+    } else {
+      rightDecayRef.current++;
+      if (rightDecayRef.current > 30) {
+        rightPeakRef.current = Math.max(MIN_DB, rightPeakRef.current - 0.5);
+      }
+    }
+
+    setAnalysis({
+      left: { level: left.rmsDb, peak: leftPeakRef.current, clipping: left.clipping },
+      right: { level: right.rmsDb, peak: rightPeakRef.current, clipping: right.clipping },
+    });
+
     rafRef.current = requestAnimationFrame(tick);
   }, []);
 
   useEffect(() => {
     if (!stream || stream.getTracks().length === 0) {
-      setAnalysis({ level: MIN_DB, peak: MIN_DB, clipping: false });
+      setAnalysis(EMPTY_ANALYSIS);
       return;
     }
 
@@ -69,25 +107,42 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
     if (ctx.state === 'suspended') {
       ctx.resume();
     }
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 2048;
-    analyser.smoothingTimeConstant = 0.3;
 
     const source = ctx.createMediaStreamSource(stream);
-    source.connect(analyser);
+    const channelCount = source.channelCount || 1;
+
+    // Split into channels (use 2 outputs even for mono — splitter will duplicate)
+    const splitter = ctx.createChannelSplitter(Math.max(2, channelCount));
+
+    const leftAnalyser = ctx.createAnalyser();
+    leftAnalyser.fftSize = 2048;
+    leftAnalyser.smoothingTimeConstant = 0.3;
+
+    const rightAnalyser = ctx.createAnalyser();
+    rightAnalyser.fftSize = 2048;
+    rightAnalyser.smoothingTimeConstant = 0.3;
+
+    source.connect(splitter);
+    splitter.connect(leftAnalyser, 0);
+    // For mono sources, channel 1 may not exist — connect channel 0 to both
+    splitter.connect(rightAnalyser, channelCount >= 2 ? 1 : 0);
 
     contextRef.current = ctx;
-    analyserRef.current = analyser;
+    leftAnalyserRef.current = leftAnalyser;
+    rightAnalyserRef.current = rightAnalyser;
 
     rafRef.current = requestAnimationFrame(tick);
 
     return () => {
       cancelAnimationFrame(rafRef.current);
       source.disconnect();
-      analyser.disconnect();
+      splitter.disconnect();
+      leftAnalyser.disconnect();
+      rightAnalyser.disconnect();
       ctx.close();
       contextRef.current = null;
-      analyserRef.current = null;
+      leftAnalyserRef.current = null;
+      rightAnalyserRef.current = null;
     };
   }, [stream, tick]);
 

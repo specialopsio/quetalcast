@@ -282,9 +282,8 @@ const Broadcaster = () => {
 
         {/* Level meter */}
         <LevelMeter
-          level={audioAnalysis.level}
-          peak={audioAnalysis.peak}
-          clipping={audioAnalysis.clipping}
+          left={audioAnalysis.left}
+          right={audioAnalysis.right}
           label="Input Level"
         />
 
