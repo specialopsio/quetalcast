@@ -20,7 +20,11 @@ import {
 import { useAudioMixer } from '@/hooks/useAudioMixer';
 import { SoundBoard } from '@/components/SoundBoard';
 
-const WS_URL = import.meta.env.VITE_WS_URL || `ws://${window.location.hostname}:3001`;
+const WS_URL = import.meta.env.VITE_WS_URL || (
+  window.location.protocol === 'https:'
+    ? `wss://${window.location.host}`
+    : `ws://${window.location.hostname}:3001`
+);
 
 const Broadcaster = () => {
   const navigate = useNavigate();

@@ -10,7 +10,11 @@ import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
 import { Headphones, Volume2 } from 'lucide-react';
 
-const WS_URL = import.meta.env.VITE_WS_URL || `ws://${window.location.hostname}:3001`;
+const WS_URL = import.meta.env.VITE_WS_URL || (
+  window.location.protocol === 'https:'
+    ? `wss://${window.location.host}`
+    : `ws://${window.location.hostname}:3001`
+);
 
 const Receiver = () => {
   const navigate = useNavigate();
