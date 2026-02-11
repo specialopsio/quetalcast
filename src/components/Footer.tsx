@@ -14,7 +14,7 @@ export function Footer() {
 
   return (
     <>
-      <footer className="py-4 px-4 text-center text-xs text-muted-foreground/60 flex flex-col items-center gap-1.5">
+      <footer className="py-4 px-4 text-center text-xs text-muted-foreground/60 flex flex-col items-center gap-3">
         <div className="flex items-center gap-3">
           <span>
             Built by{' '}
