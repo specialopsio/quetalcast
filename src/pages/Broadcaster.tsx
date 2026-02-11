@@ -16,6 +16,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useAudioMixer } from '@/hooks/useAudioMixer';
+import { SoundBoard } from '@/components/SoundBoard';
 
 const WS_URL = import.meta.env.VITE_WS_URL || `ws://${window.location.hostname}:3001`;
 
@@ -35,7 +37,8 @@ const Broadcaster = () => {
 
   const signaling = useSignaling(WS_URL);
   const webrtc = useWebRTC(signaling, 'broadcaster');
-  const audioAnalysis = useAudioAnalyser(localStream);
+  const mixer = useAudioMixer();
+  const audioAnalysis = useAudioAnalyser(mixer.mixedStream);
 
   // Auth check
   useEffect(() => {
@@ -101,6 +104,7 @@ const Broadcaster = () => {
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       setLocalStream(stream);
+      mixer.connectMic(stream);
       addLog('Audio capture started');
 
       // Create room first if needed
@@ -116,21 +120,22 @@ const Broadcaster = () => {
     }
   };
 
-  // Start broadcast once room is ready and we have a stream
+  // Start broadcast once room is ready and we have a mixed stream
   useEffect(() => {
-    if (isOnAir && localStream && webrtc.roomId && !broadcastStartedRef.current) {
+    if (isOnAir && mixer.mixedStream && webrtc.roomId && !broadcastStartedRef.current) {
       broadcastStartedRef.current = true;
-      webrtc.startBroadcast(localStream);
+      webrtc.startBroadcast(mixer.mixedStream);
       addLog('Broadcast started');
     }
     if (!isOnAir) {
       broadcastStartedRef.current = false;
     }
-  }, [isOnAir, localStream, webrtc.roomId, webrtc.startBroadcast, addLog]);
+  }, [isOnAir, mixer.mixedStream, webrtc.roomId, webrtc.startBroadcast, addLog]);
 
   const handleEndBroadcast = () => {
     localStream?.getTracks().forEach((t) => t.stop());
     setLocalStream(null);
+    mixer.disconnectMic();
     webrtc.stop();
     setIsOnAir(false);
     addLog('Broadcast ended');
@@ -196,6 +201,9 @@ const Broadcaster = () => {
           clipping={audioAnalysis.clipping}
           label="Input Level"
         />
+
+        {/* Soundboard */}
+        <SoundBoard connectElement={mixer.connectElement} />
 
         {/* Controls */}
         <div className="flex gap-3">
