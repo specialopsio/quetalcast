@@ -1,0 +1,16 @@
+{
+  "name": "webrtc-audio-bridge-server",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.6",
+    "express": "^4.21.0",
+    "express-rate-limit": "^7.4.0",
+    "pino": "^9.5.0",
+    "ws": "^8.18.0"
+  }
+}

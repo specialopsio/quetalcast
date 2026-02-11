@@ -1,0 +1,77 @@
+import type { WebRTCStats } from '@/lib/webrtc-stats';
+
+interface HealthPanelProps {
+  stats: WebRTCStats | null;
+  connectionState: string;
+  iceConnectionState: string;
+  signalingState: string;
+  peerConnected: boolean;
+}
+
+function StatItem({ label, value, unit, warn }: { label: string; value: string | number; unit?: string; warn?: boolean }) {
+  return (
+    <div className="flex flex-col items-center">
+      <span className={`stat-value ${warn ? 'text-destructive' : ''}`}>
+        {value}
+        {unit && <span className="text-xs text-muted-foreground ml-0.5">{unit}</span>}
+      </span>
+      <span className="stat-label">{label}</span>
+    </div>
+  );
+}
+
+function StateIndicator({ label, value }: { label: string; value: string }) {
+  const colorMap: Record<string, string> = {
+    connected: 'text-primary',
+    completed: 'text-primary',
+    stable: 'text-primary',
+    checking: 'text-accent',
+    connecting: 'text-accent',
+    'have-local-offer': 'text-accent',
+    'have-remote-offer': 'text-accent',
+    new: 'text-muted-foreground',
+    disconnected: 'text-destructive',
+    failed: 'text-destructive',
+    closed: 'text-muted-foreground',
+  };
+
+  return (
+    <div className="flex items-center justify-between text-xs">
+      <span className="font-mono text-muted-foreground uppercase">{label}</span>
+      <span className={`font-mono font-semibold ${colorMap[value] || 'text-foreground'}`}>{value}</span>
+    </div>
+  );
+}
+
+export function HealthPanel({ stats, connectionState, iceConnectionState, signalingState, peerConnected }: HealthPanelProps) {
+  return (
+    <div className="panel space-y-4">
+      <div className="panel-header">Health</div>
+
+      {/* Stats grid */}
+      <div className="grid grid-cols-4 gap-3">
+        <StatItem label="Bitrate" value={stats ? stats.bitrate.toFixed(1) : '—'} unit="kbps" />
+        <StatItem
+          label="Pkt Loss"
+          value={stats ? stats.packetsLost : '—'}
+          warn={!!stats && stats.packetsLost > 10}
+        />
+        <StatItem label="Jitter" value={stats ? stats.jitter.toFixed(1) : '—'} unit="ms" />
+        <StatItem label="RTT" value={stats ? stats.rtt.toFixed(0) : '—'} unit="ms" />
+      </div>
+
+      {/* Connection states */}
+      <div className="space-y-1.5 pt-2 border-t border-border/50">
+        <StateIndicator label="Connection" value={connectionState} />
+        <StateIndicator label="ICE" value={iceConnectionState} />
+        <StateIndicator label="Signaling" value={signalingState} />
+        <div className="flex items-center justify-between text-xs">
+          <span className="font-mono text-muted-foreground uppercase">Peer</span>
+          <span className={`font-mono font-semibold ${peerConnected ? 'text-primary' : 'text-muted-foreground'}`}>
+            {peerConnected ? 'connected' : 'waiting'}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}

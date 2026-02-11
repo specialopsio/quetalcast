@@ -1,73 +1,147 @@
-# Welcome to your Lovable project
+# WebRTC Audio Bridge
 
-## Project info
+Self-hosted, peer-to-peer WebRTC audio bridge with minimal signaling server. One broadcaster, one receiver, audio only.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Architecture
 
-## How can I edit this code?
+```
+┌──────────────┐     WebSocket      ┌──────────────┐     WebSocket      ┌──────────────┐
+│  Broadcaster │ ◄──────────────►  │   Signaling  │ ◄──────────────►  │   Receiver   │
+│   (Browser)  │                    │   Server     │                    │   (Browser)  │
+└──────┬───────┘                    │  (Node.js)   │                    └──────┬───────┘
+       │                            └──────────────┘                           │
+       │              WebRTC (Peer-to-Peer Audio via Opus)                     │
+       └───────────────────────────────────────────────────────────────────────┘
+```
 
-There are several ways of editing your application.
+## Quick Start (Local Dev)
 
-**Use Lovable**
+### 1. Start the signaling server
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+```bash
+cd server
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Server runs on `http://localhost:3001`.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### 2. Start the frontend
 
-**Use GitHub Codespaces**
+```bash
+npm install
+npm run dev
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+Frontend runs on `http://localhost:5173` (Vite default).
 
-## What technologies are used for this project?
+### 3. Use the app
 
-This project is built with:
+1. Open `http://localhost:5173` → Login with `admin` / `admin`
+2. Select audio input device on the Broadcaster page
+3. Click **Go On Air** → copies a receiver link
+4. Open receiver link in another tab/browser → click **Join** → **Click to Listen**
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Docker Deployment
 
-## How can I deploy this project?
+```bash
+# Build and run signaling server
+docker compose up -d signaling
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+# With TURN server (uncomment in docker-compose.yml first)
+docker compose up -d
 
-## Can I connect a custom domain to my Lovable project?
+# Production with Caddy (TLS)
+# 1. Create Caddyfile (see below)
+# 2. Uncomment caddy service in docker-compose.yml
+docker compose up -d
+```
 
-Yes, you can!
+### Example Caddyfile
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+```
+your-domain.com {
+    reverse_proxy signaling:3001
+}
+```
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+### Example turnserver.conf
+
+```
+listening-port=3478
+tls-listening-port=5349
+realm=your-domain.com
+server-name=your-domain.com
+fingerprint
+lt-cred-mech
+user=turnuser:turnpassword
+total-quota=100
+stale-nonce=600
+no-multicast-peers
+```
+
+When using TURN, update the ICE config in `src/hooks/useWebRTC.ts`:
+
+```typescript
+const RTC_CONFIG: RTCConfiguration = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'turn:your-domain.com:3478', username: 'turnuser', credential: 'turnpassword' },
+  ],
+};
+```
+
+## Environment Variables
+
+### Server
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3001` | Server port |
+| `ALLOWED_ORIGIN` | `*` | CORS origin (set to your domain in prod) |
+| `REQUIRE_TLS` | `false` | Reject non-HTTPS requests |
+| `SESSION_SECRET` | `dev-secret...` | Session signing secret |
+| `LOG_DIR` | `./logs` | Log file directory |
+| `LOG_LEVEL` | `info` | Pino log level |
+
+### Frontend
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VITE_WS_URL` | `ws://localhost:3001` | WebSocket signaling URL |
+
+## Project Structure
+
+```
+├── src/                    # React frontend
+│   ├── components/         # StatusBar, LevelMeter, HealthPanel, EventLog
+│   ├── hooks/              # useSignaling, useWebRTC, useAudioAnalyser
+│   ├── lib/                # auth, webrtc-stats
+│   └── pages/              # Login, Broadcaster, Receiver, Admin
+├── server/                 # Node.js signaling server
+│   ├── index.js            # Express + WebSocket server
+│   ├── room-manager.js     # Room lifecycle management
+│   ├── logger.js           # Pino JSON logging
+│   ├── auth.js             # Session management
+│   └── Dockerfile
+├── docker-compose.yml
+└── README.md
+```
+
+## Logs
+
+Server logs → `server/logs/`:
+- `server.log` — room lifecycle, relay events, errors
+- `stats-YYYY-MM-DD.jsonl` — client stats summaries (every 5s)
+
+## Security Notes
+
+- **MVP auth**: Hardcoded `admin/admin`. Replace for production.
+- **HTTPS**: Required for `getUserMedia` in production. Use Caddy/nginx for TLS.
+- **Origin checks**: Set `ALLOWED_ORIGIN` to your domain in production.
+- **Cookies**: `httpOnly`, `secure` (TLS), `sameSite: strict`.
+- **No SDP in logs**: Only sizes, counts, and state changes logged.
+
+## License
+
+MIT
