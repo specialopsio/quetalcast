@@ -128,7 +128,7 @@ const Receiver = () => {
               {joined && webrtc.status === 'error' && (
                 <button
                   onClick={() => window.location.reload()}
-                  className="mt-2 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+                  className="mt-4 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
                 >
                   Retry this broadcast
                 </button>
