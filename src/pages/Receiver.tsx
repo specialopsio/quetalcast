@@ -161,17 +161,19 @@ const Receiver = () => {
           />
         )}
 
-        {/* Health + Log */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <HealthPanel
-            stats={webrtc.stats}
-            connectionState={webrtc.connectionState}
-            iceConnectionState={webrtc.iceConnectionState}
-            signalingState={webrtc.signalingState}
-            peerConnected={webrtc.peerConnected}
-          />
-          <EventLog entries={logs} />
-        </div>
+        {/* Health + Log — only when actively connected */}
+        {joined && webrtc.status !== 'error' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <HealthPanel
+              stats={webrtc.stats}
+              connectionState={webrtc.connectionState}
+              iceConnectionState={webrtc.iceConnectionState}
+              signalingState={webrtc.signalingState}
+              peerConnected={webrtc.peerConnected}
+            />
+            <EventLog entries={logs} />
+          </div>
+        )}
       </div>
 
       <Footer />

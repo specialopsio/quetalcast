@@ -18,7 +18,7 @@ export function Footer() {
         <span>
           Built by{' '}
           <a
-            href="https://specialops.studio"
+            href="https://specialops.io"
             target="_blank"
             rel="noopener noreferrer"
             className="text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2"
