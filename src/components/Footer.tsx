@@ -34,6 +34,15 @@ export function Footer() {
           <HelpCircle className="h-3 w-3" />
           Help
         </button>
+        <span className="text-muted-foreground/30">|</span>
+        <a
+          href="https://github.com/specialopsio/quetalcast"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2"
+        >
+          We 🤍 Open Source
+        </a>
       </footer>
 
       <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
