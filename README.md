@@ -51,8 +51,8 @@ Soundboard Pads ─► Gain ──────────┘                   
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/SpecialOPS-dev/live-audio-bridge.git
-cd live-audio-bridge
+git clone https://github.com/specialopsio/quetalcast.git
+cd quetalcast
 
 # Install frontend dependencies
 pnpm install
