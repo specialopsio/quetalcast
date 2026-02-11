@@ -202,9 +202,6 @@ const Broadcaster = () => {
           label="Input Level"
         />
 
-        {/* Soundboard */}
-        <SoundBoard connectElement={mixer.connectElement} />
-
         {/* Controls */}
         <div className="flex gap-3">
           <button
@@ -232,6 +229,9 @@ const Broadcaster = () => {
             End Broadcast
           </button>
         </div>
+
+        {/* Soundboard */}
+        <SoundBoard connectElement={mixer.connectElement} />
 
         {/* Health + Log */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
