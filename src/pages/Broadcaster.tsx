@@ -21,7 +21,7 @@ import { useAudioMixer } from '@/hooks/useAudioMixer';
 import { useMicEffects } from '@/hooks/useMicEffects';
 import { SoundBoard } from '@/components/SoundBoard';
 import { EffectsBoard } from '@/components/EffectsBoard';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Footer } from '@/components/Footer';
 
 const WS_URL = import.meta.env.VITE_WS_URL || (
@@ -433,14 +433,28 @@ const Broadcaster = () => {
           <Tabs value={boardTab} onValueChange={setBoardTab}>
             <div className="flex items-center justify-between mb-3">
               <div className="panel-header !mb-0">{boardTab === 'sounds' ? 'Soundboard' : 'Effects'}</div>
-              <TabsList>
-                <TabsTrigger value="sounds" className="px-2.5">
-                  <Music className="h-3.5 w-3.5" />
-                </TabsTrigger>
-                <TabsTrigger value="effects" className="px-2.5">
-                  <Sparkles className="h-3.5 w-3.5" />
-                </TabsTrigger>
-              </TabsList>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setBoardTab('sounds')}
+                  className={`p-1.5 rounded transition-colors ${
+                    boardTab === 'sounds'
+                      ? 'text-primary'
+                      : 'text-muted-foreground/40 hover:text-muted-foreground'
+                  }`}
+                >
+                  <Music className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setBoardTab('effects')}
+                  className={`p-1.5 rounded transition-colors ${
+                    boardTab === 'effects'
+                      ? 'text-primary'
+                      : 'text-muted-foreground/40 hover:text-muted-foreground'
+                  }`}
+                >
+                  <Sparkles className="h-4 w-4" />
+                </button>
+              </div>
             </div>
             <TabsContent value="sounds">
               <SoundBoard connectElement={mixer.connectElement} />
