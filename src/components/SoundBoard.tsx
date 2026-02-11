@@ -165,8 +165,7 @@ export function SoundBoard({ connectElement }: SoundBoardProps) {
   const editPad = editIndex !== null ? pads[editIndex] : null;
 
   return (
-    <div className="panel">
-      <div className="panel-header">Soundboard</div>
+    <>
       <div className="grid grid-cols-5 gap-2">
         {pads.map((pad, i) => (
           <div key={i} className="relative aspect-square">
@@ -309,6 +308,6 @@ export function SoundBoard({ connectElement }: SoundBoardProps) {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }

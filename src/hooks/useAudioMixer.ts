@@ -12,6 +12,7 @@ export interface UseAudioMixerReturn {
   setListening: (on: boolean) => void;
   setCueMode: (on: boolean) => void;
   setLimiterThreshold: (db: LimiterThreshold) => void;
+  getNodes: () => { ctx: AudioContext; micGain: GainNode; broadcastBus: GainNode } | null;
 }
 
 /**
@@ -247,6 +248,16 @@ export function useAudioMixer(): UseAudioMixerReturn {
     }
   }, [buildClipCurve]);
 
+  /** Expose internal nodes so the effects chain can wire itself in */
+  const getNodes = useCallback(() => {
+    if (!ctxRef.current || !micGainRef.current || !broadcastBusRef.current) return null;
+    return {
+      ctx: ctxRef.current,
+      micGain: micGainRef.current,
+      broadcastBus: broadcastBusRef.current,
+    };
+  }, []);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -267,5 +278,6 @@ export function useAudioMixer(): UseAudioMixerReturn {
     setListening,
     setCueMode,
     setLimiterThreshold,
+    getNodes,
   };
 }

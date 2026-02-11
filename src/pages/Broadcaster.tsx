@@ -18,7 +18,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useAudioMixer } from '@/hooks/useAudioMixer';
+import { useMicEffects } from '@/hooks/useMicEffects';
 import { SoundBoard } from '@/components/SoundBoard';
+import { EffectsBoard } from '@/components/EffectsBoard';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Footer } from '@/components/Footer';
 
 const WS_URL = import.meta.env.VITE_WS_URL || (
@@ -50,6 +53,7 @@ const Broadcaster = () => {
   const signaling = useSignaling(WS_URL);
   const webrtc = useWebRTC(signaling, 'broadcaster');
   const mixer = useAudioMixer();
+  const micEffects = useMicEffects();
   const audioAnalysis = useAudioAnalyser(mixer.mixedStream);
 
   // Auth check
@@ -126,6 +130,13 @@ const Broadcaster = () => {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       setLocalStream(stream);
       mixer.connectMic(stream);
+
+      // Insert effects chain between micGain and broadcastBus
+      const nodes = mixer.getNodes();
+      if (nodes) {
+        micEffects.insertIntoChain(nodes.ctx, nodes.micGain, nodes.broadcastBus);
+      }
+
       addLog('Mic connected');
 
       // Create room first if needed
@@ -154,6 +165,7 @@ const Broadcaster = () => {
   }, [isOnAir, mixer.mixedStream, webrtc.roomId, webrtc.startBroadcast, addLog]);
 
   const handleEndBroadcast = () => {
+    micEffects.removeFromChain();
     localStream?.getTracks().forEach((t) => t.stop());
     setLocalStream(null);
     mixer.disconnectMic();
@@ -415,8 +427,25 @@ const Broadcaster = () => {
           </div>
         )}
 
-        {/* Soundboard */}
-        <SoundBoard connectElement={mixer.connectElement} />
+        {/* Soundboard / Effects */}
+        <div className="panel">
+          <Tabs defaultValue="sounds">
+            <TabsList className="w-full mb-3">
+              <TabsTrigger value="sounds" className="flex-1">Sounds</TabsTrigger>
+              <TabsTrigger value="effects" className="flex-1">Effects</TabsTrigger>
+            </TabsList>
+            <TabsContent value="sounds">
+              <SoundBoard connectElement={mixer.connectElement} />
+            </TabsContent>
+            <TabsContent value="effects">
+              <EffectsBoard
+                effects={micEffects.effects}
+                onToggle={micEffects.toggleEffect}
+                onUpdate={micEffects.updateEffect}
+              />
+            </TabsContent>
+          </Tabs>
+        </div>
 
         {/* Health + Log */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

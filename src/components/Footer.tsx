@@ -135,6 +135,38 @@ export function Footer() {
               </section>
 
               <section>
+                <h3 className="text-foreground font-semibold mb-1">Effects</h3>
+                <p>
+                  Switch to the <strong className="text-foreground">Effects</strong> tab
+                  (next to Sounds) to add real-time effects to your microphone.
+                  Tap an effect pad to turn it on or off — it glows when active.
+                </p>
+                <ul className="list-disc list-inside mt-1 space-y-1 pl-1">
+                  <li>
+                    <strong className="text-foreground">Echo</strong> — Adds a
+                    room or hall-like reverb to your voice.
+                  </li>
+                  <li>
+                    <strong className="text-foreground">Voice Shift</strong> — Makes
+                    your voice sound deeper or brighter.
+                  </li>
+                  <li>
+                    <strong className="text-foreground">Delay</strong> — Creates
+                    repeating bounces of your voice, like a slapback or rhythmic echo.
+                  </li>
+                  <li>
+                    <strong className="text-foreground">Tone</strong> — A simple
+                    equalizer that lets you boost or cut bass, mids, and treble.
+                  </li>
+                </ul>
+                <p className="mt-1">
+                  Tap the <strong className="text-foreground">gear icon</strong> on
+                  any effect to customize it with easy-to-understand sliders.
+                  Effects only apply to your mic — soundboard clips are not affected.
+                </p>
+              </section>
+
+              <section>
                 <h3 className="text-foreground font-semibold mb-1">Ending the Broadcast</h3>
                 <p>
                   Press <strong className="text-foreground">End Broadcast</strong> when
