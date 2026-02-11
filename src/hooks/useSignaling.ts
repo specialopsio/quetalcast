@@ -20,16 +20,43 @@ export function useSignaling(url: string): UseSignalingReturn {
   const [connected, setConnected] = useState(false);
   const [lastMessage, setLastMessage] = useState<SignalingMessage | null>(null);
 
+  // Auto-reconnect state
+  const shouldReconnectRef = useRef(false);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const reconnectDelayRef = useRef(1000); // starts at 1s, backs off
+
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
+
+    // Clear any pending reconnect
+    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+
+    shouldReconnectRef.current = true;
 
     try {
       const ws = new WebSocket(url);
       wsRef.current = ws;
 
-      ws.onopen = () => setConnected(true);
-      ws.onclose = () => setConnected(false);
-      ws.onerror = () => setConnected(false);
+      ws.onopen = () => {
+        setConnected(true);
+        reconnectDelayRef.current = 1000; // reset backoff on success
+      };
+
+      ws.onclose = () => {
+        setConnected(false);
+        // Auto-reconnect with exponential backoff
+        if (shouldReconnectRef.current) {
+          const delay = reconnectDelayRef.current;
+          reconnectDelayRef.current = Math.min(delay * 2, 15000); // max 15s
+          reconnectTimerRef.current = setTimeout(() => {
+            if (shouldReconnectRef.current) connect();
+          }, delay);
+        }
+      };
+
+      ws.onerror = () => {
+        // onclose will fire after onerror, which handles reconnect
+      };
 
       ws.onmessage = (event) => {
         try {
@@ -46,6 +73,8 @@ export function useSignaling(url: string): UseSignalingReturn {
   }, [url]);
 
   const disconnect = useCallback(() => {
+    shouldReconnectRef.current = false;
+    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
     wsRef.current?.close();
     wsRef.current = null;
     setConnected(false);
@@ -66,6 +95,8 @@ export function useSignaling(url: string): UseSignalingReturn {
 
   useEffect(() => {
     return () => {
+      shouldReconnectRef.current = false;
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       wsRef.current?.close();
     };
   }, []);

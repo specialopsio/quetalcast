@@ -16,6 +16,11 @@ const REQUIRE_TLS = process.env.REQUIRE_TLS === 'true';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-secret-change-in-production';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 
+// TURN server credentials (optional — falls back to STUN-only when unset)
+const TURN_URL = process.env.TURN_URL || '';          // e.g. turn:global.relay.metered.ca:443?transport=tcp
+const TURN_USERNAME = process.env.TURN_USERNAME || '';
+const TURN_CREDENTIAL = process.env.TURN_CREDENTIAL || '';
+
 const logger = createLogger('server');
 const rooms = new RoomManager(logger);
 const sessions = new SessionManager(SESSION_SECRET);
@@ -101,6 +106,29 @@ app.get('/api/session', (req, res) => {
   }
 });
 
+// ICE server configuration — returns STUN + TURN servers for WebRTC
+app.get('/api/ice-config', (req, res) => {
+  const iceServers = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+  ];
+
+  if (TURN_URL && TURN_USERNAME && TURN_CREDENTIAL) {
+    // Support comma-separated TURN URLs (e.g. multiple protocols/ports)
+    const turnUrls = TURN_URL.split(',').map(u => u.trim()).filter(Boolean);
+    iceServers.push({
+      urls: turnUrls,
+      username: TURN_USERNAME,
+      credential: TURN_CREDENTIAL,
+    });
+    logger.debug('ICE config: STUN + TURN');
+  } else {
+    logger.debug('ICE config: STUN only (no TURN configured)');
+  }
+
+  res.json({ iceServers });
+});
+
 // Fix #1: Admin routes — require authentication
 app.get('/admin/rooms', requireAuth, (req, res) => {
   res.json({ rooms: rooms.listRooms() });
@@ -119,6 +147,20 @@ const server = http.createServer(app);
 
 // Fix #6: Set maxPayload to prevent memory exhaustion
 const wss = new WebSocketServer({ server, maxPayload: 64 * 1024 }); // 64KB max
+
+// WebSocket keep-alive — ping every 25s to prevent Fly.io proxy timeout (default ~60s)
+const WS_PING_INTERVAL = 25000;
+const pingInterval = setInterval(() => {
+  for (const ws of wss.clients) {
+    if (ws.isAlive === false) {
+      ws.terminate();
+      continue;
+    }
+    ws.isAlive = false;
+    ws.ping();
+  }
+}, WS_PING_INTERVAL);
+wss.on('close', () => clearInterval(pingInterval));
 
 // WebSocket rate limiting
 const wsJoinCounts = new Map();
@@ -191,6 +233,10 @@ wss.on('connection', (ws, req) => {
   const sessionToken = cookies.session || null;
   const sessionData = sessionToken ? sessions.validate(sessionToken) : null;
   const isAuthed = !!sessionData;
+
+  // Keep-alive: mark connection as alive on pong
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; });
 
   let clientRoom = null;
   let clientRole = null;

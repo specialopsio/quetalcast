@@ -24,11 +24,29 @@ export interface UseWebRTCReturn {
   effectiveQuality: EffectiveQuality;
 }
 
-const RTC_CONFIG: RTCConfiguration = {
+// Default fallback — STUN only (no TURN relay)
+const DEFAULT_RTC_CONFIG: RTCConfiguration = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
   ],
 };
+
+/** Fetch ICE server configuration (STUN + TURN) from the server */
+async function fetchIceConfig(): Promise<RTCConfiguration> {
+  try {
+    const res = await fetch('/api/ice-config');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.iceServers && data.iceServers.length > 0) {
+        return { iceServers: data.iceServers };
+      }
+    }
+  } catch {
+    console.warn('Could not fetch ICE config, using STUN-only fallback');
+  }
+  return DEFAULT_RTC_CONFIG;
+}
 
 // ---------------------------------------------------------------------------
 // Opus SDP parameters for pristine vs bandwidth-saving audio
@@ -153,6 +171,17 @@ export function useWebRTC(
   const [peerConnected, setPeerConnected] = useState(false);
   const [roomId, setRoomId] = useState<string | null>(null);
 
+  // ICE config (fetched from server, includes TURN credentials when configured)
+  const rtcConfigRef = useRef<RTCConfiguration>(DEFAULT_RTC_CONFIG);
+  const iceConfigFetchedRef = useRef(false);
+
+  useEffect(() => {
+    fetchIceConfig().then((cfg) => {
+      rtcConfigRef.current = cfg;
+      iceConfigFetchedRef.current = true;
+    });
+  }, []);
+
   // Audio quality
   const audioQualityModeRef = useRef<AudioQuality>('auto');     // user's chosen mode
   const effectiveQualityRef = useRef<EffectiveQuality>('high'); // what's actually in use
@@ -239,7 +268,7 @@ export function useWebRTC(
   // --- Broadcaster: create a PC for a specific receiver ---
   const createPCForReceiver = useCallback(
     (receiverId: string, stream: MediaStream) => {
-      const pc = new RTCPeerConnection(RTC_CONFIG);
+      const pc = new RTCPeerConnection(rtcConfigRef.current);
       pcsRef.current.set(receiverId, pc);
 
       // Add all tracks from the broadcast stream
@@ -295,7 +324,7 @@ export function useWebRTC(
 
   // --- Receiver: create a single PC ---
   const createReceiverPC = useCallback(() => {
-    const pc = new RTCPeerConnection(RTC_CONFIG);
+    const pc = new RTCPeerConnection(rtcConfigRef.current);
     pcRef.current = pc;
 
     pc.onconnectionstatechange = () => {
