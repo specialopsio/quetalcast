@@ -79,6 +79,8 @@ const Broadcaster = () => {
     }
   }, [webrtc.status, addLog]);
 
+  const broadcastStartedRef = useRef(false);
+
   const handleGoOnAir = async () => {
     try {
       const constraints: MediaStreamConstraints = {
@@ -100,17 +102,24 @@ const Broadcaster = () => {
         addLog('Creating room…');
       }
 
+      broadcastStartedRef.current = false;
       setIsOnAir(true);
-
-      // Wait a tick for roomId, then start broadcast
-      setTimeout(() => {
-        webrtc.startBroadcast(stream);
-        addLog('Broadcast started');
-      }, 500);
     } catch (e) {
       addLog('Failed to start broadcast: ' + (e as Error).message, 'error');
     }
   };
+
+  // Start broadcast once room is ready and we have a stream
+  useEffect(() => {
+    if (isOnAir && localStream && webrtc.roomId && !broadcastStartedRef.current) {
+      broadcastStartedRef.current = true;
+      webrtc.startBroadcast(localStream);
+      addLog('Broadcast started');
+    }
+    if (!isOnAir) {
+      broadcastStartedRef.current = false;
+    }
+  }, [isOnAir, localStream, webrtc.roomId, webrtc.startBroadcast, addLog]);
 
   const handleEndBroadcast = () => {
     localStream?.getTracks().forEach((t) => t.stop());
