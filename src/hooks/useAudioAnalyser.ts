@@ -1,17 +1,26 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
 export interface AudioAnalysis {
-  level: number;   // 0-1 RMS level
-  peak: number;    // 0-1 peak hold
+  level: number;   // dBFS RMS level (e.g. -60 to 0)
+  peak: number;    // dBFS peak hold
   clipping: boolean;
 }
 
+const MIN_DB = -60; // floor of the meter
+
+/** Convert a linear amplitude (0–1) to dBFS, clamped to MIN_DB */
+function toDbfs(linear: number): number {
+  if (linear <= 0) return MIN_DB;
+  const db = 20 * Math.log10(linear);
+  return Math.max(MIN_DB, db);
+}
+
 export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
-  const [analysis, setAnalysis] = useState<AudioAnalysis>({ level: 0, peak: 0, clipping: false });
+  const [analysis, setAnalysis] = useState<AudioAnalysis>({ level: MIN_DB, peak: MIN_DB, clipping: false });
   const contextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const rafRef = useRef<number>(0);
-  const peakRef = useRef(0);
+  const peakDbRef = useRef(MIN_DB);
   const peakDecayRef = useRef(0);
 
   const tick = useCallback(() => {
@@ -32,24 +41,27 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
     const rms = Math.sqrt(sum / data.length);
     const clipping = max >= 0.99;
 
-    // Peak hold with decay
-    if (max > peakRef.current) {
-      peakRef.current = max;
+    const rmsDb = toDbfs(rms);
+    const peakDb = toDbfs(max);
+
+    // Peak hold with decay (in dB space — drop 0.5 dB per frame after hold)
+    if (peakDb > peakDbRef.current) {
+      peakDbRef.current = peakDb;
       peakDecayRef.current = 0;
     } else {
       peakDecayRef.current++;
       if (peakDecayRef.current > 30) {
-        peakRef.current = Math.max(0, peakRef.current - 0.01);
+        peakDbRef.current = Math.max(MIN_DB, peakDbRef.current - 0.5);
       }
     }
 
-    setAnalysis({ level: Math.min(1, rms * 3), peak: peakRef.current, clipping });
+    setAnalysis({ level: rmsDb, peak: peakDbRef.current, clipping });
     rafRef.current = requestAnimationFrame(tick);
   }, []);
 
   useEffect(() => {
     if (!stream || stream.getTracks().length === 0) {
-      setAnalysis({ level: 0, peak: 0, clipping: false });
+      setAnalysis({ level: MIN_DB, peak: MIN_DB, clipping: false });
       return;
     }
 
