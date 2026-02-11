@@ -27,8 +27,8 @@ const Login = () => {
   };
 
   return (
-    <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-background">
-      <div className="w-full max-w-sm flex-1 flex flex-col justify-center">
+    <div className="min-h-[100dvh] bg-background flex flex-col">
+      <div className="flex-1 flex flex-col items-center justify-center px-4">
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2 mb-4">
             <Radio className="h-8 w-8 text-primary" />
@@ -37,7 +37,7 @@ const Login = () => {
           <p className="text-sm text-muted-foreground mt-1">101.5 KTAL-LP</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="panel space-y-4">
+        <form onSubmit={handleSubmit} className="panel space-y-4 w-full max-w-sm">
           <div>
             <label className="stat-label block mb-1.5">Username</label>
             <input
