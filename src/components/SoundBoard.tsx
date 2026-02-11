@@ -156,11 +156,6 @@ export function SoundBoard({ connectElement }: SoundBoardProps) {
     setEditIndex(null);
   };
 
-  const truncateTitle = (title: string, maxLen = 14) => {
-    if (title.length <= maxLen) return title;
-    return title.slice(0, maxLen - 1) + '…';
-  };
-
   const editPad = editIndex !== null ? pads[editIndex] : null;
 
   return (
@@ -184,8 +179,8 @@ export function SoundBoard({ connectElement }: SoundBoardProps) {
                 ) : (
                   <Play className="h-4 w-4 text-muted-foreground" />
                 )}
-                <span className="text-[10px] font-mono text-muted-foreground leading-tight text-center px-1 break-all">
-                  {truncateTitle(pad.title)}
+                <span className="text-[10px] font-mono text-muted-foreground leading-tight text-center px-1 line-clamp-2 overflow-hidden">
+                  {pad.title}
                 </span>
               </button>
             ) : (
