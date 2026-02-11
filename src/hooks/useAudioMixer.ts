@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+export type LimiterThreshold = 0 | -3 | -6 | -12;
+
 export interface UseAudioMixerReturn {
   mixedStream: MediaStream | null;
   connectMic: (stream: MediaStream) => void;
@@ -9,6 +11,7 @@ export interface UseAudioMixerReturn {
   setMicMuted: (muted: boolean) => void;
   setListening: (on: boolean) => void;
   setCueMode: (on: boolean) => void;
+  setLimiterThreshold: (db: LimiterThreshold) => void;
 }
 
 /**
@@ -17,7 +20,7 @@ export interface UseAudioMixerReturn {
  *   micSource → micGain → broadcastBus
  *   soundboardBus → sbToBroadcastGain → broadcastBus
  *   soundboardBus → sbLocalGain → ctx.destination
- *   broadcastBus → dest (→ mixedStream → WebRTC)
+ *   broadcastBus → limiter → dest (→ mixedStream → WebRTC)
  *   broadcastBus → listenGain → ctx.destination
  *
  * Gain state table:
@@ -40,6 +43,7 @@ export function useAudioMixer(): UseAudioMixerReturn {
   const sbToBroadcastGainRef = useRef<GainNode | null>(null);
   const sbLocalGainRef = useRef<GainNode | null>(null);
   const listenGainRef = useRef<GainNode | null>(null);
+  const limiterRef = useRef<DynamicsCompressorNode | null>(null);
 
   // Track current mic volume for mute/unmute restore
   const micVolumeRef = useRef(1);
@@ -78,6 +82,14 @@ export function useAudioMixer(): UseAudioMixerReturn {
     sbLocalGain.gain.value = 1;
     listenGain.gain.value = 0; // listen off by default
 
+    // Output limiter (brickwall style)
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = 0;   // default: limit at 0 dBFS
+    limiter.knee.value = 0;        // hard knee for brickwall
+    limiter.ratio.value = 20;      // aggressive ratio
+    limiter.attack.value = 0.001;  // 1ms attack
+    limiter.release.value = 0.05;  // 50ms release
+
     // Wire the graph
     // micGain → broadcastBus (connected when mic is added)
     // soundboardBus → sbToBroadcastGain → broadcastBus
@@ -86,8 +98,9 @@ export function useAudioMixer(): UseAudioMixerReturn {
     // soundboardBus → sbLocalGain → ctx.destination
     soundboardBus.connect(sbLocalGain);
     sbLocalGain.connect(ctx.destination);
-    // broadcastBus → dest (WebRTC output)
-    broadcastBus.connect(dest);
+    // broadcastBus → limiter → dest (WebRTC output)
+    broadcastBus.connect(limiter);
+    limiter.connect(dest);
     // broadcastBus → listenGain → ctx.destination
     broadcastBus.connect(listenGain);
     listenGain.connect(ctx.destination);
@@ -101,6 +114,7 @@ export function useAudioMixer(): UseAudioMixerReturn {
     sbToBroadcastGainRef.current = sbToBroadcastGain;
     sbLocalGainRef.current = sbLocalGain;
     listenGainRef.current = listenGain;
+    limiterRef.current = limiter;
 
     setMixedStream(dest.stream);
 
@@ -204,6 +218,12 @@ export function useAudioMixer(): UseAudioMixerReturn {
     }
   }, []);
 
+  const setLimiterThreshold = useCallback((db: LimiterThreshold) => {
+    if (limiterRef.current) {
+      limiterRef.current.threshold.value = db;
+    }
+  }, []);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -223,5 +243,6 @@ export function useAudioMixer(): UseAudioMixerReturn {
     setMicMuted,
     setListening,
     setCueMode,
+    setLimiterThreshold,
   };
 }

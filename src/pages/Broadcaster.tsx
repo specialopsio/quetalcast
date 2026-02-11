@@ -39,6 +39,7 @@ const Broadcaster = () => {
   const [micMuted, setMicMuted] = useState(false);
   const [listening, setListening] = useState(false);
   const [cueMode, setCueMode] = useState(false);
+  const [limiterDb, setLimiterDb] = useState<0 | -3 | -6 | -12>(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
 
@@ -200,6 +201,13 @@ const Broadcaster = () => {
     }
   };
 
+  const handleLimiterChange = (value: string) => {
+    const db = Number(value) as 0 | -3 | -6 | -12;
+    setLimiterDb(db);
+    mixer.setLimiterThreshold(db);
+    addLog(`Limiter set to ${db} dB`);
+  };
+
   // Reset controls when going off air
   useEffect(() => {
     if (!isOnAir) {
@@ -207,6 +215,7 @@ const Broadcaster = () => {
       setMicMuted(false);
       setListening(false);
       setCueMode(false);
+      setLimiterDb(0);
       setElapsedSeconds(0);
     }
   }, [isOnAir]);
@@ -386,6 +395,22 @@ const Broadcaster = () => {
               >
                 CUE
               </button>
+
+              {/* Limiter */}
+              <div className="shrink-0 flex items-center gap-1.5">
+                <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Limit</span>
+                <Select value={String(limiterDb)} onValueChange={handleLimiterChange}>
+                  <SelectTrigger className="w-[72px] h-7 bg-secondary border-border text-xs font-mono">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0" className="text-xs font-mono">0 dB</SelectItem>
+                    <SelectItem value="-3" className="text-xs font-mono">-3 dB</SelectItem>
+                    <SelectItem value="-6" className="text-xs font-mono">-6 dB</SelectItem>
+                    <SelectItem value="-12" className="text-xs font-mono">-12 dB</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
         )}
