@@ -9,6 +9,13 @@ import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
 import { Copy, Mic, MicOff, Radio } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const WS_URL = import.meta.env.VITE_WS_URL || `ws://${window.location.hostname}:3001`;
 
@@ -164,18 +171,22 @@ const Broadcaster = () => {
         {/* Device select */}
         <div className="panel">
           <div className="panel-header">Audio Input</div>
-          <select
+          <Select
             value={selectedDevice}
-            onChange={(e) => setSelectedDevice(e.target.value)}
+            onValueChange={setSelectedDevice}
             disabled={isOnAir}
-            className="w-full bg-input border border-border rounded-md px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
           >
-            {devices.map((d) => (
-              <option key={d.deviceId} value={d.deviceId}>
-                {d.label || `Device ${d.deviceId.slice(0, 8)}`}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className="w-full bg-input border-border font-mono text-sm">
+              <SelectValue placeholder="Select audio device…" />
+            </SelectTrigger>
+            <SelectContent>
+              {devices.map((d) => (
+                <SelectItem key={d.deviceId} value={d.deviceId} className="font-mono text-sm">
+                  {d.label || `Device ${d.deviceId.slice(0, 8)}`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Level meter */}
