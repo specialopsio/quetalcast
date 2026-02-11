@@ -66,6 +66,7 @@ function MeterBar({ channel, segments, channelLabel }: { channel: ChannelAnalysi
 export function LevelMeter({ left, right, label = 'Level', segments = 48 }: LevelMeterProps) {
   const clipping = left.clipping || right.clipping;
   const maxLevel = Math.max(left.level, right.level);
+  const maxPeak = Math.max(left.peak, right.peak);
 
   return (
     <div className="panel">
@@ -75,6 +76,11 @@ export function LevelMeter({ left, right, label = 'Level', segments = 48 }: Leve
           {maxLevel > MIN_DB && (
             <span className="text-[10px] font-mono text-muted-foreground tabular-nums">
               {maxLevel.toFixed(1)} dB
+            </span>
+          )}
+          {maxPeak > MIN_DB && (
+            <span className="text-[10px] font-mono text-muted-foreground/60 tabular-nums">
+              pk {maxPeak.toFixed(1)}
             </span>
           )}
           {clipping && (
@@ -88,11 +94,12 @@ export function LevelMeter({ left, right, label = 'Level', segments = 48 }: Leve
         <MeterBar channel={left} segments={segments} channelLabel="L" />
         <MeterBar channel={right} segments={segments} channelLabel="R" />
       </div>
-      <div className="flex justify-between mt-1 pl-5 pr-0.5">
+      <div className="relative mt-1 ml-5 h-3">
         {SCALE_MARKS.map((mark) => (
           <span
             key={mark.db}
-            className="text-[9px] font-mono text-muted-foreground"
+            className="absolute text-[9px] font-mono text-muted-foreground -translate-x-1/2"
+            style={{ left: `${dbToPosition(mark.db) * 100}%` }}
           >
             {mark.label}
           </span>
