@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select';
 import { useAudioMixer } from '@/hooks/useAudioMixer';
 import { SoundBoard } from '@/components/SoundBoard';
+import { Footer } from '@/components/Footer';
 
 const WS_URL = import.meta.env.VITE_WS_URL || (
   window.location.protocol === 'https:'
@@ -370,6 +371,8 @@ const Broadcaster = () => {
           <EventLog entries={logs} />
         </div>
       </div>
+
+      <Footer />
     </div>
   );
 };

@@ -9,6 +9,7 @@ import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
 import { Headphones, Radio, Volume2 } from 'lucide-react';
+import { Footer } from '@/components/Footer';
 
 const WS_URL = import.meta.env.VITE_WS_URL || (
   window.location.protocol === 'https:'
@@ -172,6 +173,8 @@ const Receiver = () => {
           <EventLog entries={logs} />
         </div>
       </div>
+
+      <Footer />
     </div>
   );
 };

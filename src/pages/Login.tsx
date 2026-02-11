@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { login } from '@/lib/auth';
 import { Radio } from 'lucide-react';
+import { Footer } from '@/components/Footer';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -26,8 +27,8 @@ const Login = () => {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="w-full max-w-sm">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background">
+      <div className="w-full max-w-sm flex-1 flex flex-col justify-center">
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2 mb-4">
             <Radio className="h-8 w-8 text-primary" />
@@ -70,6 +71,8 @@ const Login = () => {
           </button>
         </form>
       </div>
+
+      <Footer />
     </div>
   );
 };
