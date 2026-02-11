@@ -8,7 +8,7 @@ import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
-import { Copy, Mic, MicOff, Radio, Headphones, Music, Sparkles, Zap, Plug2, Circle, Square, Users } from 'lucide-react';
+import { Copy, Mic, MicOff, Radio, Headphones, Music, Sparkles, Zap, Plug2, Circle, Square, Users, Disc3 } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import {
   Select,
@@ -51,6 +51,8 @@ const Broadcaster = () => {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [boardTab, setBoardTab] = useState('sounds');
   const [listenerCount, setListenerCount] = useState(0);
+  const [nowPlaying, setNowPlaying] = useState('');
+  const nowPlayingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [qualityMode, setQualityMode] = useState<AudioQuality>('auto');
   const audioRef = useRef<HTMLAudioElement>(null);
 
@@ -334,6 +336,15 @@ const Broadcaster = () => {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const handleNowPlayingChange = (value: string) => {
+    setNowPlaying(value);
+    // Debounce sending metadata
+    if (nowPlayingTimerRef.current) clearTimeout(nowPlayingTimerRef.current);
+    nowPlayingTimerRef.current = setTimeout(() => {
+      signaling.send({ type: 'metadata', text: value });
+    }, 500);
+  };
+
   const handleLimiterChange = (value: string) => {
     const db = Number(value) as 0 | -3 | -6 | -12;
     setLimiterDb(db);
@@ -351,6 +362,7 @@ const Broadcaster = () => {
       setLimiterDb(0);
       setElapsedSeconds(0);
       setListenerCount(0);
+      setNowPlaying('');
     }
   }, [isOnAir]);
 
@@ -644,6 +656,21 @@ const Broadcaster = () => {
                   </>
                 )}
               </button>
+            </div>
+
+            {/* Now Playing */}
+            <div className="flex items-center gap-3 mt-3 pt-3 border-t border-border">
+              <span className="text-xs font-semibold text-foreground flex items-center gap-1.5 shrink-0">
+                <Disc3 className="h-3 w-3" />
+                Now Playing
+              </span>
+              <input
+                value={nowPlaying}
+                onChange={(e) => handleNowPlayingChange(e.target.value)}
+                placeholder="What's playing…"
+                maxLength={200}
+                className="flex-1 bg-input border border-border rounded-md px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              />
             </div>
           </div>
         )}

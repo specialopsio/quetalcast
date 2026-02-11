@@ -381,6 +381,11 @@ wss.on('connection', (ws, req) => {
             ws.send(JSON.stringify({ type: 'peer-joined', role: 'broadcaster' }));
           }
           sendListenerCount(roomId);
+          // Send current metadata to the new receiver
+          const currentMeta = rooms.getMetadata(roomId);
+          if (currentMeta) {
+            ws.send(JSON.stringify({ type: 'metadata', text: currentMeta }));
+          }
         } else {
           // Broadcaster joining an existing room
           ws.send(JSON.stringify({ type: 'joined', roomId, role }));
@@ -490,6 +495,20 @@ wss.on('connection', (ws, req) => {
       case 'stats': {
         if (clientRoom && clientRole) {
           rooms.logStats(clientRoom, clientRole, msg.data);
+        }
+        break;
+      }
+
+      case 'metadata': {
+        if (!clientRoom || clientRole !== 'broadcaster') break;
+        const metaText = typeof msg.text === 'string' ? msg.text.slice(0, 200) : '';
+        rooms.setMetadata(clientRoom, metaText);
+        // Broadcast to all receivers
+        const metaMsg = JSON.stringify({ type: 'metadata', text: metaText });
+        const metaReceiverIds = rooms.getReceiverIds(clientRoom);
+        for (const rid of metaReceiverIds) {
+          const rws = rooms.getReceiver(clientRoom, rid);
+          if (rws) rws.send(metaMsg);
         }
         break;
       }

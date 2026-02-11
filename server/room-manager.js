@@ -16,6 +16,7 @@ export class RoomManager {
       roomId,
       broadcaster: null,
       receivers: new Map(), // receiverId → ws
+      metadata: null, // now-playing text
       createdAt: new Date().toISOString(),
     });
     return roomId;
@@ -103,6 +104,16 @@ export class RoomManager {
       if (rws === ws) return id;
     }
     return null;
+  }
+
+  setMetadata(roomId, text) {
+    const room = this.rooms.get(roomId);
+    if (room) room.metadata = text || null;
+  }
+
+  getMetadata(roomId) {
+    const room = this.rooms.get(roomId);
+    return room ? room.metadata : null;
   }
 
   listRooms() {

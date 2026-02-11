@@ -8,7 +8,7 @@ import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
-import { Headphones, Radio, Volume2, ExternalLink, RefreshCw } from 'lucide-react';
+import { Headphones, Radio, Volume2, ExternalLink, RefreshCw, Disc3 } from 'lucide-react';
 import { Footer } from '@/components/Footer';
 import { ChatPanel } from '@/components/ChatPanel';
 
@@ -25,6 +25,7 @@ const Receiver = () => {
   const [joined, setJoined] = useState(false);
   const [audioStarted, setAudioStarted] = useState(false);
   const [externalStream, setExternalStream] = useState(false);
+  const [nowPlaying, setNowPlaying] = useState('');
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const noAudioTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -55,6 +56,16 @@ const Receiver = () => {
   useEffect(() => {
     if (signaling.connected) addLog('Connected to server');
   }, [signaling.connected]);
+
+  // Listen for metadata updates
+  useEffect(() => {
+    const unsub = signaling.subscribe((msg) => {
+      if (msg.type === 'metadata' && typeof msg.text === 'string') {
+        setNowPlaying(msg.text as string);
+      }
+    });
+    return unsub;
+  }, [signaling]);
 
   const prevStatus = useRef<ConnectionStatus>('idle');
   useEffect(() => {
@@ -242,6 +253,14 @@ const Receiver = () => {
             right={audioAnalysis.right}
             label="Output Level"
           />
+        )}
+
+        {/* Now Playing */}
+        {joined && nowPlaying && (audioStarted || externalStream) && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-primary/5 border border-primary/20 rounded-md">
+            <Disc3 className="h-4 w-4 text-primary shrink-0 animate-spin" style={{ animationDuration: '3s' }} />
+            <span className="text-xs font-mono text-foreground truncate">{nowPlaying}</span>
+          </div>
         )}
 
         {/* Chat — visible when listening or in external stream room */}
