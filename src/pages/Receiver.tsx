@@ -34,20 +34,29 @@ const Receiver = () => {
   const audioAnalysis = useAudioAnalyser(audioStarted ? webrtc.remoteStream : null);
 
 
+  const statusLabels: Record<ConnectionStatus, string> = {
+    idle: 'Ready',
+    connecting: 'Connecting to broadcast…',
+    'on-air': 'On air',
+    receiving: 'Listening',
+    disconnected: 'Broadcast ended',
+    error: 'Could not connect',
+  };
+
   useEffect(() => {
     signaling.connect();
-    addLog('Connecting to signaling server…');
+    addLog('Connecting…');
     return () => signaling.disconnect();
   }, []);
 
   useEffect(() => {
-    if (signaling.connected) addLog('Signaling connected');
+    if (signaling.connected) addLog('Connected to server');
   }, [signaling.connected]);
 
   const prevStatus = useRef<ConnectionStatus>('idle');
   useEffect(() => {
     if (webrtc.status !== prevStatus.current) {
-      addLog(`Status: ${webrtc.status}`);
+      addLog(statusLabels[webrtc.status] || webrtc.status);
       prevStatus.current = webrtc.status;
     }
   }, [webrtc.status, addLog]);
@@ -67,7 +76,7 @@ const Receiver = () => {
     }
     webrtc.joinAsReceiver(rid);
     setJoined(true);
-    addLog(`Joining room ${rid.slice(0, 8)}…`);
+    addLog('Tuning in…');
   };
 
   const handleClickToListen = () => {
@@ -76,9 +85,9 @@ const Receiver = () => {
       audio.srcObject = webrtc.remoteStream;
       audio.play().then(() => {
         setAudioStarted(true);
-        addLog('Audio playback started');
-      }).catch((e) => {
-        addLog('Playback failed: ' + e.message, 'error');
+        addLog('You\'re listening');
+      }).catch(() => {
+        addLog('Couldn\'t start playback — try tapping again', 'error');
       });
       audioElRef.current = audio;
     }
@@ -144,17 +153,17 @@ const Receiver = () => {
             className="w-full py-12 rounded-lg bg-primary/10 border-2 border-primary/30 text-primary hover:bg-primary/20 transition-colors flex flex-col items-center gap-3"
           >
             <Volume2 className="h-12 w-12" />
-            <span className="text-lg font-semibold">Click to Listen</span>
-            <span className="text-xs text-muted-foreground">Browser requires user gesture for audio playback</span>
+            <span className="text-lg font-semibold">Tap to Listen</span>
+            <span className="text-xs text-muted-foreground">The broadcast is ready — tap to start audio</span>
           </button>
         )}
 
         {/* Waiting state — only when joined and actively connecting */}
         {joined && !webrtc.remoteStream && webrtc.status !== 'error' && webrtc.status !== 'disconnected' && (
           <div className="panel text-center py-8">
-            <div className="text-muted-foreground text-sm">Waiting for broadcaster…</div>
-            <div className="text-xs text-muted-foreground/60 mt-1 font-mono">
-              ICE: {webrtc.iceConnectionState} | Signaling: {webrtc.signalingState}
+            <div className="text-muted-foreground text-sm">Connecting to broadcast…</div>
+            <div className="text-xs text-muted-foreground/60 mt-1">
+              Hang tight, we're setting up the connection
             </div>
           </div>
         )}

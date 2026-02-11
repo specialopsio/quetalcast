@@ -71,30 +71,39 @@ const Broadcaster = () => {
         if (audioInputs.length > 0 && !selectedDevice) {
           setSelectedDevice(audioInputs[0].deviceId);
         }
-        addLog(`Found ${audioInputs.length} audio input device(s)`);
+        addLog(`Found ${audioInputs.length} audio input${audioInputs.length !== 1 ? 's' : ''}`);
       } catch (e) {
-        addLog('Failed to enumerate devices: ' + (e as Error).message, 'error');
+        addLog('Couldn\'t find audio devices — check permissions', 'error');
       }
     }
     getDevices();
   }, [addLog, selectedDevice]);
 
+  const statusLabels: Record<ConnectionStatus, string> = {
+    idle: 'Ready',
+    connecting: 'Setting up broadcast…',
+    'on-air': 'You\'re on air',
+    receiving: 'Receiving',
+    disconnected: 'Disconnected',
+    error: 'Something went wrong',
+  };
+
   // Connect signaling
   useEffect(() => {
     signaling.connect();
-    addLog('Connecting to signaling server…');
+    addLog('Connecting…');
     return () => signaling.disconnect();
   }, []);
 
   useEffect(() => {
-    if (signaling.connected) addLog('Signaling connected');
+    if (signaling.connected) addLog('Connected to server');
   }, [signaling.connected]);
 
   // Log status changes
   const prevStatus = useRef<ConnectionStatus>('idle');
   useEffect(() => {
     if (webrtc.status !== prevStatus.current) {
-      addLog(`Status: ${webrtc.status}`);
+      addLog(statusLabels[webrtc.status] || webrtc.status);
       prevStatus.current = webrtc.status;
     }
   }, [webrtc.status, addLog]);
@@ -115,18 +124,18 @@ const Broadcaster = () => {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       setLocalStream(stream);
       mixer.connectMic(stream);
-      addLog('Audio capture started');
+      addLog('Mic connected');
 
       // Create room first if needed
       if (!webrtc.roomId) {
         webrtc.createRoom();
-        addLog('Creating room…');
+        addLog('Setting up room…');
       }
 
       broadcastStartedRef.current = false;
       setIsOnAir(true);
     } catch (e) {
-      addLog('Failed to start broadcast: ' + (e as Error).message, 'error');
+      addLog('Couldn\'t start broadcast — check mic permissions', 'error');
     }
   };
 
@@ -135,7 +144,7 @@ const Broadcaster = () => {
     if (isOnAir && mixer.mixedStream && webrtc.roomId && !broadcastStartedRef.current) {
       broadcastStartedRef.current = true;
       webrtc.startBroadcast(mixer.mixedStream);
-      addLog('Broadcast started');
+      addLog('You\'re live!');
     }
     if (!isOnAir) {
       broadcastStartedRef.current = false;
@@ -148,7 +157,7 @@ const Broadcaster = () => {
     mixer.disconnectMic();
     webrtc.stop();
     setIsOnAir(false);
-    addLog('Broadcast ended');
+    addLog('Off air');
   };
 
   // --- Mixer control handlers ---
@@ -181,12 +190,12 @@ const Broadcaster = () => {
     if (newCue) {
       // Cue on → auto-enable listen
       setListening(true);
-      addLog('Cue mode on (listen enabled)');
+      addLog('Cue mode on — previewing locally');
     } else {
       // Cue off → auto-disable listen
       setListening(false);
       mixer.setListening(false);
-      addLog('Cue mode off');
+      addLog('Cue mode off — back on air');
     }
   };
 

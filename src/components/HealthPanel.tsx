@@ -35,10 +35,24 @@ function StateIndicator({ label, value }: { label: string; value: string }) {
     closed: 'text-muted-foreground',
   };
 
+  const friendlyValue: Record<string, string> = {
+    connected: 'Good',
+    completed: 'Good',
+    stable: 'Stable',
+    checking: 'Checking…',
+    connecting: 'Connecting…',
+    'have-local-offer': 'Setting up…',
+    'have-remote-offer': 'Setting up…',
+    new: 'Waiting',
+    disconnected: 'Lost',
+    failed: 'Failed',
+    closed: 'Closed',
+  };
+
   return (
     <div className="flex items-center justify-between text-xs">
       <span className="font-mono text-muted-foreground uppercase">{label}</span>
-      <span className={`font-mono font-semibold ${colorMap[value] || 'text-foreground'}`}>{value}</span>
+      <span className={`font-mono font-semibold ${colorMap[value] || 'text-foreground'}`}>{friendlyValue[value] || value}</span>
     </div>
   );
 }
@@ -46,29 +60,29 @@ function StateIndicator({ label, value }: { label: string; value: string }) {
 export function HealthPanel({ stats, connectionState, iceConnectionState, signalingState, peerConnected }: HealthPanelProps) {
   return (
     <div className="panel space-y-4">
-      <div className="panel-header">Health</div>
+      <div className="panel-header">Connection</div>
 
       {/* Stats grid */}
       <div className="grid grid-cols-4 gap-3">
-        <StatItem label="Bitrate" value={stats ? stats.bitrate.toFixed(1) : '—'} unit="kbps" />
+        <StatItem label="Speed" value={stats ? stats.bitrate.toFixed(1) : '—'} unit="kbps" />
         <StatItem
-          label="Pkt Loss"
+          label="Dropped"
           value={stats ? stats.packetsLost : '—'}
           warn={!!stats && stats.packetsLost > 10}
         />
         <StatItem label="Jitter" value={stats ? stats.jitter.toFixed(1) : '—'} unit="ms" />
-        <StatItem label="RTT" value={stats ? stats.rtt.toFixed(0) : '—'} unit="ms" />
+        <StatItem label="Delay" value={stats ? stats.rtt.toFixed(0) : '—'} unit="ms" />
       </div>
 
       {/* Connection states */}
       <div className="space-y-1.5 pt-2 border-t border-border/50">
-        <StateIndicator label="Connection" value={connectionState} />
-        <StateIndicator label="ICE" value={iceConnectionState} />
-        <StateIndicator label="Signaling" value={signalingState} />
+        <StateIndicator label="Stream" value={connectionState} />
+        <StateIndicator label="Network" value={iceConnectionState} />
+        <StateIndicator label="Server" value={signalingState} />
         <div className="flex items-center justify-between text-xs">
-          <span className="font-mono text-muted-foreground uppercase">Peer</span>
+          <span className="font-mono text-muted-foreground uppercase">Listener</span>
           <span className={`font-mono font-semibold ${peerConnected ? 'text-primary' : 'text-muted-foreground'}`}>
-            {peerConnected ? 'connected' : 'waiting'}
+            {peerConnected ? 'Connected' : 'Waiting'}
           </span>
         </div>
       </div>

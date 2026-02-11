@@ -8,11 +8,11 @@ interface StatusBarProps {
 
 const statusConfig: Record<ConnectionStatus, { label: string; className: string; icon: typeof Radio }> = {
   idle: { label: 'OFFLINE', className: 'status-offline', icon: WifiOff },
-  connecting: { label: 'CONNECTING', className: 'status-connecting', icon: Wifi },
+  connecting: { label: 'CONNECTING…', className: 'status-connecting', icon: Wifi },
   'on-air': { label: 'ON AIR', className: 'status-on-air', icon: Radio },
-  receiving: { label: 'RECEIVING', className: 'status-receiving', icon: Headphones },
-  disconnected: { label: 'DISCONNECTED', className: 'status-error', icon: WifiOff },
-  error: { label: 'ERROR', className: 'status-error', icon: AlertCircle },
+  receiving: { label: 'LISTENING', className: 'status-receiving', icon: Headphones },
+  disconnected: { label: 'OFF AIR', className: 'status-error', icon: WifiOff },
+  error: { label: 'OFFLINE', className: 'status-error', icon: AlertCircle },
 };
 
 export function StatusBar({ status, roomId }: StatusBarProps) {
