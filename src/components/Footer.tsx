@@ -221,10 +221,104 @@ export function Footer() {
               </section>
 
               <section>
+                <h3 className="text-foreground font-semibold mb-1">Live Chat</h3>
+                <p>
+                  When on air, a chat panel appears below the mixer. Listeners can send
+                  you messages and you can reply. The first time you click the chat input,
+                  you'll be asked for a display name (session-only — not saved). Messages
+                  are limited to 280 characters and rate-limited to 1 per second. Incoming
+                  chat messages also appear in the event log with a blue icon.
+                </p>
+              </section>
+
+              <section>
+                <h3 className="text-foreground font-semibold mb-1">Now Playing</h3>
+                <p>
+                  Type into the <strong className="text-foreground">Now Playing</strong> field
+                  in the mixer controls to set stream metadata (song title, show name, etc.).
+                  It's sent to all connected listeners in real time with a 500ms debounce.
+                  Max 200 characters.
+                </p>
+              </section>
+
+              <section>
+                <h3 className="text-foreground font-semibold mb-1">Recording</h3>
+                <p>
+                  Press the <strong className="text-foreground">Record</strong> button in
+                  the mixer controls to capture your broadcast as a 320 kbps stereo MP3.
+                  A pulsing red dot shows when recording is active, along with elapsed time
+                  and file size. When you stop recording (or end the broadcast), the MP3
+                  automatically downloads to your computer. Recording uses an energy-efficient
+                  AudioWorklet + Web Worker pipeline.
+                </p>
+              </section>
+
+              <section>
+                <h3 className="text-foreground font-semibold mb-1">Keyboard Shortcuts</h3>
+                <p>
+                  While on air, use these keys for hands-free control (disabled when
+                  typing in text inputs):
+                </p>
+                <ul className="list-disc list-inside mt-1 space-y-1 pl-1">
+                  <li><strong className="text-foreground">Space</strong> — Toggle mute</li>
+                  <li><strong className="text-foreground">R</strong> — Toggle recording</li>
+                  <li><strong className="text-foreground">L</strong> — Toggle listen</li>
+                  <li><strong className="text-foreground">C</strong> — Toggle cue mode</li>
+                  <li><strong className="text-foreground">1–9, 0</strong> — Trigger soundboard pads 1–10</li>
+                  <li><strong className="text-foreground">?</strong> — Show/hide shortcuts reference</li>
+                </ul>
+                <p className="mt-1">
+                  Click the keyboard icon next to "Broadcaster" in the header to see
+                  the full shortcut reference.
+                </p>
+              </section>
+
+              <section>
+                <h3 className="text-foreground font-semibold mb-1">Audio Presets</h3>
+                <p>
+                  The <strong className="text-foreground">Presets</strong> dropdown in the
+                  mixer saves and recalls your mic volume, limiter, quality, and all effect
+                  settings at once. Three built-in presets are included:
+                </p>
+                <ul className="list-disc list-inside mt-1 space-y-1 pl-1">
+                  <li><strong className="text-foreground">Podcast Voice</strong> — Enhance + compressor, high quality</li>
+                  <li><strong className="text-foreground">DJ Mode</strong> — Tone + compressor, high quality</li>
+                  <li><strong className="text-foreground">Lo-Fi</strong> — Echo + voice shift + tone, low quality</li>
+                </ul>
+                <p className="mt-1">
+                  Select "Save Current…" to create your own presets (stored in
+                  localStorage). User presets can be deleted with the trash icon.
+                </p>
+              </section>
+
+              <section>
+                <h3 className="text-foreground font-semibold mb-1">Integrations</h3>
+                <p>
+                  Before going on air, click the <strong className="text-foreground">Integrations</strong> button
+                  to connect to an external streaming platform (Icecast, Shoutcast, or
+                  Radio.co). Enter your server credentials and use the
+                  <strong className="text-foreground"> Test Connection</strong> button to
+                  verify. You can save credentials to localStorage with the "Remember"
+                  checkbox. When broadcasting with an integration, audio goes to the
+                  external platform, but a room is still created so listeners can access
+                  chat and now-playing metadata.
+                </p>
+              </section>
+
+              <section>
+                <h3 className="text-foreground font-semibold mb-1">Listener Count</h3>
+                <p>
+                  While on air, a listener count badge is displayed above the broadcast
+                  controls showing how many receivers are currently connected.
+                </p>
+              </section>
+
+              <section>
                 <h3 className="text-foreground font-semibold mb-1">Ending the Broadcast</h3>
                 <p>
                   Press <strong className="text-foreground">End Broadcast</strong> when
                   you're done. Listeners will be disconnected and your room will close.
+                  If you're recording, the MP3 will be saved automatically.
                 </p>
               </section>
             </TabsContent>
@@ -255,6 +349,36 @@ export function Footer() {
                   on the left (L) and right (R) channels. If you see the meter moving
                   but can't hear anything, check that your volume is turned up and your
                   speakers or headphones are connected.
+                </p>
+              </section>
+
+              <section>
+                <h3 className="text-foreground font-semibold mb-1">Live Chat</h3>
+                <p>
+                  Once listening, a chat panel appears below the level meter. The first
+                  time you click the chat input, you'll be asked for a display name.
+                  Send messages to the broadcaster and see their replies. Messages are
+                  limited to 280 characters, 1 per second.
+                </p>
+              </section>
+
+              <section>
+                <h3 className="text-foreground font-semibold mb-1">Now Playing</h3>
+                <p>
+                  If the broadcaster sets stream metadata, you'll see a "Now Playing"
+                  bar with a spinning disc icon showing the current track or show name.
+                  This updates in real time.
+                </p>
+              </section>
+
+              <section>
+                <h3 className="text-foreground font-semibold mb-1">Auto-Reconnect</h3>
+                <p>
+                  If your connection drops during a broadcast, the app automatically
+                  tries to reconnect with increasing delays (1s, 2s, 4s, 8s, up to 15s)
+                  for up to 5 attempts. You'll see a "Reconnecting… (attempt X of 5)"
+                  message. If all attempts fail, a "Connection lost" message appears
+                  with a manual <strong className="text-foreground">Try again</strong> button.
                 </p>
               </section>
 

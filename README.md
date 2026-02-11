@@ -7,13 +7,20 @@ Real-time audio broadcasting application built with WebRTC, React, and Node.js. 
 - **High-fidelity audio** — Opus codec at up to 510 kbps stereo with adaptive quality (High / Auto / Low)
 - **Soundboard** — 5x2 pad grid with MP3 loading, loop toggle, per-pad volume (up to 300%), and broadcast mixing
 - **Mic effects** — Enhance (noise gate, rumble filter, clarity boost), tone/EQ, compressor, pitch shift, delay, and reverb with per-effect settings
+- **Audio presets** — Save and recall mixer + effects profiles. 3 built-in presets (Podcast Voice, DJ Mode, Lo-Fi) plus unlimited custom presets stored in localStorage
 - **Stereo VU meter** — Calibrated dBFS metering with peak hold
 - **Output limiter** — Selectable ceiling (0 dB, -3 dB, -6 dB, -12 dB)
 - **Broadcast timer** — Elapsed time display while on air
 - **Mixer controls** — Mic volume, mute, listen mode, and cue mode
+- **Live chat** — Bidirectional chat between broadcaster and listeners. Users provide a display name before chatting. Rate-limited to 1 message per second, max 280 characters
+- **Listener count** — Real-time count of connected listeners displayed during broadcast
+- **Now playing** — Broadcaster sets stream metadata (song title, show name) visible to all listeners in real time
+- **Local recording** — Record your broadcast as a 320 kbps stereo MP3, auto-downloaded when you stop. Uses AudioWorklet + Web Worker for energy-efficient encoding
+- **Keyboard shortcuts** — Space (mute), R (record), L (listen), C (cue), 1–0 (soundboard pads), ? (help). Active while on air, disabled when typing in inputs
+- **Integrations** — Stream to external platforms (Icecast, Shoutcast, Radio.co) via server-side relay. Test connection, remember credentials in localStorage. Room is still created for chat and metadata
 - **Multi-receiver** — Up to 4 concurrent listeners per room
 - **TURN relay** — Dynamic credential fetching via Metered.ca (or static config)
-- **Auto-reconnect** — WebSocket reconnection with exponential backoff
+- **Auto-reconnect** — Receivers automatically reconnect on connection drops with exponential backoff (up to 5 attempts). Manual retry available after max attempts
 
 ## Architecture
 
@@ -138,23 +145,30 @@ fly deploy
 ```
 ├── src/                        # React frontend (Vite + TypeScript)
 │   ├── components/
+│   │   ├── ChatPanel.tsx       # Bidirectional chat with name prompt
 │   │   ├── EffectsBoard.tsx    # Mic effects UI (enhance, tone, compressor, pitch, delay, reverb)
+│   │   ├── IntegrationsSheet.tsx # External streaming platform config
 │   │   ├── SoundBoard.tsx      # 5x2 soundboard pad grid
 │   │   ├── LevelMeter.tsx      # Stereo VU meter with dBFS scale
 │   │   ├── StatusBar.tsx       # Room ID, timer, connection status
 │   │   ├── HealthPanel.tsx     # RTT, packet loss, jitter display
-│   │   ├── EventLog.tsx        # Connection event timeline
+│   │   ├── EventLog.tsx        # Connection event timeline with chat
 │   │   ├── Footer.tsx          # Credits and help modal
 │   │   └── ui/                 # shadcn/ui primitives
 │   ├── hooks/
 │   │   ├── useSignaling.ts     # WebSocket signaling with auto-reconnect
-│   │   ├── useWebRTC.ts        # WebRTC peer connections + adaptive quality
+│   │   ├── useWebRTC.ts        # WebRTC peer connections + adaptive quality + auto-reconnect
 │   │   ├── useAudioMixer.ts    # Web Audio API mixing graph
 │   │   ├── useAudioAnalyser.ts # Audio level analysis
-│   │   └── useMicEffects.ts    # Mic effect chain (enhance, compressor, pitch shift worklets)
+│   │   ├── useIntegrationStream.ts # MP3 encoding + WebSocket relay for integrations
+│   │   ├── useKeyboardShortcuts.ts # Keyboard shortcut bindings for broadcaster
+│   │   ├── useMicEffects.ts    # Mic effect chain (enhance, compressor, pitch shift worklets)
+│   │   └── useRecorder.ts      # AudioWorklet + Web Worker MP3 recording
 │   ├── lib/
 │   │   ├── auth.ts             # Client-side session management
 │   │   ├── debug.ts            # VITE_DEBUG-gated console logging
+│   │   ├── integrations.ts     # Integration platform registry + localStorage config
+│   │   ├── presets.ts          # Audio preset definitions + localStorage management
 │   │   └── webrtc-stats.ts     # Stats parsing utilities
 │   └── pages/
 │       ├── Login.tsx           # Broadcaster authentication
@@ -162,11 +176,15 @@ fly deploy
 │       ├── Receiver.tsx        # Listener page
 │       └── Admin.tsx           # Room management dashboard
 ├── server/                     # Node.js signaling server
-│   ├── index.js                # Express + WebSocket + ICE config endpoint
-│   ├── room-manager.js         # Multi-receiver room management
+│   ├── index.js                # Express + WebSocket + ICE config + chat/metadata relay
+│   ├── integration-relay.js    # TCP source client for Icecast/Shoutcast
+│   ├── room-manager.js         # Multi-receiver room management with metadata
 │   ├── auth.js                 # Session management with expiry
 │   └── logger.js               # Pino JSON logging
 ├── public/
+│   ├── lame.min.js             # lamejs library for Web Worker MP3 encoding
+│   ├── mp3-encoder-worker.js   # Web Worker for 320 kbps MP3 encoding
+│   ├── recorder-processor.js   # AudioWorklet for energy-efficient PCM capture
 │   ├── pitch-shift-processor.js  # AudioWorklet for real-time pitch shifting
 │   └── noise-gate-processor.js   # AudioWorklet for noise gate (Enhance effect)
 ├── Dockerfile                  # Multi-stage production build
