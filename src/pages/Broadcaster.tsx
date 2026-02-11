@@ -842,11 +842,6 @@ const Broadcaster = () => {
           </Tabs>
         </div>
 
-        {/* Chat — visible when on air */}
-        {isOnAir && (
-          <ChatPanel signaling={signaling} active={isOnAir} />
-        )}
-
         {/* Health + Log */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <HealthPanel
@@ -925,6 +920,9 @@ const Broadcaster = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Chat FAB — visible when on air */}
+      <ChatPanel signaling={signaling} active={isOnAir} />
     </div>
   );
 };

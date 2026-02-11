@@ -263,11 +263,6 @@ const Receiver = () => {
           </div>
         )}
 
-        {/* Chat — visible when listening or in external stream room */}
-        {joined && (audioStarted || externalStream) && (
-          <ChatPanel signaling={signaling} active={true} />
-        )}
-
         {/* Health + Log — only when actively connected */}
         {joined && webrtc.status !== 'error' && webrtc.status !== 'disconnected' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -284,6 +279,9 @@ const Receiver = () => {
       </div>
 
       <Footer />
+
+      {/* Chat FAB — visible when listening or in external stream room */}
+      <ChatPanel signaling={signaling} active={joined && (audioStarted || externalStream)} />
     </div>
   );
 };
