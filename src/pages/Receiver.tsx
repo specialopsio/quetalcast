@@ -8,7 +8,7 @@ import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
-import { Headphones, Radio, Volume2, ExternalLink } from 'lucide-react';
+import { Headphones, Radio, Volume2, ExternalLink, RefreshCw } from 'lucide-react';
 import { Footer } from '@/components/Footer';
 
 const WS_URL = import.meta.env.VITE_WS_URL || (
@@ -137,8 +137,19 @@ const Receiver = () => {
           Receiver
         </h1>
 
+        {/* Reconnecting state */}
+        {joined && webrtc.reconnectAttempt > 0 && webrtc.reconnectAttempt <= webrtc.maxReconnectAttempts && webrtc.status === 'connecting' && (
+          <div className="panel text-center py-8 space-y-3">
+            <RefreshCw className="h-8 w-8 text-muted-foreground animate-spin mx-auto" />
+            <p className="text-sm text-foreground font-semibold">Reconnecting…</p>
+            <p className="text-xs text-muted-foreground">
+              Attempt {webrtc.reconnectAttempt} of {webrtc.maxReconnectAttempts}
+            </p>
+          </div>
+        )}
+
         {/* Off-air / not joined / error / disconnected — show message + room ID input */}
-        {(!joined || (joined && !webrtc.remoteStream && (webrtc.status === 'error' || webrtc.status === 'disconnected'))) && (
+        {(!joined || (joined && !webrtc.remoteStream && webrtc.reconnectAttempt === 0 && (webrtc.status === 'error' || webrtc.status === 'disconnected'))) && (
           <div className="panel text-center py-10 space-y-5">
             <div>
               <Radio className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
@@ -163,13 +174,30 @@ const Receiver = () => {
               </div>
               {joined && (webrtc.status === 'error' || webrtc.status === 'disconnected') && (
                 <button
-                  onClick={() => window.location.reload()}
+                  onClick={webrtc.retryConnection}
                   className="mt-4 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
                 >
                   Retry this broadcast
                 </button>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Connection lost after max retries */}
+        {joined && webrtc.reconnectAttempt > webrtc.maxReconnectAttempts && webrtc.status === 'disconnected' && (
+          <div className="panel text-center py-8 space-y-3">
+            <Radio className="h-8 w-8 text-muted-foreground/40 mx-auto" />
+            <p className="text-sm text-foreground font-semibold">Connection lost</p>
+            <p className="text-xs text-muted-foreground">
+              Couldn't reconnect after {webrtc.maxReconnectAttempts} attempts
+            </p>
+            <button
+              onClick={webrtc.retryConnection}
+              className="text-xs text-primary hover:text-primary/80 underline underline-offset-2 transition-colors"
+            >
+              Try again
+            </button>
           </div>
         )}
 

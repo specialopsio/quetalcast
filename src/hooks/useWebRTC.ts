@@ -23,6 +23,12 @@ export interface UseWebRTCReturn {
   setAudioQuality: (quality: AudioQuality) => void;
   /** The actual quality level in use (meaningful when mode is 'auto') */
   effectiveQuality: EffectiveQuality;
+  /** Current reconnect attempt (0 = not reconnecting) */
+  reconnectAttempt: number;
+  /** Max reconnect attempts before giving up */
+  maxReconnectAttempts: number;
+  /** Manual retry after reconnection gave up */
+  retryConnection: () => void;
 }
 
 // Default fallback — STUN only (no TURN relay)
@@ -161,6 +167,13 @@ const AUTO_UPGRADE_JITTER = 20;     // ms — can upgrade if jitter below this
 const AUTO_UPGRADE_STABLE_COUNT = 5; // consecutive good readings before upgrading
 
 // ---------------------------------------------------------------------------
+// Receiver auto-reconnect
+// ---------------------------------------------------------------------------
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_BASE_DELAY = 1000; // ms
+const RECONNECT_MAX_DELAY = 15000; // ms
+
+// ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
 
@@ -204,6 +217,12 @@ export function useWebRTC(
   const effectiveQualityRef = useRef<EffectiveQuality>('high'); // what's actually in use
   const [effectiveQuality, setEffectiveQuality] = useState<EffectiveQuality>('high');
   const stableCountRef = useRef(0); // consecutive good readings for upgrade hysteresis
+
+  // Receiver reconnect state
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const receiverRoomIdRef = useRef<string | null>(null);
+  const reconnectingRef = useRef(false);
 
   // Receiver: single PC
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -350,6 +369,59 @@ export function useWebRTC(
     [signaling, ensureIceConfig],
   );
 
+  /** Receiver: attempt auto-reconnect with exponential backoff */
+  const attemptReconnect = useCallback(() => {
+    if (role !== 'receiver' || reconnectingRef.current) return;
+
+    const roomIdToReconnect = receiverRoomIdRef.current;
+    if (!roomIdToReconnect) {
+      setStatus('disconnected');
+      return;
+    }
+
+    reconnectingRef.current = true;
+
+    setReconnectAttempt((prev) => {
+      const next = prev + 1;
+      if (next > MAX_RECONNECT_ATTEMPTS) {
+        dbg(`[RTC:R] Max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached`);
+        setStatus('disconnected');
+        reconnectingRef.current = false;
+        return prev;
+      }
+
+      const delay = Math.min(RECONNECT_BASE_DELAY * Math.pow(2, next - 1), RECONNECT_MAX_DELAY);
+      dbg(`[RTC:R] Reconnecting in ${delay}ms (attempt ${next}/${MAX_RECONNECT_ATTEMPTS})`);
+      setStatus('connecting');
+
+      reconnectTimerRef.current = setTimeout(async () => {
+        // Clean up existing PC
+        if (pcRef.current) {
+          pcRef.current.close();
+          pcRef.current = null;
+        }
+        if (statsIntervalRef.current) clearInterval(statsIntervalRef.current);
+        if (reportIntervalRef.current) clearInterval(reportIntervalRef.current);
+        resetStats();
+        setRemoteStream(null);
+        setPeerConnected(false);
+
+        try {
+          // Recreate PC and rejoin
+          await createReceiverPC();
+          signaling.send({ type: 'join-room', roomId: roomIdToReconnect, role: 'receiver' });
+          reconnectingRef.current = false;
+        } catch (e) {
+          dbgWarn('[RTC:R] Reconnect failed:', e);
+          reconnectingRef.current = false;
+          attemptReconnect();
+        }
+      }, delay);
+
+      return next;
+    });
+  }, [role, signaling]);
+
   // --- Receiver: create a single PC ---
   const createReceiverPC = useCallback(async () => {
     const config = await ensureIceConfig();
@@ -367,9 +439,13 @@ export function useWebRTC(
       if (pc.connectionState === 'connected') {
         setPeerConnected(true);
         setStatus('receiving');
+        // Reset reconnect state on successful connection
+        setReconnectAttempt(0);
+        reconnectingRef.current = false;
       }
       if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-        setStatus('disconnected');
+        // Attempt auto-reconnect
+        attemptReconnect();
       }
     };
 
@@ -575,6 +651,9 @@ export function useWebRTC(
   const joinAsReceiver = useCallback(
     async (joinRoomId: string) => {
       dbg(`[RTC:R] Joining room ${joinRoomId} as receiver`);
+      receiverRoomIdRef.current = joinRoomId;
+      setReconnectAttempt(0);
+      reconnectingRef.current = false;
       setStatus('connecting');
       await createReceiverPC();
       signaling.send({ type: 'join-room', roomId: joinRoomId, role: 'receiver' });
@@ -583,10 +662,22 @@ export function useWebRTC(
   );
 
   const stop = useCallback(() => {
+    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+    reconnectingRef.current = false;
+    setReconnectAttempt(0);
     signaling.send({ type: 'leave' });
     cleanup();
     setStatus('idle');
   }, [signaling, cleanup]);
+
+  /** Manual retry after auto-reconnect gave up */
+  const retryConnection = useCallback(() => {
+    const roomIdToRetry = receiverRoomIdRef.current;
+    if (!roomIdToRetry || role !== 'receiver') return;
+    setReconnectAttempt(0);
+    reconnectingRef.current = false;
+    joinAsReceiver(roomIdToRetry);
+  }, [role, joinAsReceiver]);
 
   /** Change the audio quality mode. For 'high'/'low' applies immediately;
    *  for 'auto' starts at high and adapts based on stream health. */
@@ -604,6 +695,7 @@ export function useWebRTC(
 
   useEffect(() => {
     return () => {
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       cleanup();
     };
   }, [cleanup]);
@@ -623,5 +715,8 @@ export function useWebRTC(
     roomId,
     setAudioQuality,
     effectiveQuality,
+    reconnectAttempt,
+    maxReconnectAttempts: MAX_RECONNECT_ATTEMPTS,
+    retryConnection,
   };
 }
