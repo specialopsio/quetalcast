@@ -57,6 +57,27 @@
     font-family: 'Space Grotesk', system-ui, sans-serif;
   }
 
+  button,
+  a,
+  select,
+  [role="button"],
+  [role="option"],
+  [role="menuitem"],
+  [role="tab"],
+  [role="checkbox"],
+  [role="radio"],
+  [role="switch"],
+  [role="combobox"],
+  [role="listbox"],
+  label[for],
+  input[type="checkbox"],
+  input[type="radio"],
+  input[type="submit"],
+  input[type="button"],
+  summary {
+    cursor: pointer;
+  }
+
   code, .font-mono {
     font-family: 'JetBrains Mono', ui-monospace, monospace;
   }
