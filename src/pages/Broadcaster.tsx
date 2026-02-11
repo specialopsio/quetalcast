@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { isAuthenticated, verifySession } from '@/lib/auth';
 import { useSignaling } from '@/hooks/useSignaling';
-import { useWebRTC, type ConnectionStatus } from '@/hooks/useWebRTC';
+import { useWebRTC, type ConnectionStatus, type AudioQuality } from '@/hooks/useWebRTC';
 import { useAudioAnalyser } from '@/hooks/useAudioAnalyser';
 import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
@@ -45,7 +45,7 @@ const Broadcaster = () => {
   const [limiterDb, setLimiterDb] = useState<0 | -3 | -6 | -12>(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [boardTab, setBoardTab] = useState('sounds');
-  const [highQuality, setHighQuality] = useState(true);
+  const [qualityMode, setQualityMode] = useState<AudioQuality>('auto');
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const addLog = useCallback((msg: string, level: LogEntry['level'] = 'info') => {
@@ -235,11 +235,16 @@ const Broadcaster = () => {
     }
   };
 
-  const handleToggleQuality = () => {
-    const newHQ = !highQuality;
-    setHighQuality(newHQ);
-    webrtc.setAudioQuality(newHQ ? 'high' : 'low');
-    addLog(newHQ ? 'High quality audio (510 kbps stereo)' : 'Low bandwidth mode (32 kbps mono)');
+  const handleQualityChange = (value: string) => {
+    const q = value as AudioQuality;
+    setQualityMode(q);
+    webrtc.setAudioQuality(q);
+    const labels: Record<AudioQuality, string> = {
+      high: 'High quality (510 kbps stereo)',
+      auto: 'Auto quality — adapts to connection health',
+      low: 'Low bandwidth (32 kbps mono)',
+    };
+    addLog(labels[q]);
   };
 
   const handleLimiterChange = (value: string) => {
@@ -330,25 +335,33 @@ const Broadcaster = () => {
           </Select>
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
             <div className="flex flex-col">
-              <span className="text-xs font-semibold text-foreground">
-                High Quality Audio
+              <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <Zap className="h-3 w-3" />
+                Audio Quality
               </span>
               <span className="text-[10px] text-muted-foreground">
-                {highQuality ? '510 kbps stereo — pristine broadcast quality' : '32 kbps mono — saves bandwidth on slow connections'}
+                {qualityMode === 'high' && '510 kbps stereo — pristine broadcast quality'}
+                {qualityMode === 'auto' && (
+                  <>
+                    Adapts to connection health — currently{' '}
+                    <span className={webrtc.effectiveQuality === 'high' ? 'text-primary' : 'text-yellow-500'}>
+                      {webrtc.effectiveQuality === 'high' ? 'high quality' : 'low bandwidth'}
+                    </span>
+                  </>
+                )}
+                {qualityMode === 'low' && '32 kbps mono — saves bandwidth on slow connections'}
               </span>
             </div>
-            <button
-              onClick={handleToggleQuality}
-              className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                highQuality
-                  ? 'bg-primary/20 text-primary'
-                  : 'bg-secondary text-muted-foreground hover:text-foreground'
-              }`}
-              title={highQuality ? 'Switch to low bandwidth mode' : 'Switch to high quality mode'}
-            >
-              <Zap className="h-3.5 w-3.5" />
-              {highQuality ? 'HQ On' : 'HQ Off'}
-            </button>
+            <Select value={qualityMode} onValueChange={handleQualityChange}>
+              <SelectTrigger className="w-[92px] h-7 bg-secondary border-border text-xs font-mono shrink-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="high" className="text-xs font-mono">High</SelectItem>
+                <SelectItem value="auto" className="text-xs font-mono">Auto</SelectItem>
+                <SelectItem value="low" className="text-xs font-mono">Low</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 

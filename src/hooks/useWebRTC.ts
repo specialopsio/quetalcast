@@ -3,7 +3,8 @@ import { type UseSignalingReturn, type SignalingMessage } from './useSignaling';
 import { parseStats, resetStats, type WebRTCStats } from '@/lib/webrtc-stats';
 
 export type ConnectionStatus = 'idle' | 'connecting' | 'on-air' | 'receiving' | 'disconnected' | 'error';
-export type AudioQuality = 'high' | 'low';
+export type AudioQuality = 'high' | 'low' | 'auto';
+type EffectiveQuality = 'high' | 'low';
 
 export interface UseWebRTCReturn {
   status: ConnectionStatus;
@@ -19,6 +20,8 @@ export interface UseWebRTCReturn {
   createRoom: () => void;
   roomId: string | null;
   setAudioQuality: (quality: AudioQuality) => void;
+  /** The actual quality level in use (meaningful when mode is 'auto') */
+  effectiveQuality: EffectiveQuality;
 }
 
 const RTC_CONFIG: RTCConfiguration = {
@@ -54,7 +57,7 @@ const LQ_OPUS_PARAMS: Record<string, number> = {
 };
 
 /** Rewrite the Opus fmtp line in an SDP string to inject our codec params */
-function mungeOpusSdp(sdp: string, quality: AudioQuality): string {
+function mungeOpusSdp(sdp: string, quality: EffectiveQuality): string {
   const params = quality === 'high' ? HQ_OPUS_PARAMS : LQ_OPUS_PARAMS;
   const lines = sdp.split('\r\n');
 
@@ -75,7 +78,6 @@ function mungeOpusSdp(sdp: string, quality: AudioQuality): string {
   const result = lines.map((line) => {
     if (line.startsWith(fmtpPrefix)) {
       found = true;
-      // Parse existing params and merge ours on top
       const existing = line.slice(fmtpPrefix.length + 1);
       const map = new Map<string, string>();
       existing.split(';').forEach((p) => {
@@ -90,7 +92,6 @@ function mungeOpusSdp(sdp: string, quality: AudioQuality): string {
     return line;
   });
 
-  // If no fmtp line existed for Opus, add one after the rtpmap line
   if (!found) {
     const rtpmapIdx = result.findIndex((l) => l.startsWith(`a=rtpmap:${opusPT} opus/`));
     if (rtpmapIdx !== -1) {
@@ -103,7 +104,7 @@ function mungeOpusSdp(sdp: string, quality: AudioQuality): string {
 }
 
 /** Apply maxBitrate on all audio senders of a peer connection */
-async function applyBitrateToSenders(pc: RTCPeerConnection, quality: AudioQuality) {
+async function applyBitrateToSenders(pc: RTCPeerConnection, quality: EffectiveQuality) {
   const maxBitrate = quality === 'high' ? 510000 : 32000;
   for (const sender of pc.getSenders()) {
     if (sender.track?.kind === 'audio') {
@@ -120,6 +121,19 @@ async function applyBitrateToSenders(pc: RTCPeerConnection, quality: AudioQualit
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Auto-adaptive quality thresholds
+// ---------------------------------------------------------------------------
+const AUTO_DOWNGRADE_RTT = 200;     // ms — downgrade if RTT exceeds this
+const AUTO_DOWNGRADE_LOSS = 5;      // packets — downgrade if loss exceeds this
+const AUTO_DOWNGRADE_JITTER = 50;   // ms — downgrade if jitter exceeds this
+
+const AUTO_UPGRADE_RTT = 100;       // ms — can upgrade if RTT below this
+const AUTO_UPGRADE_LOSS = 1;        // packets — can upgrade if loss below this
+const AUTO_UPGRADE_JITTER = 20;     // ms — can upgrade if jitter below this
+
+const AUTO_UPGRADE_STABLE_COUNT = 5; // consecutive good readings before upgrading
 
 // ---------------------------------------------------------------------------
 // Hook
@@ -139,8 +153,11 @@ export function useWebRTC(
   const [peerConnected, setPeerConnected] = useState(false);
   const [roomId, setRoomId] = useState<string | null>(null);
 
-  // Audio quality (ref so callbacks always read the latest value)
-  const audioQualityRef = useRef<AudioQuality>('high');
+  // Audio quality
+  const audioQualityModeRef = useRef<AudioQuality>('auto');     // user's chosen mode
+  const effectiveQualityRef = useRef<EffectiveQuality>('high'); // what's actually in use
+  const [effectiveQuality, setEffectiveQuality] = useState<EffectiveQuality>('high');
+  const stableCountRef = useRef(0); // consecutive good readings for upgrade hysteresis
 
   // Receiver: single PC
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -151,6 +168,48 @@ export function useWebRTC(
 
   const statsIntervalRef = useRef<ReturnType<typeof setInterval>>();
   const reportIntervalRef = useRef<ReturnType<typeof setInterval>>();
+
+  /** Apply a quality level to all existing broadcaster PCs */
+  const applyEffectiveQuality = useCallback((q: EffectiveQuality) => {
+    if (effectiveQualityRef.current === q) return;
+    effectiveQualityRef.current = q;
+    setEffectiveQuality(q);
+    for (const pc of pcsRef.current.values()) {
+      applyBitrateToSenders(pc, q);
+    }
+  }, []);
+
+  /** Auto-adaptive: evaluate stats and adjust quality if in auto mode */
+  const evaluateAutoQuality = useCallback((s: WebRTCStats) => {
+    if (audioQualityModeRef.current !== 'auto') return;
+
+    const current = effectiveQualityRef.current;
+    const bad = s.rtt > AUTO_DOWNGRADE_RTT ||
+                s.packetsLost > AUTO_DOWNGRADE_LOSS ||
+                s.jitter > AUTO_DOWNGRADE_JITTER;
+
+    if (bad && current === 'high') {
+      // Downgrade immediately
+      stableCountRef.current = 0;
+      applyEffectiveQuality('low');
+      return;
+    }
+
+    const good = s.rtt < AUTO_UPGRADE_RTT &&
+                 s.packetsLost <= AUTO_UPGRADE_LOSS &&
+                 s.jitter < AUTO_UPGRADE_JITTER;
+
+    if (good && current === 'low') {
+      // Require several consecutive good readings before upgrading
+      stableCountRef.current++;
+      if (stableCountRef.current >= AUTO_UPGRADE_STABLE_COUNT) {
+        stableCountRef.current = 0;
+        applyEffectiveQuality('high');
+      }
+    } else if (!good) {
+      stableCountRef.current = 0;
+    }
+  }, [applyEffectiveQuality]);
 
   const cleanup = useCallback(() => {
     if (statsIntervalRef.current) clearInterval(statsIntervalRef.current);
@@ -174,6 +233,7 @@ export function useWebRTC(
     setConnectionState('new');
     setIceConnectionState('new');
     setSignalingState('stable');
+    stableCountRef.current = 0;
   }, []);
 
   // --- Broadcaster: create a PC for a specific receiver ---
@@ -216,14 +276,12 @@ export function useWebRTC(
       (async () => {
         try {
           const offer = await pc.createOffer();
-          // Munge SDP to set Opus encoding parameters
-          const quality = audioQualityRef.current;
+          const quality = effectiveQualityRef.current;
           const mungedSdp = mungeOpusSdp(offer.sdp!, quality);
           const mungedOffer = { ...offer, sdp: mungedSdp };
           await pc.setLocalDescription(mungedOffer);
           signaling.send({ type: 'offer', sdp: mungedOffer, receiverId });
 
-          // Also set sender bitrate via setParameters
           applyBitrateToSenders(pc, quality);
         } catch (e) {
           console.error('Failed to create offer for receiver:', receiverId, e);
@@ -301,7 +359,6 @@ export function useWebRTC(
 
         case 'peer-joined': {
           if (role === 'broadcaster' && msg.receiverId && broadcastStreamRef.current) {
-            // New receiver joined — create a dedicated PC for them
             createPCForReceiver(msg.receiverId as string, broadcastStreamRef.current);
           }
           setPeerConnected(true);
@@ -325,7 +382,6 @@ export function useWebRTC(
         }
 
         case 'offer':
-          // Only receivers handle offers
           if (role === 'receiver') {
             const pc = pcRef.current;
             if (pc) {
@@ -345,7 +401,6 @@ export function useWebRTC(
           break;
 
         case 'answer':
-          // Only broadcasters handle answers (routed by receiverId)
           if (role === 'broadcaster' && msg.receiverId) {
             const rid = msg.receiverId as string;
             const pc = pcsRef.current.get(rid);
@@ -363,7 +418,6 @@ export function useWebRTC(
 
         case 'candidate':
           if (role === 'broadcaster' && msg.receiverId) {
-            // Route to the correct receiver's PC
             const rid = msg.receiverId as string;
             const pc = pcsRef.current.get(rid);
             if (pc) {
@@ -408,12 +462,13 @@ export function useWebRTC(
       setStatus('on-air');
       broadcastStreamRef.current = stream;
 
-      // Stats polling for broadcaster — uses first connected PC
+      // Stats polling for broadcaster — also drives auto quality adaptation
       statsIntervalRef.current = setInterval(async () => {
         for (const pc of pcsRef.current.values()) {
           if (pc.connectionState === 'connected') {
             const s = await parseStats(pc, 'broadcaster');
             setStats(s);
+            evaluateAutoQuality(s);
             break;
           }
         }
@@ -429,10 +484,9 @@ export function useWebRTC(
         }
       }, 5000);
 
-      // Tell the server we're ready — it will send peer-joined for each existing receiver
       signaling.send({ type: 'ready', roomId });
     },
-    [roomId, signaling],
+    [roomId, signaling, evaluateAutoQuality],
   );
 
   const joinAsReceiver = useCallback(
@@ -450,14 +504,19 @@ export function useWebRTC(
     setStatus('idle');
   }, [signaling, cleanup]);
 
-  /** Change audio quality on the fly — updates existing connections immediately */
+  /** Change the audio quality mode. For 'high'/'low' applies immediately;
+   *  for 'auto' starts at high and adapts based on stream health. */
   const setAudioQuality = useCallback((quality: AudioQuality) => {
-    audioQualityRef.current = quality;
-    // Update bitrate on all existing broadcaster PCs
-    for (const pc of pcsRef.current.values()) {
-      applyBitrateToSenders(pc, quality);
+    audioQualityModeRef.current = quality;
+    stableCountRef.current = 0;
+
+    if (quality === 'high' || quality === 'low') {
+      applyEffectiveQuality(quality);
+    } else {
+      // Auto: start at high, let evaluateAutoQuality handle the rest
+      applyEffectiveQuality('high');
     }
-  }, []);
+  }, [applyEffectiveQuality]);
 
   useEffect(() => {
     return () => {
@@ -479,5 +538,6 @@ export function useWebRTC(
     createRoom,
     roomId,
     setAudioQuality,
+    effectiveQuality,
   };
 }
