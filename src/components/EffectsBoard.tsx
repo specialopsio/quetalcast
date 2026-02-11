@@ -55,12 +55,12 @@ const EFFECT_SETTINGS: Record<EffectName, SliderConfig[]> = {
     },
     {
       key: 'fade', label: 'Fade',
-      description: 'How long the echo lingers before fading out.',
+      description: 'How long the reverb lingers before fading out.',
       min: 0, max: 100, step: 1, defaultValue: 50,
     },
     {
       key: 'amount', label: 'Amount',
-      description: 'How much echo is mixed in with your voice.',
+      description: 'How much reverb is mixed in with your voice.',
       min: 0, max: 100, step: 1, defaultValue: 30,
       formatValue: (v) => `${v}%`,
     },
@@ -147,7 +147,7 @@ export function EffectsBoard({ effects, onToggle, onUpdate }: EffectsBoardProps)
             <div key={effectName} className="relative aspect-square">
               <button
                 onClick={() => onToggle(effectName)}
-                className={`w-full h-full rounded-md border flex flex-col items-center justify-center gap-2.5 transition-all ${
+                className={`w-full h-full rounded-md border flex flex-col items-center justify-center gap-4 transition-all ${
                   effect.enabled
                     ? 'border-primary bg-primary/15 glow-ring'
                     : 'border-border bg-secondary/50 hover:bg-secondary'

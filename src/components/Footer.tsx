@@ -143,8 +143,8 @@ export function Footer() {
                 </p>
                 <ul className="list-disc list-inside mt-1 space-y-1 pl-1">
                   <li>
-                    <strong className="text-foreground">Echo</strong> — Adds a
-                    room or hall-like reverb to your voice.
+                    <strong className="text-foreground">Reverb</strong> — Adds a
+                    room or hall-like ambience to your voice.
                   </li>
                   <li>
                     <strong className="text-foreground">Voice Shift</strong> — Makes

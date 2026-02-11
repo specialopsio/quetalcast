@@ -15,7 +15,7 @@ export const EFFECT_LABELS: Record<EffectName, string> = {
   tone: 'Tone',
   voiceShift: 'Voice Shift',
   delay: 'Delay',
-  echo: 'Echo',
+  echo: 'Reverb',
 };
 
 export const DEFAULT_PARAMS: Record<EffectName, Record<string, number>> = {
