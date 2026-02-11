@@ -8,7 +8,7 @@ import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
-import { Copy, Mic, MicOff, Radio, Headphones, Clock, Music, Sparkles } from 'lucide-react';
+import { Copy, Mic, MicOff, Radio, Headphones, Clock, Music, Sparkles, Zap } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import {
   Select,
@@ -45,6 +45,7 @@ const Broadcaster = () => {
   const [limiterDb, setLimiterDb] = useState<0 | -3 | -6 | -12>(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [boardTab, setBoardTab] = useState('sounds');
+  const [highQuality, setHighQuality] = useState(true);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const addLog = useCallback((msg: string, level: LogEntry['level'] = 'info') => {
@@ -143,6 +144,8 @@ const Broadcaster = () => {
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: false,
+          sampleRate: { ideal: 48000 },
+          channelCount: { ideal: 2 },
         },
       };
 
@@ -232,6 +235,13 @@ const Broadcaster = () => {
     }
   };
 
+  const handleToggleQuality = () => {
+    const newHQ = !highQuality;
+    setHighQuality(newHQ);
+    webrtc.setAudioQuality(newHQ ? 'high' : 'low');
+    addLog(newHQ ? 'High quality audio (510 kbps stereo)' : 'Low bandwidth mode (32 kbps mono)');
+  };
+
   const handleLimiterChange = (value: string) => {
     const db = Number(value) as 0 | -3 | -6 | -12;
     setLimiterDb(db);
@@ -299,7 +309,7 @@ const Broadcaster = () => {
           )}
         </div>
 
-        {/* Device select */}
+        {/* Device select + quality */}
         <div className="panel">
           <div className="panel-header">Audio Input</div>
           <Select
@@ -318,6 +328,28 @@ const Broadcaster = () => {
               ))}
             </SelectContent>
           </Select>
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+            <div className="flex flex-col">
+              <span className="text-xs font-semibold text-foreground">
+                High Quality Audio
+              </span>
+              <span className="text-[10px] text-muted-foreground">
+                {highQuality ? '510 kbps stereo — pristine broadcast quality' : '32 kbps mono — saves bandwidth on slow connections'}
+              </span>
+            </div>
+            <button
+              onClick={handleToggleQuality}
+              className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                highQuality
+                  ? 'bg-primary/20 text-primary'
+                  : 'bg-secondary text-muted-foreground hover:text-foreground'
+              }`}
+              title={highQuality ? 'Switch to low bandwidth mode' : 'Switch to high quality mode'}
+            >
+              <Zap className="h-3.5 w-3.5" />
+              {highQuality ? 'HQ On' : 'HQ Off'}
+            </button>
+          </div>
         </div>
 
         {/* Level meter */}

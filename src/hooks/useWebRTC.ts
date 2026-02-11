@@ -3,6 +3,7 @@ import { type UseSignalingReturn, type SignalingMessage } from './useSignaling';
 import { parseStats, resetStats, type WebRTCStats } from '@/lib/webrtc-stats';
 
 export type ConnectionStatus = 'idle' | 'connecting' | 'on-air' | 'receiving' | 'disconnected' | 'error';
+export type AudioQuality = 'high' | 'low';
 
 export interface UseWebRTCReturn {
   status: ConnectionStatus;
@@ -17,6 +18,7 @@ export interface UseWebRTCReturn {
   stop: () => void;
   createRoom: () => void;
   roomId: string | null;
+  setAudioQuality: (quality: AudioQuality) => void;
 }
 
 const RTC_CONFIG: RTCConfiguration = {
@@ -24,6 +26,104 @@ const RTC_CONFIG: RTCConfiguration = {
     { urls: 'stun:stun.l.google.com:19302' },
   ],
 };
+
+// ---------------------------------------------------------------------------
+// Opus SDP parameters for pristine vs bandwidth-saving audio
+// ---------------------------------------------------------------------------
+
+/** Pristine: 510 kbps stereo Opus, CBR, no DTX, no FEC */
+const HQ_OPUS_PARAMS: Record<string, number> = {
+  maxaveragebitrate: 510000,
+  stereo: 1,
+  'sprop-stereo': 1,
+  maxplaybackrate: 48000,
+  usedtx: 0,
+  useinbandfec: 0,
+  cbr: 1,
+};
+
+/** Low bandwidth: 32 kbps mono Opus, VBR, DTX + FEC for resilience */
+const LQ_OPUS_PARAMS: Record<string, number> = {
+  maxaveragebitrate: 32000,
+  stereo: 0,
+  'sprop-stereo': 0,
+  maxplaybackrate: 24000,
+  usedtx: 1,
+  useinbandfec: 1,
+  cbr: 0,
+};
+
+/** Rewrite the Opus fmtp line in an SDP string to inject our codec params */
+function mungeOpusSdp(sdp: string, quality: AudioQuality): string {
+  const params = quality === 'high' ? HQ_OPUS_PARAMS : LQ_OPUS_PARAMS;
+  const lines = sdp.split('\r\n');
+
+  // Find the Opus payload type number
+  let opusPT: string | null = null;
+  for (const line of lines) {
+    const match = line.match(/^a=rtpmap:(\d+) opus\/48000/);
+    if (match) {
+      opusPT = match[1];
+      break;
+    }
+  }
+  if (!opusPT) return sdp;
+
+  const fmtpPrefix = `a=fmtp:${opusPT}`;
+  let found = false;
+
+  const result = lines.map((line) => {
+    if (line.startsWith(fmtpPrefix)) {
+      found = true;
+      // Parse existing params and merge ours on top
+      const existing = line.slice(fmtpPrefix.length + 1);
+      const map = new Map<string, string>();
+      existing.split(';').forEach((p) => {
+        const [k, ...v] = p.trim().split('=');
+        if (k) map.set(k, v.join('='));
+      });
+      for (const [k, v] of Object.entries(params)) {
+        map.set(k, String(v));
+      }
+      return `${fmtpPrefix} ${Array.from(map).map(([k, v]) => `${k}=${v}`).join(';')}`;
+    }
+    return line;
+  });
+
+  // If no fmtp line existed for Opus, add one after the rtpmap line
+  if (!found) {
+    const rtpmapIdx = result.findIndex((l) => l.startsWith(`a=rtpmap:${opusPT} opus/`));
+    if (rtpmapIdx !== -1) {
+      const paramStr = Object.entries(params).map(([k, v]) => `${k}=${v}`).join(';');
+      result.splice(rtpmapIdx + 1, 0, `${fmtpPrefix} ${paramStr}`);
+    }
+  }
+
+  return result.join('\r\n');
+}
+
+/** Apply maxBitrate on all audio senders of a peer connection */
+async function applyBitrateToSenders(pc: RTCPeerConnection, quality: AudioQuality) {
+  const maxBitrate = quality === 'high' ? 510000 : 32000;
+  for (const sender of pc.getSenders()) {
+    if (sender.track?.kind === 'audio') {
+      try {
+        const params = sender.getParameters();
+        if (!params.encodings || params.encodings.length === 0) {
+          params.encodings = [{}];
+        }
+        params.encodings[0].maxBitrate = maxBitrate;
+        await sender.setParameters(params);
+      } catch (e) {
+        console.warn('Could not set sender bitrate:', e);
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Hook
+// ---------------------------------------------------------------------------
 
 export function useWebRTC(
   signaling: UseSignalingReturn,
@@ -38,6 +138,9 @@ export function useWebRTC(
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [peerConnected, setPeerConnected] = useState(false);
   const [roomId, setRoomId] = useState<string | null>(null);
+
+  // Audio quality (ref so callbacks always read the latest value)
+  const audioQualityRef = useRef<AudioQuality>('high');
 
   // Receiver: single PC
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -109,12 +212,19 @@ export function useWebRTC(
         }
       };
 
-      // Create and send offer for this receiver
+      // Create offer with Opus quality params baked in
       (async () => {
         try {
           const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          signaling.send({ type: 'offer', sdp: offer, receiverId });
+          // Munge SDP to set Opus encoding parameters
+          const quality = audioQualityRef.current;
+          const mungedSdp = mungeOpusSdp(offer.sdp!, quality);
+          const mungedOffer = { ...offer, sdp: mungedSdp };
+          await pc.setLocalDescription(mungedOffer);
+          signaling.send({ type: 'offer', sdp: mungedOffer, receiverId });
+
+          // Also set sender bitrate via setParameters
+          applyBitrateToSenders(pc, quality);
         } catch (e) {
           console.error('Failed to create offer for receiver:', receiverId, e);
         }
@@ -340,6 +450,15 @@ export function useWebRTC(
     setStatus('idle');
   }, [signaling, cleanup]);
 
+  /** Change audio quality on the fly — updates existing connections immediately */
+  const setAudioQuality = useCallback((quality: AudioQuality) => {
+    audioQualityRef.current = quality;
+    // Update bitrate on all existing broadcaster PCs
+    for (const pc of pcsRef.current.values()) {
+      applyBitrateToSenders(pc, quality);
+    }
+  }, []);
+
   useEffect(() => {
     return () => {
       cleanup();
@@ -359,5 +478,6 @@ export function useWebRTC(
     stop,
     createRoom,
     roomId,
+    setAudioQuality,
   };
 }
