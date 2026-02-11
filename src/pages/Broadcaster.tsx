@@ -8,7 +8,7 @@ import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
-import { Copy, Mic, MicOff, Radio, Headphones } from 'lucide-react';
+import { Copy, Mic, MicOff, Radio, Headphones, Clock } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import {
   Select,
@@ -39,6 +39,7 @@ const Broadcaster = () => {
   const [micMuted, setMicMuted] = useState(false);
   const [listening, setListening] = useState(false);
   const [cueMode, setCueMode] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const addLog = useCallback((msg: string, level: LogEntry['level'] = 'info') => {
@@ -206,8 +207,25 @@ const Broadcaster = () => {
       setMicMuted(false);
       setListening(false);
       setCueMode(false);
+      setElapsedSeconds(0);
     }
   }, [isOnAir]);
+
+  // Broadcast timer
+  useEffect(() => {
+    if (!isOnAir) return;
+    setElapsedSeconds(0);
+    const interval = setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
+    return () => clearInterval(interval);
+  }, [isOnAir]);
+
+  const formatTime = (totalSeconds: number) => {
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+  };
 
   const copyReceiverLink = () => {
     if (webrtc.roomId) {
@@ -269,6 +287,14 @@ const Broadcaster = () => {
           clipping={audioAnalysis.clipping}
           label="Input Level"
         />
+
+        {/* Broadcast timer */}
+        {isOnAir && (
+          <div className="flex items-center justify-center gap-2 text-sm font-mono text-muted-foreground">
+            <Clock className="h-3.5 w-3.5" />
+            <span className="tabular-nums">{formatTime(elapsedSeconds)}</span>
+          </div>
+        )}
 
         {/* Controls */}
         <div className="flex gap-3">
