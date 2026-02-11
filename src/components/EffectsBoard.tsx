@@ -67,10 +67,10 @@ const EFFECT_SETTINGS: Record<EffectName, SliderConfig[]> = {
   ],
   voiceShift: [
     {
-      key: 'shift', label: 'Shift',
-      description: 'Moves your voice lower or higher.',
+      key: 'shift', label: 'Pitch',
+      description: 'Shifts your voice pitch. Left for deep, right for high (chipmunk).',
       min: 0, max: 100, step: 1, defaultValue: 50,
-      minLabel: 'Low', maxLabel: 'High',
+      minLabel: 'Deep', maxLabel: 'High',
     },
   ],
   delay: [

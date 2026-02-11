@@ -77,20 +77,15 @@ function createToneNodes(ctx: AudioContext): EffectNodeSet {
   return { input: lowshelf, output: highshelf, internals: { lowshelf, peaking, highshelf } };
 }
 
+/**
+ * Voice Shift uses an AudioWorklet that performs real-time granular pitch
+ * shifting.  The worklet module MUST be loaded on the AudioContext before
+ * this function is called (see `ensureWorkletLoaded`).
+ */
 function createVoiceShiftNodes(ctx: AudioContext): EffectNodeSet {
-  const lowshelf = ctx.createBiquadFilter();
-  lowshelf.type = 'lowshelf';
-  lowshelf.frequency.value = 300;
-  lowshelf.gain.value = 0;
-
-  const highshelf = ctx.createBiquadFilter();
-  highshelf.type = 'highshelf';
-  highshelf.frequency.value = 3000;
-  highshelf.gain.value = 0;
-
-  lowshelf.connect(highshelf);
-
-  return { input: lowshelf, output: highshelf, internals: { lowshelf, highshelf } };
+  const worklet = new AudioWorkletNode(ctx, 'pitch-shift-processor');
+  // AudioWorkletNode is both input and output
+  return { input: worklet, output: worklet, internals: { worklet } };
 }
 
 function createDelayNodes(ctx: AudioContext): EffectNodeSet {
@@ -154,10 +149,9 @@ function applyToneParams(nodes: EffectNodeSet, params: Record<string, number>) {
 
 function applyVoiceShiftParams(nodes: EffectNodeSet, params: Record<string, number>) {
   const shift = params.shift ?? 50;
-  const normalized = (shift - 50) / 50; // -1 to 1
-  const gain = normalized * 12;          // -12 to +12 dB
-  (nodes.internals.lowshelf as BiquadFilterNode).gain.value = -gain;
-  (nodes.internals.highshelf as BiquadFilterNode).gain.value = gain;
+  // Map 0–100 to pitch ratio: 0 → 0.5 (octave down), 50 → 1.0, 100 → 2.0 (octave up)
+  const pitchFactor = Math.pow(2, (shift - 50) / 50);
+  (nodes.internals.worklet as AudioWorkletNode).port.postMessage({ pitchFactor });
 }
 
 function applyDelayParams(nodes: EffectNodeSet, params: Record<string, number>) {
@@ -183,7 +177,7 @@ export interface UseMicEffectsReturn {
   effects: Record<EffectName, EffectState>;
   toggleEffect: (name: EffectName) => void;
   updateEffect: (name: EffectName, params: Record<string, number>) => void;
-  insertIntoChain: (ctx: AudioContext, input: AudioNode, output: AudioNode) => void;
+  insertIntoChain: (ctx: AudioContext, input: AudioNode, output: AudioNode) => Promise<void>;
   removeFromChain: () => void;
 }
 
@@ -249,12 +243,23 @@ export function useMicEffects(): UseMicEffectsReturn {
     chainConnectionsRef.current = connections;
   }, []);
 
+  /** Ensure the pitch-shift AudioWorklet module is loaded on this context */
+  const workletLoadedRef = useRef(false);
+  const ensureWorkletLoaded = useCallback(async (ctx: AudioContext) => {
+    if (workletLoadedRef.current) return;
+    await ctx.audioWorklet.addModule('/pitch-shift-processor.js');
+    workletLoadedRef.current = true;
+  }, []);
+
   /** Wire the effects chain between micGain and broadcastBus */
   const insertIntoChain = useCallback(
-    (ctx: AudioContext, input: AudioNode, output: AudioNode) => {
+    async (ctx: AudioContext, input: AudioNode, output: AudioNode) => {
       ctxRef.current = ctx;
       chainInputRef.current = input;
       chainOutputRef.current = output;
+
+      // Load worklet module before creating nodes (required for AudioWorkletNode)
+      await ensureWorkletLoaded(ctx);
 
       if (!effectNodesRef.current) {
         effectNodesRef.current = createAllNodes(ctx);
@@ -266,7 +271,7 @@ export function useMicEffects(): UseMicEffectsReturn {
       insertedRef.current = true;
       rebuildChain();
     },
-    [createAllNodes, rebuildChain],
+    [createAllNodes, rebuildChain, ensureWorkletLoaded],
   );
 
   /** Remove chain and reconnect micGain → broadcastBus directly */

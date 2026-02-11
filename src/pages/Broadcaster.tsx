@@ -155,7 +155,7 @@ const Broadcaster = () => {
       // Insert effects chain between micGain and broadcastBus
       const nodes = mixer.getNodes();
       if (nodes) {
-        micEffects.insertIntoChain(nodes.ctx, nodes.micGain, nodes.broadcastBus);
+        await micEffects.insertIntoChain(nodes.ctx, nodes.micGain, nodes.broadcastBus);
       }
 
       addLog('Mic connected');
