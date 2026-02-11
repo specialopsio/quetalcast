@@ -53,3 +53,17 @@ export function getSession(): AuthSession | null {
 export function isAuthenticated(): boolean {
   return getSession() !== null;
 }
+
+/** Verify the session cookie is still valid on the server. Clears local auth if not. */
+export async function verifySession(): Promise<boolean> {
+  try {
+    const res = await fetch('/api/session', { credentials: 'include' });
+    if (res.ok) return true;
+    // Server says session is invalid — clear local auth
+    localStorage.removeItem(AUTH_KEY);
+    return false;
+  } catch {
+    // Network error — keep local auth, don't lock user out
+    return true;
+  }
+}

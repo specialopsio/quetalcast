@@ -90,6 +90,17 @@ app.post('/api/logout', (req, res) => {
   res.json({ ok: true });
 });
 
+// Session check — lets the client verify if the session is still valid
+app.get('/api/session', (req, res) => {
+  const token = req.cookies.session;
+  const session = token ? sessions.validate(token) : null;
+  if (session) {
+    res.json({ ok: true, username: session.username });
+  } else {
+    res.status(401).json({ ok: false });
+  }
+});
+
 // Fix #1: Admin routes — require authentication
 app.get('/admin/rooms', requireAuth, (req, res) => {
   res.json({ rooms: rooms.listRooms() });

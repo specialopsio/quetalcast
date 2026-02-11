@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { isAuthenticated } from '@/lib/auth';
+import { isAuthenticated, verifySession } from '@/lib/auth';
 import { useSignaling } from '@/hooks/useSignaling';
 import { useWebRTC, type ConnectionStatus } from '@/hooks/useWebRTC';
 import { useAudioAnalyser } from '@/hooks/useAudioAnalyser';
@@ -57,9 +57,15 @@ const Broadcaster = () => {
   const micEffects = useMicEffects();
   const audioAnalysis = useAudioAnalyser(mixer.mixedStream);
 
-  // Auth check
+  // Auth check — verify both local token and server session
   useEffect(() => {
-    if (!isAuthenticated()) navigate('/login');
+    if (!isAuthenticated()) {
+      navigate('/login');
+      return;
+    }
+    verifySession().then((valid) => {
+      if (!valid) navigate('/login');
+    });
   }, [navigate]);
 
   // Enumerate devices
@@ -105,6 +111,18 @@ const Broadcaster = () => {
   useEffect(() => {
     if (signaling.connected) addLog('Connected to server');
   }, [signaling.connected]);
+
+  // Handle auth errors from signaling — redirect to login
+  useEffect(() => {
+    const unsub = signaling.subscribe((msg) => {
+      if (msg.type === 'error' && msg.code === 'AUTH_REQUIRED') {
+        addLog('Session expired — please log in again', 'warn');
+        localStorage.removeItem('webrtc-bridge-auth');
+        setTimeout(() => navigate('/login'), 500);
+      }
+    });
+    return unsub;
+  }, [signaling, navigate, addLog]);
 
   // Log status changes
   const prevStatus = useRef<ConnectionStatus>('idle');
@@ -413,7 +431,7 @@ const Broadcaster = () => {
               <div className="shrink-0 flex items-center gap-1.5">
                 <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Limit</span>
                 <Select value={String(limiterDb)} onValueChange={handleLimiterChange}>
-                  <SelectTrigger className="w-[80px] h-7 bg-secondary border-border text-xs font-mono">
+                  <SelectTrigger className="w-[92px] h-7 bg-secondary border-border text-xs font-mono">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
