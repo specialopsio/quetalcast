@@ -1,29 +1,42 @@
-// Simple client-side auth for MVP. In production, auth is handled by the signaling server
-// with httpOnly session cookies. This module provides the client-side session management.
-
 const AUTH_KEY = 'webrtc-bridge-auth';
 
 export interface AuthSession {
   username: string;
-  token: string;
   timestamp: number;
 }
 
-export function login(username: string, password: string): boolean {
-  // MVP hardcoded credentials - replace with server-side auth in production
-  if (username === 'admin' && password === 'admin') {
-    const session: AuthSession = {
-      username,
-      token: generateToken(),
-      timestamp: Date.now(),
-    };
-    localStorage.setItem(AUTH_KEY, JSON.stringify(session));
-    return true;
+export async function login(username: string, password: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ username, password }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const session: AuthSession = {
+        username: data.username,
+        timestamp: Date.now(),
+      };
+      localStorage.setItem(AUTH_KEY, JSON.stringify(session));
+      return { ok: true };
+    }
+
+    const err = await res.json().catch(() => ({ error: 'Login failed' }));
+    return { ok: false, error: err.error || 'Invalid credentials' };
+  } catch {
+    return { ok: false, error: 'Could not reach server' };
   }
-  return false;
 }
 
-export function logout(): void {
+export async function logout(): Promise<void> {
+  try {
+    await fetch('/api/logout', { method: 'POST', credentials: 'include' });
+  } catch {
+    // ignore network errors during logout
+  }
   localStorage.removeItem(AUTH_KEY);
 }
 
@@ -39,10 +52,4 @@ export function getSession(): AuthSession | null {
 
 export function isAuthenticated(): boolean {
   return getSession() !== null;
-}
-
-function generateToken(): string {
-  const arr = new Uint8Array(32);
-  crypto.getRandomValues(arr);
-  return Array.from(arr, (b) => b.toString(16).padStart(2, '0')).join('');
 }

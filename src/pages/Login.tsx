@@ -8,14 +8,20 @@ const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (login(username, password)) {
+    setLoading(true);
+
+    const result = await login(username, password);
+    setLoading(false);
+
+    if (result.ok) {
       navigate('/broadcast');
     } else {
-      setError('Invalid credentials');
+      setError(result.error || 'Invalid credentials');
     }
   };
 
@@ -57,31 +63,12 @@ const Login = () => {
 
           <button
             type="submit"
-            className="w-full bg-primary text-primary-foreground rounded-md px-4 py-2.5 text-sm font-semibold hover:opacity-90 transition-opacity"
+            disabled={loading}
+            className="w-full bg-primary text-primary-foreground rounded-md px-4 py-2.5 text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
           >
-            Sign In
+            {loading ? 'Signing in…' : 'Sign In'}
           </button>
-
-          <p className="text-[10px] text-muted-foreground text-center font-mono">
-            MVP: admin / admin
-          </p>
         </form>
-
-        <div className="flex gap-2 mt-4 justify-center">
-          <button
-            onClick={() => { if (login('admin', 'admin')) navigate('/broadcast'); }}
-            className="text-xs font-mono text-muted-foreground hover:text-foreground transition-colors"
-          >
-            → Broadcaster
-          </button>
-          <span className="text-muted-foreground/30">|</span>
-          <button
-            onClick={() => { if (login('admin', 'admin')) navigate('/receive'); }}
-            className="text-xs font-mono text-muted-foreground hover:text-foreground transition-colors"
-          >
-            → Receiver
-          </button>
-        </div>
       </div>
     </div>
   );

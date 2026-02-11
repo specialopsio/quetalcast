@@ -14,6 +14,7 @@ const PORT = parseInt(process.env.PORT || '3001', 10);
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '*';
 const REQUIRE_TLS = process.env.REQUIRE_TLS === 'true';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-secret-change-in-production';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 
 const logger = createLogger('server');
 const rooms = new RoomManager(logger);
@@ -51,7 +52,7 @@ const loginLimiter = rateLimit({ windowMs: 60000, max: 10, message: { error: 'To
 // Auth routes
 app.post('/api/login', loginLimiter, (req, res) => {
   const { username, password } = req.body;
-  if (username === 'admin' && password === 'admin') {
+  if (username === 'admin' && password === ADMIN_PASSWORD) {
     const token = sessions.create(username);
     res.cookie('session', token, {
       httpOnly: true,
