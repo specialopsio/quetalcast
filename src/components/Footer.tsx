@@ -223,21 +223,39 @@ export function Footer() {
               <section>
                 <h3 className="text-foreground font-semibold mb-1">Live Chat</h3>
                 <p>
-                  When on air, a chat panel appears below the mixer. Listeners can send
-                  you messages and you can reply. The first time you click the chat input,
-                  you'll be asked for a display name (session-only — not saved). Messages
-                  are limited to 280 characters and rate-limited to 1 per second. Incoming
-                  chat messages also appear in the event log with a blue icon.
+                  When on air, a chat button appears in the bottom-right corner of the
+                  screen. Tap it to open the chat panel (full-screen on mobile, floating
+                  card on desktop). Listeners can send you messages and you can reply.
+                  The first time you open chat, you'll be asked for a display name
+                  (session-only — not saved). Messages are limited to 280 characters
+                  and rate-limited to 1 per second. Incoming chat messages also appear
+                  in the event log with a blue icon. An unread badge shows on the
+                  chat button when you have new messages.
                 </p>
               </section>
 
               <section>
                 <h3 className="text-foreground font-semibold mb-1">Now Playing</h3>
                 <p>
-                  Type into the <strong className="text-foreground">Now Playing</strong> field
-                  in the mixer controls to set stream metadata (song title, show name, etc.).
-                  It's sent to all connected listeners in real time with a 500ms debounce.
-                  Max 200 characters.
+                  The <strong className="text-foreground">Now Playing</strong> field in the
+                  mixer controls has built-in <strong className="text-foreground">Deezer search</strong> —
+                  start typing an artist or song name and you'll see autocomplete results
+                  with album art. Select one to fill "Artist — Title", or type anything
+                  freeform. Metadata is sent to all listeners in real time.
+                  When using an integration (Icecast, Shoutcast, Radio.co), the
+                  metadata is also pushed to the external server so listeners on that
+                  platform can see what's playing.
+                </p>
+              </section>
+
+              <section>
+                <h3 className="text-foreground font-semibold mb-1">Track List</h3>
+                <p>
+                  Every time you set a new Now Playing value, it's added to a
+                  chronological track list that appears below the stats panel. The
+                  current track is highlighted at the top with a spinning disc icon.
+                  Receivers who join mid-broadcast will see the full history of
+                  tracks played so far. Up to 100 tracks are stored per session.
                 </p>
               </section>
 
@@ -301,15 +319,17 @@ export function Footer() {
                   verify. You can save credentials to localStorage with the "Remember"
                   checkbox. When broadcasting with an integration, audio goes to the
                   external platform, but a room is still created so listeners can access
-                  chat and now-playing metadata.
+                  chat, track list, and now-playing metadata. Now Playing metadata is
+                  automatically forwarded to the external server's admin API so listeners
+                  on those platforms can see what's playing too.
                 </p>
               </section>
 
               <section>
                 <h3 className="text-foreground font-semibold mb-1">Listener Count</h3>
                 <p>
-                  While on air, a listener count badge is displayed above the broadcast
-                  controls showing how many receivers are currently connected.
+                  While on air, the Stats panel shows how many receivers are currently
+                  connected alongside speed, jitter, delay, and packet loss metrics.
                 </p>
               </section>
 
@@ -355,10 +375,12 @@ export function Footer() {
               <section>
                 <h3 className="text-foreground font-semibold mb-1">Live Chat</h3>
                 <p>
-                  Once listening, a chat panel appears below the level meter. The first
-                  time you click the chat input, you'll be asked for a display name.
-                  Send messages to the broadcaster and see their replies. Messages are
-                  limited to 280 characters, 1 per second.
+                  Once listening, a chat button appears in the bottom-right corner of
+                  the screen. Tap it to open the chat panel (full-screen on mobile,
+                  floating card on desktop). The first time you open chat, you'll be
+                  asked for a display name. Send messages to the broadcaster and see
+                  their replies. Messages are limited to 280 characters, 1 per second.
+                  An unread badge shows on the button when you have new messages.
                 </p>
               </section>
 
@@ -368,6 +390,16 @@ export function Footer() {
                   If the broadcaster sets stream metadata, you'll see a "Now Playing"
                   bar with a spinning disc icon showing the current track or show name.
                   This updates in real time.
+                </p>
+              </section>
+
+              <section>
+                <h3 className="text-foreground font-semibold mb-1">Track List</h3>
+                <p>
+                  A track list appears below the stats panel showing every track
+                  played during the broadcast. The current track is highlighted at
+                  the top. If you join mid-broadcast, you'll see the full history
+                  of tracks that have been played so far.
                 </p>
               </section>
 

@@ -12,12 +12,13 @@ Real-time audio broadcasting application built with WebRTC, React, and Node.js. 
 - **Output limiter** — Selectable ceiling (0 dB, -3 dB, -6 dB, -12 dB)
 - **Broadcast timer** — Elapsed time display while on air
 - **Mixer controls** — Mic volume, mute, listen mode, and cue mode
-- **Live chat** — Bidirectional chat between broadcaster and listeners. Users provide a display name before chatting. Rate-limited to 1 message per second, max 280 characters
-- **Listener count** — Real-time count of connected listeners displayed during broadcast
-- **Now playing** — Broadcaster sets stream metadata (song title, show name) visible to all listeners in real time
+- **Live chat** — Bidirectional chat via floating action button (full-screen on mobile, floating panel on desktop). Users provide a display name before chatting. Rate-limited to 1 message per second, max 280 characters. Unread badge on FAB
+- **Listener count** — Real-time count of connected listeners displayed in the Stats panel during broadcast
+- **Now playing** — Broadcaster sets stream metadata with Deezer-powered autocomplete (artist + song search with album art). Visible to all listeners in real time. Metadata is also forwarded to external integration streams (Icecast/Shoutcast)
+- **Track list** — Chronological history of every track played during the broadcast. Visible to both broadcaster and receivers, with the current track highlighted. New receivers get the full history on join
 - **Local recording** — Record your broadcast as a 320 kbps stereo MP3, auto-downloaded when you stop. Uses AudioWorklet + Web Worker for energy-efficient encoding
 - **Keyboard shortcuts** — Space (mute), R (record), L (listen), C (cue), 1–0 (soundboard pads), ? (help). Active while on air, disabled when typing in inputs
-- **Integrations** — Stream to external platforms (Icecast, Shoutcast, Radio.co) via server-side relay. Test connection, remember credentials in localStorage. Room is still created for chat and metadata
+- **Integrations** — Stream to external platforms (Icecast, Shoutcast, Radio.co) via server-side relay. Test connection, remember credentials in localStorage. Room is still created for chat and metadata. Now Playing metadata is automatically pushed to the external server's admin API
 - **Multi-receiver** — Up to 4 concurrent listeners per room
 - **TURN relay** — Dynamic credential fetching via Metered.ca (or static config)
 - **Auto-reconnect** — Receivers automatically reconnect on connection drops with exponential backoff (up to 5 attempts). Manual retry available after max attempts
@@ -145,9 +146,11 @@ fly deploy
 ```
 ├── src/                        # React frontend (Vite + TypeScript)
 │   ├── components/
-│   │   ├── ChatPanel.tsx       # Bidirectional chat with name prompt
+│   │   ├── ChatPanel.tsx       # Floating chat FAB + full-screen mobile overlay
 │   │   ├── EffectsBoard.tsx    # Mic effects UI (enhance, tone, compressor, pitch, delay, reverb)
 │   │   ├── IntegrationsSheet.tsx # External streaming platform config
+│   │   ├── NowPlayingInput.tsx # Deezer autocomplete for now-playing metadata
+│   │   ├── TrackList.tsx       # Chronological track history display
 │   │   ├── SoundBoard.tsx      # 5x2 soundboard pad grid
 │   │   ├── LevelMeter.tsx      # Stereo VU meter with dBFS scale
 │   │   ├── StatusBar.tsx       # Room ID, timer, connection status
@@ -176,9 +179,9 @@ fly deploy
 │       ├── Receiver.tsx        # Listener page
 │       └── Admin.tsx           # Room management dashboard
 ├── server/                     # Node.js signaling server
-│   ├── index.js                # Express + WebSocket + ICE config + chat/metadata relay
-│   ├── integration-relay.js    # TCP source client for Icecast/Shoutcast
-│   ├── room-manager.js         # Multi-receiver room management with metadata
+│   ├── index.js                # Express + WebSocket + ICE config + chat/metadata relay + Deezer proxy
+│   ├── integration-relay.js    # TCP source client + metadata updater for Icecast/Shoutcast
+│   ├── room-manager.js         # Multi-receiver room management with metadata + track list
 │   ├── auth.js                 # Session management with expiry
 │   └── logger.js               # Pino JSON logging
 ├── public/
