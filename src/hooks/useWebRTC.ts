@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { type UseSignalingReturn, type SignalingMessage } from './useSignaling';
 import { parseStats, resetStats, type WebRTCStats } from '@/lib/webrtc-stats';
+import { dbg, dbgWarn } from '@/lib/debug';
 
 export type ConnectionStatus = 'idle' | 'connecting' | 'on-air' | 'receiving' | 'disconnected' | 'error';
 export type AudioQuality = 'high' | 'low' | 'auto';
@@ -39,11 +40,17 @@ async function fetchIceConfig(): Promise<RTCConfiguration> {
     if (res.ok) {
       const data = await res.json();
       if (data.iceServers && data.iceServers.length > 0) {
+        const hasTurn = data.iceServers.some((s: { urls: string | string[] }) => {
+          const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
+          return urls.some((u: string) => u.startsWith('turn:') || u.startsWith('turns:'));
+        });
+        dbg(`[ICE] Fetched config: ${data.iceServers.length} server(s), TURN: ${hasTurn ? 'YES' : 'NO'}`);
         return { iceServers: data.iceServers };
       }
     }
-  } catch {
-    // Fall through to default config
+    dbgWarn('[ICE] Server returned empty or bad response, using STUN-only fallback');
+  } catch (e) {
+    dbgWarn('[ICE] Could not fetch config, using STUN-only fallback', e);
   }
   return DEFAULT_RTC_CONFIG;
 }
@@ -279,6 +286,11 @@ export function useWebRTC(
   const createPCForReceiver = useCallback(
     async (receiverId: string, stream: MediaStream) => {
       const config = await ensureIceConfig();
+      dbg(`[RTC:B] Creating PC for receiver ${receiverId}`, {
+        iceServers: config.iceServers?.length,
+        tracks: stream.getTracks().map(t => `${t.kind}:${t.readyState}`),
+      });
+
       const pc = new RTCPeerConnection(config);
       pcsRef.current.set(receiverId, pc);
 
@@ -286,6 +298,7 @@ export function useWebRTC(
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
       pc.onconnectionstatechange = () => {
+        dbg(`[RTC:B] connectionState → ${pc.connectionState} (receiver: ${receiverId})`);
         setConnectionState(pc.connectionState);
         const anyConnected = Array.from(pcsRef.current.values()).some(
           (p) => p.connectionState === 'connected',
@@ -295,20 +308,25 @@ export function useWebRTC(
       };
 
       pc.oniceconnectionstatechange = () => {
+        dbg(`[RTC:B] iceConnectionState → ${pc.iceConnectionState} (receiver: ${receiverId})`);
         setIceConnectionState(pc.iceConnectionState);
       };
 
       pc.onsignalingstatechange = () => {
+        dbg(`[RTC:B] signalingState → ${pc.signalingState} (receiver: ${receiverId})`);
         setSignalingState(pc.signalingState);
       };
 
       pc.onicecandidate = (event) => {
         if (event.candidate) {
+          dbg(`[RTC:B] ICE candidate: ${event.candidate.type || 'unknown'} ${event.candidate.protocol || ''} ${event.candidate.address || ''}:${event.candidate.port || ''}`);
           signaling.send({
             type: 'candidate',
             candidate: event.candidate.toJSON(),
             receiverId,
           });
+        } else {
+          dbg('[RTC:B] ICE gathering complete');
         }
       };
 
@@ -319,6 +337,7 @@ export function useWebRTC(
         const mungedSdp = mungeOpusSdp(offer.sdp!, quality);
         const mungedOffer = { ...offer, sdp: mungedSdp };
         await pc.setLocalDescription(mungedOffer);
+        dbg(`[RTC:B] Offer created & sent to receiver ${receiverId}`);
         signaling.send({ type: 'offer', sdp: mungedOffer, receiverId });
 
         applyBitrateToSenders(pc, quality);
@@ -334,10 +353,16 @@ export function useWebRTC(
   // --- Receiver: create a single PC ---
   const createReceiverPC = useCallback(async () => {
     const config = await ensureIceConfig();
+    dbg('[RTC:R] Creating receiver PC', {
+      iceServers: config.iceServers?.length,
+      iceConfigFetched: iceConfigFetchedRef.current,
+    });
+
     const pc = new RTCPeerConnection(config);
     pcRef.current = pc;
 
     pc.onconnectionstatechange = () => {
+      dbg(`[RTC:R] connectionState → ${pc.connectionState}`);
       setConnectionState(pc.connectionState);
       if (pc.connectionState === 'connected') {
         setPeerConnected(true);
@@ -349,20 +374,26 @@ export function useWebRTC(
     };
 
     pc.oniceconnectionstatechange = () => {
+      dbg(`[RTC:R] iceConnectionState → ${pc.iceConnectionState}`);
       setIceConnectionState(pc.iceConnectionState);
     };
 
     pc.onsignalingstatechange = () => {
+      dbg(`[RTC:R] signalingState → ${pc.signalingState}`);
       setSignalingState(pc.signalingState);
     };
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
+        dbg(`[RTC:R] ICE candidate: ${event.candidate.type || 'unknown'} ${event.candidate.protocol || ''} ${event.candidate.address || ''}:${event.candidate.port || ''}`);
         signaling.send({ type: 'candidate', candidate: event.candidate.toJSON() });
+      } else {
+        dbg('[RTC:R] ICE gathering complete');
       }
     };
 
     pc.ontrack = (event) => {
+      dbg(`[RTC:R] Remote track received: ${event.track.kind} (${event.track.readyState})`);
       setRemoteStream(event.streams[0] || new MediaStream([event.track]));
     };
 
@@ -387,6 +418,8 @@ export function useWebRTC(
   // --- Handle signaling messages ---
   useEffect(() => {
     const unsub = signaling.subscribe(async (msg: SignalingMessage) => {
+      dbg(`[SIG:${role[0].toUpperCase()}] ← ${msg.type}`, msg.type === 'candidate' ? '' : msg);
+
       switch (msg.type) {
         case 'room-created':
           setRoomId(msg.roomId as string);
@@ -397,6 +430,7 @@ export function useWebRTC(
           break;
 
         case 'peer-joined': {
+          dbg(`[SIG:${role[0].toUpperCase()}] peer-joined: receiverId=${msg.receiverId}, broadcastStream=${!!broadcastStreamRef.current}`);
           if (role === 'broadcaster' && msg.receiverId && broadcastStreamRef.current) {
             // Await ICE config + PC creation (async)
             await createPCForReceiver(msg.receiverId as string, broadcastStreamRef.current);
@@ -424,13 +458,16 @@ export function useWebRTC(
         case 'offer':
           if (role === 'receiver') {
             const pc = pcRef.current;
+            dbg(`[RTC:R] Received offer, PC exists: ${!!pc}, signalingState: ${pc?.signalingState}`);
             if (pc) {
               try {
                 await pc.setRemoteDescription(
                   new RTCSessionDescription(msg.sdp as RTCSessionDescriptionInit),
                 );
+                dbg('[RTC:R] Remote description set, creating answer...');
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
+                dbg('[RTC:R] Answer created & sent');
                 signaling.send({ type: 'answer', sdp: answer });
               } catch (e) {
                 console.error('Failed to handle offer:', e);
@@ -449,6 +486,7 @@ export function useWebRTC(
                 await pc.setRemoteDescription(
                   new RTCSessionDescription(msg.sdp as RTCSessionDescriptionInit),
                 );
+                dbg(`[RTC:B] Answer set for receiver ${rid}`);
               } catch (e) {
                 console.error('Failed to handle answer:', e);
               }
@@ -499,7 +537,11 @@ export function useWebRTC(
 
   const startBroadcast = useCallback(
     (stream: MediaStream) => {
-      if (!roomId) return;
+      if (!roomId) {
+        dbgWarn('[RTC:B] startBroadcast called but no roomId');
+        return;
+      }
+      dbg(`[RTC:B] Starting broadcast in room ${roomId}, stream tracks:`, stream.getTracks().map(t => `${t.kind}:${t.readyState}`));
       setStatus('on-air');
       broadcastStreamRef.current = stream;
 
@@ -532,6 +574,7 @@ export function useWebRTC(
 
   const joinAsReceiver = useCallback(
     async (joinRoomId: string) => {
+      dbg(`[RTC:R] Joining room ${joinRoomId} as receiver`);
       setStatus('connecting');
       await createReceiverPC();
       signaling.send({ type: 'join-room', roomId: joinRoomId, role: 'receiver' });
