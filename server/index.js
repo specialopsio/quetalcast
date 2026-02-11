@@ -97,6 +97,17 @@ const wsJoinCounts = new Map();
 const WS_JOIN_LIMIT = 20;
 const WS_JOIN_WINDOW = 60000;
 
+/** Parse a cookie header string into a key-value map */
+function parseCookies(header) {
+  const map = {};
+  if (!header) return map;
+  header.split(';').forEach(pair => {
+    const [key, ...rest] = pair.split('=');
+    if (key) map[key.trim()] = rest.join('=').trim();
+  });
+  return map;
+}
+
 wss.on('connection', (ws, req) => {
   const ip = req.headers['x-forwarded-for']?.toString().split(',')[0] || req.socket.remoteAddress || 'unknown';
 
@@ -122,10 +133,16 @@ wss.on('connection', (ws, req) => {
   recent.push(now);
   wsJoinCounts.set(ip, recent);
 
+  // Authenticate session from cookie (needed for broadcaster actions)
+  const cookies = parseCookies(req.headers.cookie);
+  const sessionToken = cookies.session || null;
+  const sessionData = sessionToken ? sessions.validate(sessionToken) : null;
+  const isAuthed = !!sessionData;
+
   let clientRoom = null;
   let clientRole = null;
 
-  logger.info({ ip }, 'WebSocket connected');
+  logger.info({ ip, authed: isAuthed }, 'WebSocket connected');
 
   ws.on('message', (raw) => {
     let msg;
@@ -137,6 +154,11 @@ wss.on('connection', (ws, req) => {
 
     switch (msg.type) {
       case 'create-room': {
+        if (!isAuthed) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Authentication required', code: 'AUTH_REQUIRED' }));
+          logger.warn({ ip }, 'Unauthenticated create-room attempt');
+          break;
+        }
         const roomId = rooms.create();
         clientRoom = roomId;
         clientRole = 'broadcaster';
@@ -151,6 +173,11 @@ wss.on('connection', (ws, req) => {
         const { roomId, role } = msg;
         if (!roomId || !role) {
           ws.send(JSON.stringify({ type: 'error', message: 'Missing roomId or role', code: 'MISSING_PARAMS' }));
+          break;
+        }
+        if (role === 'broadcaster' && !isAuthed) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Authentication required', code: 'AUTH_REQUIRED' }));
+          logger.warn({ ip, roomId }, 'Unauthenticated broadcaster join attempt');
           break;
         }
         const result = rooms.join(roomId, role, ws);

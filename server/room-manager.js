@@ -34,13 +34,19 @@ export class RoomManager {
       return { ok: false, error: 'Invalid role', code: 'INVALID_ROLE' };
     }
 
-    // Disconnect prior client if same role
-    if (room[role]) {
+    // Lock broadcaster slot — reject if another broadcaster is already live
+    if (role === 'broadcaster' && room.broadcaster && room.broadcaster.readyState === 1) {
+      this.logger.warn({ roomId: roomId.slice(0, 8) }, 'Broadcaster join rejected — slot already occupied');
+      return { ok: false, error: 'Broadcast already in progress', code: 'BROADCASTER_OCCUPIED' };
+    }
+
+    // For receivers, disconnect prior client if same role (allows reconnects)
+    if (role === 'receiver' && room[role]) {
       try {
         room[role].send(JSON.stringify({ type: 'error', message: 'Replaced by new connection', code: 'REPLACED' }));
         room[role].close();
       } catch {}
-      this.logger.info({ roomId: roomId.slice(0, 8), role }, 'Prior client disconnected');
+      this.logger.info({ roomId: roomId.slice(0, 8), role }, 'Prior receiver disconnected');
     }
 
     room[role] = ws;
