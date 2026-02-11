@@ -6,6 +6,8 @@ interface HealthPanelProps {
   iceConnectionState: string;
   signalingState: string;
   peerConnected: boolean;
+  /** Optional listener count — shown only when provided (broadcaster) */
+  listenerCount?: number;
 }
 
 function StatItem({ label, value, unit, warn }: { label: string; value: string | number; unit?: string; warn?: boolean }) {
@@ -57,13 +59,13 @@ function StateIndicator({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function HealthPanel({ stats, connectionState, iceConnectionState, signalingState, peerConnected }: HealthPanelProps) {
+export function HealthPanel({ stats, connectionState, iceConnectionState, signalingState, peerConnected, listenerCount }: HealthPanelProps) {
   return (
     <div className="panel space-y-4">
-      <div className="panel-header">Connection</div>
+      <div className="panel-header">Stats</div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className={`grid gap-3 ${listenerCount !== undefined ? 'grid-cols-5' : 'grid-cols-4'}`}>
         <StatItem label="Speed" value={stats ? stats.bitrate.toFixed(1) : '—'} unit="kbps" />
         <StatItem
           label="Dropped"
@@ -72,6 +74,9 @@ export function HealthPanel({ stats, connectionState, iceConnectionState, signal
         />
         <StatItem label="Jitter" value={stats ? stats.jitter.toFixed(1) : '—'} unit="ms" />
         <StatItem label="Delay" value={stats ? stats.rtt.toFixed(0) : '—'} unit="ms" />
+        {listenerCount !== undefined && (
+          <StatItem label="Listeners" value={listenerCount} />
+        )}
       </div>
 
       {/* Connection states */}
@@ -80,7 +85,7 @@ export function HealthPanel({ stats, connectionState, iceConnectionState, signal
         <StateIndicator label="Network" value={iceConnectionState} />
         <StateIndicator label="Server" value={signalingState} />
         <div className="flex items-center justify-between text-xs">
-          <span className="font-mono text-muted-foreground uppercase">Listener</span>
+          <span className="font-mono text-muted-foreground uppercase">Peer</span>
           <span className={`font-mono font-semibold ${peerConnected ? 'text-primary' : 'text-muted-foreground'}`}>
             {peerConnected ? 'Connected' : 'Waiting'}
           </span>

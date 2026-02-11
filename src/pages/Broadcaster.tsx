@@ -8,7 +8,7 @@ import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
-import { Copy, Mic, MicOff, Radio, Headphones, Music, Sparkles, Zap, Plug2, Circle, Square, Users, Disc3, Keyboard, ListMusic, Trash2 } from 'lucide-react';
+import { Copy, Mic, MicOff, Radio, Headphones, Music, Sparkles, Zap, Plug2, Circle, Square, Disc3, Keyboard, ListMusic, Trash2 } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import {
   Select,
@@ -547,16 +547,6 @@ const Broadcaster = () => {
           label="Input Level"
         />
 
-        {/* Listener count — visible when on air */}
-        {isOnAir && (
-          <div className="flex items-center justify-center gap-4 text-sm font-mono text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <Users className="h-3.5 w-3.5" />
-              {listenerCount === 0 ? 'No listeners' : `${listenerCount} listener${listenerCount !== 1 ? 's' : ''}`}
-            </span>
-          </div>
-        )}
-
         {/* Controls */}
         <div className="flex gap-3">
           <button
@@ -850,6 +840,7 @@ const Broadcaster = () => {
             iceConnectionState={webrtc.iceConnectionState}
             signalingState={webrtc.signalingState}
             peerConnected={webrtc.peerConnected}
+            listenerCount={listenerCount}
           />
           <EventLog entries={logs} />
         </div>
