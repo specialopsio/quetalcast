@@ -400,7 +400,7 @@ const Broadcaster = () => {
               <div className="shrink-0 flex items-center gap-1.5">
                 <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Limit</span>
                 <Select value={String(limiterDb)} onValueChange={handleLimiterChange}>
-                  <SelectTrigger className="w-[72px] h-7 bg-secondary border-border text-xs font-mono">
+                  <SelectTrigger className="w-[80px] h-7 bg-secondary border-border text-xs font-mono">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
