@@ -14,32 +14,33 @@ export function Footer() {
 
   return (
     <>
-      <footer className="py-4 px-4 text-center text-xs text-muted-foreground/60 flex items-center justify-center gap-3">
-        <span>
-          Built by{' '}
-          <a
-            href="https://specialops.io"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2"
+      <footer className="py-4 px-4 text-center text-xs text-muted-foreground/60 flex flex-col items-center gap-1.5">
+        <div className="flex items-center gap-3">
+          <span>
+            Built by{' '}
+            <a
+              href="https://specialops.io"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground hover:text-foreground hover:underline underline-offset-2 transition-colors"
+            >
+              SpecialOPS
+            </a>
+          </span>
+          <span className="text-muted-foreground/30">|</span>
+          <button
+            onClick={() => setHelpOpen(true)}
+            className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground hover:underline underline-offset-2 transition-colors"
           >
-            SpecialOPS
-          </a>
-        </span>
-        <span className="text-muted-foreground/30">|</span>
-        <button
-          onClick={() => setHelpOpen(true)}
-          className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2"
-        >
-          <HelpCircle className="h-3 w-3" />
-          Help
-        </button>
-        <span className="text-muted-foreground/30">|</span>
+            <HelpCircle className="h-3 w-3" />
+            Help
+          </button>
+        </div>
         <a
           href="https://github.com/specialopsio/quetalcast"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2"
+          className="text-muted-foreground/40 hover:text-foreground hover:underline underline-offset-2 transition-colors"
         >
           We 🤍 Open Source
         </a>
