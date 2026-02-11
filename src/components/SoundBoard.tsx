@@ -174,7 +174,7 @@ export function SoundBoard({ connectElement }: SoundBoardProps) {
               /* Loaded pad */
               <button
                 onClick={() => handlePlayStop(i)}
-                className={`w-full h-full rounded-md border flex flex-col items-center justify-between pt-[40%] pb-2 transition-all ${
+                className={`w-full h-full rounded-md border flex flex-col items-center justify-between pt-[40%] pb-6 transition-all ${
                   pad.isPlaying
                     ? 'border-primary bg-primary/15 glow-ring'
                     : 'border-border bg-secondary/50 hover:bg-secondary'
