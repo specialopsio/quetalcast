@@ -201,6 +201,11 @@ export function Footer() {
                     <strong className="text-foreground">Tone</strong> — A simple
                     equalizer that lets you boost or cut bass, mids, and treble.
                   </li>
+                  <li>
+                    <strong className="text-foreground">Compressor</strong> — Evens
+                    out your volume so quiet parts are louder and loud parts don't
+                    clip. Great for keeping a consistent level.
+                  </li>
                 </ul>
                 <p className="mt-1">
                   Tap the <strong className="text-foreground">gear icon</strong> on

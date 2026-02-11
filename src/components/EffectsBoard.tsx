@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AudioLines, MicVocal, Timer, SlidersHorizontal, Settings } from 'lucide-react';
+import { AudioLines, MicVocal, Timer, SlidersHorizontal, Gauge, Settings } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -24,13 +24,14 @@ interface EffectsBoardProps {
 
 // ── Config ─────────────────────────────────────────────────────────
 
-const EFFECT_ORDER: EffectName[] = ['echo', 'voiceShift', 'delay', 'tone'];
+const EFFECT_ORDER: EffectName[] = ['echo', 'voiceShift', 'delay', 'tone', 'compressor'];
 
 const EFFECT_ICONS: Record<EffectName, React.ComponentType<{ className?: string }>> = {
   echo: AudioLines,
   voiceShift: MicVocal,
   delay: Timer,
   tone: SlidersHorizontal,
+  compressor: Gauge,
 };
 
 interface SliderConfig {
@@ -111,6 +112,27 @@ const EFFECT_SETTINGS: Record<EffectName, SliderConfig[]> = {
       formatValue: (v) => `${v > 0 ? '+' : ''}${v} dB`,
     },
   ],
+  compressor: [
+    {
+      key: 'amount', label: 'Amount',
+      description: 'How much compression to apply. Low = gentle leveling, high = heavy squash.',
+      min: 0, max: 100, step: 1, defaultValue: 50,
+      minLabel: 'Light', maxLabel: 'Heavy',
+      formatValue: (v) => `${v}%`,
+    },
+    {
+      key: 'speed', label: 'Speed',
+      description: 'How fast the compressor reacts. Slow = smooth, fast = punchy.',
+      min: 0, max: 100, step: 1, defaultValue: 50,
+      minLabel: 'Smooth', maxLabel: 'Punchy',
+    },
+    {
+      key: 'makeup', label: 'Makeup Gain',
+      description: 'Boost the output volume to compensate for compression.',
+      min: 0, max: 100, step: 1, defaultValue: 0,
+      formatValue: (v) => `+${Math.round((v / 100) * 24)} dB`,
+    },
+  ],
 };
 
 // ── Component ──────────────────────────────────────────────────────
@@ -138,7 +160,7 @@ export function EffectsBoard({ effects, onToggle, onUpdate }: EffectsBoardProps)
 
   return (
     <>
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-5 gap-2">
         {EFFECT_ORDER.map((effectName) => {
           const effect = effects[effectName];
           const Icon = EFFECT_ICONS[effectName];

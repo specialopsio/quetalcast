@@ -2,17 +2,18 @@ import { useCallback, useRef, useState } from 'react';
 
 // ── Types ──────────────────────────────────────────────────────────
 
-export type EffectName = 'tone' | 'voiceShift' | 'delay' | 'echo';
+export type EffectName = 'tone' | 'voiceShift' | 'delay' | 'echo' | 'compressor';
 
 export interface EffectState {
   enabled: boolean;
   params: Record<string, number>;
 }
 
-export const CHAIN_ORDER: EffectName[] = ['tone', 'voiceShift', 'delay', 'echo'];
+export const CHAIN_ORDER: EffectName[] = ['tone', 'compressor', 'voiceShift', 'delay', 'echo'];
 
 export const EFFECT_LABELS: Record<EffectName, string> = {
   tone: 'Tone',
+  compressor: 'Compressor',
   voiceShift: 'Voice Shift',
   delay: 'Delay',
   echo: 'Reverb',
@@ -20,6 +21,7 @@ export const EFFECT_LABELS: Record<EffectName, string> = {
 
 export const DEFAULT_PARAMS: Record<EffectName, Record<string, number>> = {
   tone: { bass: 0, mids: 0, treble: 0 },
+  compressor: { amount: 50, speed: 50, makeup: 0 },
   voiceShift: { shift: 50 },
   delay: { timing: 30, repeats: 30, amount: 50 },
   echo: { space: 50, fade: 50, amount: 30 },
@@ -116,6 +118,27 @@ function createDelayNodes(ctx: AudioContext): EffectNodeSet {
   return { input, output, internals: { dryGain, wetGain, delay: delayNode, feedback } };
 }
 
+function createCompressorNodes(ctx: AudioContext): EffectNodeSet {
+  const input = ctx.createGain();
+  const output = ctx.createGain();
+  const compressor = ctx.createDynamicsCompressor();
+  const makeupGain = ctx.createGain();
+
+  // Defaults for amount=50, speed=50
+  compressor.threshold.value = -25;
+  compressor.knee.value = 10;
+  compressor.ratio.value = 6;
+  compressor.attack.value = 0.01;
+  compressor.release.value = 0.15;
+  makeupGain.gain.value = 1;
+
+  input.connect(compressor);
+  compressor.connect(makeupGain);
+  makeupGain.connect(output);
+
+  return { input, output, internals: { compressor, makeupGain } };
+}
+
 function createEchoNodes(ctx: AudioContext): EffectNodeSet {
   const input = ctx.createGain();
   const output = ctx.createGain();
@@ -152,6 +175,25 @@ function applyVoiceShiftParams(nodes: EffectNodeSet, params: Record<string, numb
   // Map 0–100 to pitch ratio: 0 → 0.5 (octave down), 50 → 1.0, 100 → 2.0 (octave up)
   const pitchFactor = Math.pow(2, (shift - 50) / 50);
   (nodes.internals.worklet as AudioWorkletNode).port.postMessage({ pitchFactor });
+}
+
+function applyCompressorParams(nodes: EffectNodeSet, params: Record<string, number>) {
+  const amount = params.amount ?? 50;
+  const speed = params.speed ?? 50;
+  const makeup = params.makeup ?? 0;
+
+  const comp = nodes.internals.compressor as DynamicsCompressorNode;
+  // amount 0–100 → threshold 0 to -50 dB, ratio 1 to 12
+  comp.threshold.value = -(amount / 100) * 50;
+  comp.ratio.value = 1 + (amount / 100) * 11;
+  comp.knee.value = 30 - (amount / 100) * 25; // softer knee at low amounts
+
+  // speed 0–100 → attack 0.1s (slow) to 0.001s (fast), release 0.5s to 0.05s
+  comp.attack.value = 0.1 - (speed / 100) * 0.099;
+  comp.release.value = 0.5 - (speed / 100) * 0.45;
+
+  // makeup 0–100 → 0 to +24 dB of gain
+  (nodes.internals.makeupGain as GainNode).gain.value = Math.pow(10, (makeup / 100) * 24 / 20);
 }
 
 function applyDelayParams(nodes: EffectNodeSet, params: Record<string, number>) {
@@ -205,6 +247,7 @@ export function useMicEffects(): UseMicEffectsReturn {
   const createAllNodes = useCallback((ctx: AudioContext): Record<EffectName, EffectNodeSet> => {
     return {
       tone: createToneNodes(ctx),
+      compressor: createCompressorNodes(ctx),
       voiceShift: createVoiceShiftNodes(ctx),
       delay: createDelayNodes(ctx),
       echo: createEchoNodes(ctx),
@@ -311,6 +354,9 @@ export function useMicEffects(): UseMicEffectsReturn {
       switch (name) {
         case 'tone':
           applyToneParams(nodeSet, fullParams);
+          break;
+        case 'compressor':
+          applyCompressorParams(nodeSet, fullParams);
           break;
         case 'voiceShift':
           applyVoiceShiftParams(nodeSet, fullParams);
