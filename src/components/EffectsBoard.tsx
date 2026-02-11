@@ -25,7 +25,6 @@ interface EffectsBoardProps {
 // ── Config ─────────────────────────────────────────────────────────
 
 const EFFECT_ORDER: EffectName[] = ['echo', 'voiceShift', 'delay', 'tone'];
-const PAD_COUNT = 10;
 
 const EFFECT_ICONS: Record<EffectName, React.ComponentType<{ className?: string }>> = {
   echo: AudioLines,
@@ -139,20 +138,8 @@ export function EffectsBoard({ effects, onToggle, onUpdate }: EffectsBoardProps)
 
   return (
     <>
-      <div className="grid grid-cols-5 gap-2">
-        {Array.from({ length: PAD_COUNT }, (_, i) => {
-          const effectName = EFFECT_ORDER[i];
-
-          if (!effectName) {
-            return (
-              <div key={i} className="relative aspect-square">
-                <div className="w-full h-full rounded-md border-2 border-dashed border-border/60 flex items-center justify-center">
-                  <span className="text-muted-foreground/20 text-xs">—</span>
-                </div>
-              </div>
-            );
-          }
-
+      <div className="grid grid-cols-4 gap-2">
+        {EFFECT_ORDER.map((effectName) => {
           const effect = effects[effectName];
           const Icon = EFFECT_ICONS[effectName];
 
