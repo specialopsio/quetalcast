@@ -1,94 +1,110 @@
-# WebRTC Audio Bridge
+# QueTal Cast
 
-Self-hosted, peer-to-peer WebRTC audio bridge with minimal signaling server. One broadcaster, one receiver, audio only.
+Real-time audio broadcasting application built with WebRTC, React, and Node.js. Designed for low-latency, high-quality audio streaming from a single broadcaster to multiple listeners.
+
+## Features
+
+- **High-fidelity audio** — Opus codec at up to 510 kbps stereo with adaptive quality (High / Auto / Low)
+- **Soundboard** — 5x2 pad grid with MP3 loading, loop toggle, per-pad volume (up to 300%), and broadcast mixing
+- **Mic effects** — Tone/EQ, pitch shift, delay, and reverb with per-effect settings
+- **Stereo VU meter** — Calibrated dBFS metering with peak hold
+- **Output limiter** — Selectable ceiling (0 dB, -3 dB, -6 dB, -12 dB)
+- **Broadcast timer** — Elapsed time display while on air
+- **Mixer controls** — Mic volume, mute, listen mode, and cue mode
+- **Multi-receiver** — Up to 4 concurrent listeners per room
+- **TURN relay** — Dynamic credential fetching via Metered.ca (or static config)
+- **Auto-reconnect** — WebSocket reconnection with exponential backoff
 
 ## Architecture
 
 ```
 ┌──────────────┐     WebSocket      ┌──────────────┐     WebSocket      ┌──────────────┐
-│  Broadcaster │ ◄──────────────►  │   Signaling  │ ◄──────────────►  │   Receiver   │
-│   (Browser)  │                    │   Server     │                    │   (Browser)  │
+│  Broadcaster │ ◄────────────────► │   Signaling  │ ◄────────────────► │  Receiver(s) │
+│   (React)    │                    │   Server     │                    │   (React)    │
 └──────┬───────┘                    │  (Node.js)   │                    └──────┬───────┘
-       │                            └──────────────┘                           │
-       │              WebRTC (Peer-to-Peer Audio via Opus)                     │
-       └───────────────────────────────────────────────────────────────────────┘
+       │                            └──────┬───────┘                           │
+       │                                   │                                   │
+       │        WebRTC (Peer-to-Peer)      │    TURN relay (when needed)       │
+       └───────────────────────────────────┼───────────────────────────────────┘
+                                           │
+                                    ┌──────┴───────┐
+                                    │  TURN Server │
+                                    │  (Metered)   │
+                                    └──────────────┘
 ```
 
-## Quick Start (Local Dev)
+**Broadcaster audio graph (Web Audio API):**
 
-### 1. Start the signaling server
+```
+Microphone ─► Mic Effects ─► Gain ─┐
+                                   ├─► Broadcast Bus (stereo) ─► Limiter ─► WebRTC
+Soundboard Pads ─► Gain ──────────┘                            └─► VU Meter
+```
+
+## Quick Start
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) 18+
+- [pnpm](https://pnpm.io/)
+
+### 1. Clone and install
 
 ```bash
+git clone https://github.com/SpecialOPS-dev/live-audio-bridge.git
+cd live-audio-bridge
+
+# Install frontend dependencies
+pnpm install
+
+# Install server dependencies
+cd server && pnpm install && cd ..
+```
+
+### 2. Configure environment
+
+```bash
+cp .env.example .env
+# Edit .env — at minimum set ADMIN_PASSWORD and SESSION_SECRET
+```
+
+### 3. Run locally
+
+```bash
+# Terminal 1 — signaling server
 cd server
-npm install
-npm run dev
+pnpm run dev
+
+# Terminal 2 — frontend
+pnpm run dev
 ```
 
-Server runs on `http://localhost:3001`.
+- Frontend: `http://localhost:5173`
+- Server: `http://localhost:3001`
 
-### 2. Start the frontend
+### 4. Use the app
+
+1. Open `http://localhost:5173` and log in with your configured password
+2. Select an audio input device
+3. Click **Go On Air** — a room ID is generated and copied
+4. Share the receiver link; listeners open it and click **Join**
+
+## Deployment (Fly.io)
+
+The project includes a multi-stage `Dockerfile` and `fly.toml` for [Fly.io](https://fly.io) deployment.
 
 ```bash
-npm install
-npm run dev
-```
+# Install Fly CLI: https://fly.io/docs/getting-started/installing-flyctl/
+fly launch
 
-Frontend runs on `http://localhost:5173` (Vite default).
+# Set secrets
+fly secrets set SESSION_SECRET="your-random-secret"
+fly secrets set ADMIN_PASSWORD="your-password"
+fly secrets set METERED_APP_NAME="yourapp.metered.live"
+fly secrets set METERED_API_KEY="your-metered-api-key"
 
-### 3. Use the app
-
-1. Open `http://localhost:5173` → Login with `admin` / `admin`
-2. Select audio input device on the Broadcaster page
-3. Click **Go On Air** → copies a receiver link
-4. Open receiver link in another tab/browser → click **Join** → **Click to Listen**
-
-## Docker Deployment
-
-```bash
-# Build and run signaling server
-docker compose up -d signaling
-
-# With TURN server (uncomment in docker-compose.yml first)
-docker compose up -d
-
-# Production with Caddy (TLS)
-# 1. Create Caddyfile (see below)
-# 2. Uncomment caddy service in docker-compose.yml
-docker compose up -d
-```
-
-### Example Caddyfile
-
-```
-your-domain.com {
-    reverse_proxy signaling:3001
-}
-```
-
-### Example turnserver.conf
-
-```
-listening-port=3478
-tls-listening-port=5349
-realm=your-domain.com
-server-name=your-domain.com
-fingerprint
-lt-cred-mech
-user=turnuser:turnpassword
-total-quota=100
-stale-nonce=600
-no-multicast-peers
-```
-
-When using TURN, update the ICE config in `src/hooks/useWebRTC.ts`:
-
-```typescript
-const RTC_CONFIG: RTCConfiguration = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'turn:your-domain.com:3478', username: 'turnuser', credential: 'turnpassword' },
-  ],
-};
+# Deploy
+fly deploy
 ```
 
 ## Environment Variables
@@ -97,51 +113,84 @@ const RTC_CONFIG: RTCConfiguration = {
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `3001` | Server port |
-| `ALLOWED_ORIGIN` | `*` | CORS origin (set to your domain in prod) |
-| `REQUIRE_TLS` | `false` | Reject non-HTTPS requests |
-| `SESSION_SECRET` | `dev-secret...` | Session signing secret |
-| `LOG_DIR` | `./logs` | Log file directory |
-| `LOG_LEVEL` | `info` | Pino log level |
+| `PORT` | `3001` | Server listen port |
+| `ALLOWED_ORIGIN` | `*` | CORS origin (set to your domain in production) |
+| `REQUIRE_TLS` | `false` | Require HTTPS for cookies |
+| `SESSION_SECRET` | `dev-secret...` | Session cookie signing secret |
+| `ADMIN_PASSWORD` | `admin` | Broadcaster login password |
+| `METERED_APP_NAME` | — | Metered.ca app name for dynamic TURN credentials |
+| `METERED_API_KEY` | — | Metered.ca API key |
+| `TURN_URL` | — | Static TURN server URL (alternative to Metered) |
+| `TURN_USERNAME` | — | Static TURN username |
+| `TURN_CREDENTIAL` | — | Static TURN credential |
+| `LOG_DIR` | `server/logs` | Log file directory |
+| `LOG_LEVEL` | `info` | Log level (error, warn, info, debug) |
 
 ### Frontend
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VITE_WS_URL` | `ws://localhost:3001` | WebSocket signaling URL |
+| `VITE_WS_URL` | auto-detected | WebSocket signaling URL |
 
 ## Project Structure
 
 ```
-├── src/                    # React frontend
-│   ├── components/         # StatusBar, LevelMeter, HealthPanel, EventLog
-│   ├── hooks/              # useSignaling, useWebRTC, useAudioAnalyser
-│   ├── lib/                # auth, webrtc-stats
-│   └── pages/              # Login, Broadcaster, Receiver, Admin
-├── server/                 # Node.js signaling server
-│   ├── index.js            # Express + WebSocket server
-│   ├── room-manager.js     # Room lifecycle management
-│   ├── logger.js           # Pino JSON logging
-│   ├── auth.js             # Session management
-│   └── Dockerfile
-├── docker-compose.yml
-└── README.md
+├── src/                        # React frontend (Vite + TypeScript)
+│   ├── components/
+│   │   ├── EffectsBoard.tsx    # Mic effects UI (tone, pitch, delay, reverb)
+│   │   ├── SoundBoard.tsx      # 5x2 soundboard pad grid
+│   │   ├── LevelMeter.tsx      # Stereo VU meter with dBFS scale
+│   │   ├── StatusBar.tsx       # Room ID, timer, connection status
+│   │   ├── HealthPanel.tsx     # RTT, packet loss, jitter display
+│   │   ├── EventLog.tsx        # Connection event timeline
+│   │   ├── Footer.tsx          # Credits and help modal
+│   │   └── ui/                 # shadcn/ui primitives
+│   ├── hooks/
+│   │   ├── useSignaling.ts     # WebSocket signaling with auto-reconnect
+│   │   ├── useWebRTC.ts        # WebRTC peer connections + adaptive quality
+│   │   ├── useAudioMixer.ts    # Web Audio API mixing graph
+│   │   ├── useAudioAnalyser.ts # Audio level analysis
+│   │   └── useMicEffects.ts    # Mic effect chain (incl. AudioWorklet pitch shift)
+│   ├── lib/
+│   │   ├── auth.ts             # Client-side session management
+│   │   └── webrtc-stats.ts     # Stats parsing utilities
+│   └── pages/
+│       ├── Login.tsx           # Broadcaster authentication
+│       ├── Broadcaster.tsx     # Main broadcast control page
+│       ├── Receiver.tsx        # Listener page
+│       └── Admin.tsx           # Room management dashboard
+├── server/                     # Node.js signaling server
+│   ├── index.js                # Express + WebSocket + ICE config endpoint
+│   ├── room-manager.js         # Multi-receiver room management
+│   ├── auth.js                 # Session management with expiry
+│   └── logger.js               # Pino JSON logging
+├── public/
+│   └── pitch-shift-processor.js  # AudioWorklet for real-time pitch shifting
+├── Dockerfile                  # Multi-stage production build
+├── fly.toml                    # Fly.io deployment config
+└── docker-compose.yml          # Local Docker setup
 ```
 
-## Logs
+## Security
 
-Server logs → `server/logs/`:
-- `server.log` — room lifecycle, relay events, errors
-- `stats-YYYY-MM-DD.jsonl` — client stats summaries (every 5s)
+- **Session auth** — HTTP-only cookies with configurable secret and server-side expiry
+- **WebSocket auth** — Broadcaster connections require valid session; receiver connections are open
+- **Rate limiting** — WebSocket message throttling to prevent abuse
+- **Payload limits** — Maximum WebSocket message size enforced
+- **CORS** — Configurable allowed origin
+- **SDP/ICE validation** — Relayed WebRTC data is validated before forwarding
+- **HTTPS** — Required for `getUserMedia` in production; use a reverse proxy (Caddy, nginx) or Fly.io for TLS
 
-## Security Notes
+## TURN Server
 
-- **MVP auth**: Hardcoded `admin/admin`. Replace for production.
-- **HTTPS**: Required for `getUserMedia` in production. Use Caddy/nginx for TLS.
-- **Origin checks**: Set `ALLOWED_ORIGIN` to your domain in production.
-- **Cookies**: `httpOnly`, `secure` (TLS), `sameSite: strict`.
-- **No SDP in logs**: Only sizes, counts, and state changes logged.
+WebRTC peer-to-peer connections can fail behind restrictive NATs or firewalls. A TURN relay server solves this.
+
+**Recommended: [Metered.ca](https://www.metered.ca/)** — Set `METERED_APP_NAME` and `METERED_API_KEY` and the server will dynamically fetch temporary TURN credentials.
+
+**Alternative:** Set `TURN_URL`, `TURN_USERNAME`, and `TURN_CREDENTIAL` for a static TURN server.
+
+If no TURN configuration is provided, the app falls back to STUN-only (Google STUN servers).
 
 ## License
 
-MIT
+[MIT](LICENSE) — built by [SpecialOPS](https://specialops.io)
