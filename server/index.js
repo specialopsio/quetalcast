@@ -22,14 +22,20 @@ const sessions = new SessionManager(SESSION_SECRET);
 
 // Express setup
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '16kb' })); // Fix: explicit size limit
 app.use(cookieParser());
+app.set('trust proxy', 1); // Fix #4: trust first proxy hop (Fly.io etc.)
 
-// CORS
+// Fix #2: CORS — don't reflect arbitrary origins with credentials
 app.use((req, res, next) => {
-  const origin = ALLOWED_ORIGIN === '*' ? req.headers.origin || '*' : ALLOWED_ORIGIN;
-  res.header('Access-Control-Allow-Origin', origin);
-  res.header('Access-Control-Allow-Credentials', 'true');
+  if (ALLOWED_ORIGIN === '*') {
+    // Wildcard: no credentials, open access
+    res.header('Access-Control-Allow-Origin', '*');
+  } else {
+    // Specific origin: allow credentials
+    res.header('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
   res.header('Access-Control-Allow-Headers', 'Content-Type');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
@@ -49,6 +55,15 @@ if (REQUIRE_TLS) {
 // Rate limiting
 const loginLimiter = rateLimit({ windowMs: 60000, max: 10, message: { error: 'Too many login attempts' } });
 
+// Auth middleware
+function requireAuth(req, res, next) {
+  const token = req.cookies.session;
+  if (!token || !sessions.validate(token)) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  next();
+}
+
 // Auth routes
 app.post('/api/login', loginLimiter, (req, res) => {
   const { username, password } = req.body;
@@ -60,10 +75,10 @@ app.post('/api/login', loginLimiter, (req, res) => {
       sameSite: 'strict',
       maxAge: 86400000, // 24h
     });
-    logger.info({ username }, 'Login successful');
+    logger.info('Login successful');
     res.json({ ok: true, username });
   } else {
-    logger.warn({ username }, 'Login failed');
+    logger.warn('Login failed');
     res.status(401).json({ error: 'Invalid credentials' });
   }
 });
@@ -75,8 +90,8 @@ app.post('/api/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-// Admin routes
-app.get('/admin/rooms', (req, res) => {
+// Fix #1: Admin routes — require authentication
+app.get('/admin/rooms', requireAuth, (req, res) => {
   res.json({ rooms: rooms.listRooms() });
 });
 
@@ -90,12 +105,27 @@ app.get('*', (req, res, next) => {
 
 // HTTP + WebSocket server
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
+
+// Fix #6: Set maxPayload to prevent memory exhaustion
+const wss = new WebSocketServer({ server, maxPayload: 64 * 1024 }); // 64KB max
 
 // WebSocket rate limiting
 const wsJoinCounts = new Map();
 const WS_JOIN_LIMIT = 20;
 const WS_JOIN_WINDOW = 60000;
+
+// Fix #9: Periodic cleanup of stale rate limit entries
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, timestamps] of wsJoinCounts) {
+    const recent = timestamps.filter(t => now - t < WS_JOIN_WINDOW);
+    if (recent.length === 0) {
+      wsJoinCounts.delete(ip);
+    } else {
+      wsJoinCounts.set(ip, recent);
+    }
+  }
+}, 5 * 60 * 1000);
 
 /** Parse a cookie header string into a key-value map */
 function parseCookies(header) {
@@ -108,14 +138,26 @@ function parseCookies(header) {
   return map;
 }
 
-wss.on('connection', (ws, req) => {
-  const ip = req.headers['x-forwarded-for']?.toString().split(',')[0] || req.socket.remoteAddress || 'unknown';
+/** Validate SDP payload */
+function isValidSdp(sdp) {
+  return sdp && typeof sdp === 'object' && typeof sdp.sdp === 'string' && sdp.sdp.length <= 10000;
+}
 
-  // Origin check
+/** Validate ICE candidate payload */
+function isValidCandidate(candidate) {
+  if (!candidate || typeof candidate !== 'object') return false;
+  try { return JSON.stringify(candidate).length <= 2000; } catch { return false; }
+}
+
+wss.on('connection', (ws, req) => {
+  // Fix #4: Use socket IP, not X-Forwarded-For (can't be spoofed)
+  const ip = req.socket.remoteAddress || 'unknown';
+
+  // Fix #5: Origin check — reject missing origin when checking is enabled
   if (ALLOWED_ORIGIN !== '*') {
     const origin = req.headers.origin;
-    if (origin && origin !== ALLOWED_ORIGIN) {
-      logger.warn({ origin, ip }, 'WebSocket rejected: origin mismatch');
+    if (!origin || origin !== ALLOWED_ORIGIN) {
+      logger.warn({ origin: origin || 'none', ip }, 'WebSocket rejected: origin mismatch');
       ws.close(4003, 'Origin not allowed');
       return;
     }
@@ -141,6 +183,7 @@ wss.on('connection', (ws, req) => {
 
   let clientRoom = null;
   let clientRole = null;
+  let clientReceiverId = null; // set when joining as receiver
 
   logger.info({ ip, authed: isAuthed }, 'WebSocket connected');
 
@@ -187,59 +230,121 @@ wss.on('connection', (ws, req) => {
         }
         clientRoom = roomId;
         clientRole = role;
-        ws.send(JSON.stringify({ type: 'joined', roomId, role }));
-        // Notify existing peer
-        const peer = rooms.getPeer(roomId, role === 'broadcaster' ? 'receiver' : 'broadcaster');
-        if (peer) {
-          peer.send(JSON.stringify({ type: 'peer-joined', role }));
-          ws.send(JSON.stringify({ type: 'peer-joined', role: role === 'broadcaster' ? 'receiver' : 'broadcaster' }));
+
+        if (role === 'receiver') {
+          clientReceiverId = result.receiverId;
+          ws.send(JSON.stringify({ type: 'joined', roomId, role }));
+
+          // Tell the broadcaster about this new receiver
+          const broadcaster = rooms.getBroadcaster(roomId);
+          if (broadcaster) {
+            broadcaster.send(JSON.stringify({ type: 'peer-joined', role: 'receiver', receiverId: clientReceiverId }));
+            ws.send(JSON.stringify({ type: 'peer-joined', role: 'broadcaster' }));
+          }
+        } else {
+          // Broadcaster joining an existing room
+          ws.send(JSON.stringify({ type: 'joined', roomId, role }));
+          // Notify all existing receivers
+          const receiverIds = rooms.getReceiverIds(roomId);
+          for (const rid of receiverIds) {
+            const rws = rooms.getReceiver(roomId, rid);
+            if (rws) {
+              rws.send(JSON.stringify({ type: 'peer-joined', role: 'broadcaster' }));
+              ws.send(JSON.stringify({ type: 'peer-joined', role: 'receiver', receiverId: rid }));
+            }
+          }
         }
+
         logger.info({ roomId: roomId.slice(0, 8), role, ip }, 'Joined room');
         break;
       }
 
       case 'ready': {
-        // Broadcaster signals ready, notify receiver if present
+        // Broadcaster signals ready — tell it about all existing receivers
         if (clientRoom && clientRole === 'broadcaster') {
-          const receiver = rooms.getPeer(clientRoom, 'receiver');
-          if (receiver) {
-            ws.send(JSON.stringify({ type: 'peer-joined', role: 'receiver' }));
+          const receiverIds = rooms.getReceiverIds(clientRoom);
+          for (const rid of receiverIds) {
+            ws.send(JSON.stringify({ type: 'peer-joined', role: 'receiver', receiverId: rid }));
           }
         }
         break;
       }
 
-      case 'offer':
+      // Fix #8: Validate SDP before relay
+      case 'offer': {
+        if (!clientRoom || !isValidSdp(msg.sdp)) break;
+
+        if (clientRole === 'broadcaster') {
+          // Route to specific receiver
+          const receiverId = msg.receiverId;
+          if (!receiverId) break;
+          const receiver = rooms.getReceiver(clientRoom, receiverId);
+          if (receiver) {
+            receiver.send(JSON.stringify({ type: 'offer', sdp: msg.sdp }));
+            logger.info({ roomId: clientRoom.slice(0, 8), type: 'offer' }, 'Relayed SDP');
+          }
+        }
+        break;
+      }
+
       case 'answer': {
-        if (!clientRoom) break;
-        const targetRole = msg.type === 'offer' ? 'receiver' : 'broadcaster';
-        const peer = rooms.getPeer(clientRoom, targetRole);
-        if (peer) {
-          peer.send(JSON.stringify({ type: msg.type, sdp: msg.sdp }));
-          logger.info({ roomId: clientRoom.slice(0, 8), type: msg.type }, 'Relayed SDP');
+        if (!clientRoom || !isValidSdp(msg.sdp)) break;
+
+        if (clientRole === 'receiver') {
+          // Route to broadcaster, include receiverId
+          const broadcaster = rooms.getBroadcaster(clientRoom);
+          if (broadcaster) {
+            broadcaster.send(JSON.stringify({ type: 'answer', sdp: msg.sdp, receiverId: clientReceiverId }));
+            logger.info({ roomId: clientRoom.slice(0, 8), type: 'answer' }, 'Relayed SDP');
+          }
         }
         break;
       }
 
       case 'candidate': {
-        if (!clientRoom) break;
-        const targetRole2 = clientRole === 'broadcaster' ? 'receiver' : 'broadcaster';
-        const peer2 = rooms.getPeer(clientRoom, targetRole2);
-        if (peer2) {
-          peer2.send(JSON.stringify({ type: 'candidate', candidate: msg.candidate }));
+        if (!clientRoom || !isValidCandidate(msg.candidate)) break;
+
+        if (clientRole === 'broadcaster') {
+          // Route to specific receiver
+          const receiverId = msg.receiverId;
+          if (!receiverId) break;
+          const receiver = rooms.getReceiver(clientRoom, receiverId);
+          if (receiver) {
+            receiver.send(JSON.stringify({ type: 'candidate', candidate: msg.candidate }));
+          }
+        } else if (clientRole === 'receiver') {
+          // Route to broadcaster, include receiverId
+          const broadcaster = rooms.getBroadcaster(clientRoom);
+          if (broadcaster) {
+            broadcaster.send(JSON.stringify({ type: 'candidate', candidate: msg.candidate, receiverId: clientReceiverId }));
+          }
         }
         break;
       }
 
       case 'leave': {
         if (clientRoom && clientRole) {
-          const peer = rooms.getPeer(clientRoom, clientRole === 'broadcaster' ? 'receiver' : 'broadcaster');
-          if (peer) peer.send(JSON.stringify({ type: 'peer-left', role: clientRole }));
-          rooms.leave(clientRoom, clientRole);
+          if (clientRole === 'broadcaster') {
+            // Notify all receivers
+            const receiverIds = rooms.getReceiverIds(clientRoom);
+            for (const rid of receiverIds) {
+              const rws = rooms.getReceiver(clientRoom, rid);
+              if (rws) rws.send(JSON.stringify({ type: 'peer-left', role: 'broadcaster' }));
+            }
+            rooms.leave(clientRoom, 'broadcaster');
+          } else if (clientRole === 'receiver') {
+            // Notify broadcaster
+            const broadcaster = rooms.getBroadcaster(clientRoom);
+            if (broadcaster) {
+              broadcaster.send(JSON.stringify({ type: 'peer-left', role: 'receiver', receiverId: clientReceiverId }));
+            }
+            rooms.leave(clientRoom, 'receiver', clientReceiverId);
+          }
           logger.info({ roomId: clientRoom.slice(0, 8), role: clientRole }, 'Left room');
         }
         clientRoom = null;
         clientRole = null;
+        clientReceiverId = null;
         break;
       }
 
@@ -257,9 +362,20 @@ wss.on('connection', (ws, req) => {
 
   ws.on('close', (code, reason) => {
     if (clientRoom && clientRole) {
-      const peer = rooms.getPeer(clientRoom, clientRole === 'broadcaster' ? 'receiver' : 'broadcaster');
-      if (peer) peer.send(JSON.stringify({ type: 'peer-left', role: clientRole }));
-      rooms.leave(clientRoom, clientRole);
+      if (clientRole === 'broadcaster') {
+        const receiverIds = rooms.getReceiverIds(clientRoom);
+        for (const rid of receiverIds) {
+          const rws = rooms.getReceiver(clientRoom, rid);
+          if (rws) rws.send(JSON.stringify({ type: 'peer-left', role: 'broadcaster' }));
+        }
+        rooms.leave(clientRoom, 'broadcaster');
+      } else if (clientRole === 'receiver') {
+        const broadcaster = rooms.getBroadcaster(clientRoom);
+        if (broadcaster) {
+          broadcaster.send(JSON.stringify({ type: 'peer-left', role: 'receiver', receiverId: clientReceiverId }));
+        }
+        rooms.leave(clientRoom, 'receiver', clientReceiverId);
+      }
       logger.info({ roomId: clientRoom?.slice(0, 8), role: clientRole, code, reason: reason?.toString() }, 'Disconnected');
     }
   });

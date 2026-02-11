@@ -1,5 +1,7 @@
 import crypto from 'crypto';
 
+const SESSION_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
 export class SessionManager {
   constructor(secret) {
     this.secret = secret;
@@ -13,7 +15,14 @@ export class SessionManager {
   }
 
   validate(token) {
-    return this.sessions.get(token) || null;
+    const session = this.sessions.get(token);
+    if (!session) return null;
+    // Expire sessions after TTL
+    if (Date.now() - session.createdAt > SESSION_TTL) {
+      this.sessions.delete(token);
+      return null;
+    }
+    return session;
   }
 
   destroy(token) {

@@ -29,10 +29,7 @@ export function useWebRTC(
   signaling: UseSignalingReturn,
   role: 'broadcaster' | 'receiver'
 ): UseWebRTCReturn {
-  const pcRef = useRef<RTCPeerConnection | null>(null);
-  const statsIntervalRef = useRef<ReturnType<typeof setInterval>>();
-  const reportIntervalRef = useRef<ReturnType<typeof setInterval>>();
-
+  // --- Shared state ---
   const [status, setStatus] = useState<ConnectionStatus>('idle');
   const [connectionState, setConnectionState] = useState('new');
   const [iceConnectionState, setIceConnectionState] = useState('new');
@@ -42,11 +39,31 @@ export function useWebRTC(
   const [peerConnected, setPeerConnected] = useState(false);
   const [roomId, setRoomId] = useState<string | null>(null);
 
+  // Receiver: single PC
+  const pcRef = useRef<RTCPeerConnection | null>(null);
+
+  // Broadcaster: multiple PCs keyed by receiverId
+  const pcsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const broadcastStreamRef = useRef<MediaStream | null>(null);
+
+  const statsIntervalRef = useRef<ReturnType<typeof setInterval>>();
+  const reportIntervalRef = useRef<ReturnType<typeof setInterval>>();
+
   const cleanup = useCallback(() => {
     if (statsIntervalRef.current) clearInterval(statsIntervalRef.current);
     if (reportIntervalRef.current) clearInterval(reportIntervalRef.current);
+
+    // Receiver PC
     pcRef.current?.close();
     pcRef.current = null;
+
+    // Broadcaster PCs
+    for (const pc of pcsRef.current.values()) {
+      pc.close();
+    }
+    pcsRef.current.clear();
+    broadcastStreamRef.current = null;
+
     resetStats();
     setStats(null);
     setRemoteStream(null);
@@ -56,7 +73,60 @@ export function useWebRTC(
     setSignalingState('stable');
   }, []);
 
-  const createPC = useCallback(() => {
+  // --- Broadcaster: create a PC for a specific receiver ---
+  const createPCForReceiver = useCallback(
+    (receiverId: string, stream: MediaStream) => {
+      const pc = new RTCPeerConnection(RTC_CONFIG);
+      pcsRef.current.set(receiverId, pc);
+
+      // Add all tracks from the broadcast stream
+      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+      pc.onconnectionstatechange = () => {
+        setConnectionState(pc.connectionState);
+        const anyConnected = Array.from(pcsRef.current.values()).some(
+          (p) => p.connectionState === 'connected',
+        );
+        setPeerConnected(anyConnected);
+        if (anyConnected) setStatus('on-air');
+      };
+
+      pc.oniceconnectionstatechange = () => {
+        setIceConnectionState(pc.iceConnectionState);
+      };
+
+      pc.onsignalingstatechange = () => {
+        setSignalingState(pc.signalingState);
+      };
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          signaling.send({
+            type: 'candidate',
+            candidate: event.candidate.toJSON(),
+            receiverId,
+          });
+        }
+      };
+
+      // Create and send offer for this receiver
+      (async () => {
+        try {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          signaling.send({ type: 'offer', sdp: offer, receiverId });
+        } catch (e) {
+          console.error('Failed to create offer for receiver:', receiverId, e);
+        }
+      })();
+
+      return pc;
+    },
+    [signaling],
+  );
+
+  // --- Receiver: create a single PC ---
+  const createReceiverPC = useCallback(() => {
     const pc = new RTCPeerConnection(RTC_CONFIG);
     pcRef.current = pc;
 
@@ -64,7 +134,7 @@ export function useWebRTC(
       setConnectionState(pc.connectionState);
       if (pc.connectionState === 'connected') {
         setPeerConnected(true);
-        setStatus(role === 'broadcaster' ? 'on-air' : 'receiving');
+        setStatus('receiving');
       }
       if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
         setStatus('disconnected');
@@ -85,36 +155,31 @@ export function useWebRTC(
       }
     };
 
-    if (role === 'receiver') {
-      pc.ontrack = (event) => {
-        setRemoteStream(event.streams[0] || new MediaStream([event.track]));
-      };
-    }
+    pc.ontrack = (event) => {
+      setRemoteStream(event.streams[0] || new MediaStream([event.track]));
+    };
 
-    // Poll stats every second
+    // Stats polling for receiver
     statsIntervalRef.current = setInterval(async () => {
       if (pc.connectionState === 'connected') {
-        const s = await parseStats(pc, role);
+        const s = await parseStats(pc, 'receiver');
         setStats(s);
       }
     }, 1000);
 
-    // Report stats to server every 5 seconds
     reportIntervalRef.current = setInterval(async () => {
       if (pc.connectionState === 'connected') {
-        const s = await parseStats(pc, role);
+        const s = await parseStats(pc, 'receiver');
         signaling.send({ type: 'stats', data: s });
       }
     }, 5000);
 
     return pc;
-  }, [role, signaling]);
+  }, [signaling]);
 
-  // Handle signaling messages
+  // --- Handle signaling messages ---
   useEffect(() => {
     const unsub = signaling.subscribe(async (msg: SignalingMessage) => {
-      const pc = pcRef.current;
-
       switch (msg.type) {
         case 'room-created':
           setRoomId(msg.roomId as string);
@@ -124,46 +189,92 @@ export function useWebRTC(
           setRoomId(msg.roomId as string);
           break;
 
-        case 'peer-joined':
+        case 'peer-joined': {
+          if (role === 'broadcaster' && msg.receiverId && broadcastStreamRef.current) {
+            // New receiver joined — create a dedicated PC for them
+            createPCForReceiver(msg.receiverId as string, broadcastStreamRef.current);
+          }
           setPeerConnected(true);
           break;
+        }
 
-        case 'peer-left':
-          setPeerConnected(false);
-          setStatus(role === 'broadcaster' ? 'on-air' : 'idle');
+        case 'peer-left': {
+          if (role === 'broadcaster' && msg.receiverId) {
+            const rid = msg.receiverId as string;
+            const pc = pcsRef.current.get(rid);
+            if (pc) {
+              pc.close();
+              pcsRef.current.delete(rid);
+            }
+            setPeerConnected(pcsRef.current.size > 0);
+          } else {
+            setPeerConnected(false);
+            setStatus(role === 'broadcaster' ? 'on-air' : 'idle');
+          }
           break;
+        }
 
         case 'offer':
-          if (role === 'receiver' && pc) {
-            try {
-              await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp as RTCSessionDescriptionInit));
-              const answer = await pc.createAnswer();
-              await pc.setLocalDescription(answer);
-              signaling.send({ type: 'answer', sdp: answer });
-            } catch (e) {
-              console.error('Failed to handle offer:', e);
-              setStatus('error');
+          // Only receivers handle offers
+          if (role === 'receiver') {
+            const pc = pcRef.current;
+            if (pc) {
+              try {
+                await pc.setRemoteDescription(
+                  new RTCSessionDescription(msg.sdp as RTCSessionDescriptionInit),
+                );
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                signaling.send({ type: 'answer', sdp: answer });
+              } catch (e) {
+                console.error('Failed to handle offer:', e);
+                setStatus('error');
+              }
             }
           }
           break;
 
         case 'answer':
-          if (role === 'broadcaster' && pc) {
-            try {
-              await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp as RTCSessionDescriptionInit));
-            } catch (e) {
-              console.error('Failed to handle answer:', e);
-              setStatus('error');
+          // Only broadcasters handle answers (routed by receiverId)
+          if (role === 'broadcaster' && msg.receiverId) {
+            const rid = msg.receiverId as string;
+            const pc = pcsRef.current.get(rid);
+            if (pc) {
+              try {
+                await pc.setRemoteDescription(
+                  new RTCSessionDescription(msg.sdp as RTCSessionDescriptionInit),
+                );
+              } catch (e) {
+                console.error('Failed to handle answer:', e);
+              }
             }
           }
           break;
 
         case 'candidate':
-          if (pc) {
-            try {
-              await pc.addIceCandidate(new RTCIceCandidate(msg.candidate as RTCIceCandidateInit));
-            } catch (e) {
-              console.error('Failed to add ICE candidate:', e);
+          if (role === 'broadcaster' && msg.receiverId) {
+            // Route to the correct receiver's PC
+            const rid = msg.receiverId as string;
+            const pc = pcsRef.current.get(rid);
+            if (pc) {
+              try {
+                await pc.addIceCandidate(
+                  new RTCIceCandidate(msg.candidate as RTCIceCandidateInit),
+                );
+              } catch (e) {
+                console.error('Failed to add ICE candidate:', e);
+              }
+            }
+          } else if (role === 'receiver') {
+            const pc = pcRef.current;
+            if (pc) {
+              try {
+                await pc.addIceCandidate(
+                  new RTCIceCandidate(msg.candidate as RTCIceCandidateInit),
+                );
+              } catch (e) {
+                console.error('Failed to add ICE candidate:', e);
+              }
             }
           }
           break;
@@ -175,7 +286,7 @@ export function useWebRTC(
     });
 
     return unsub;
-  }, [signaling, role]);
+  }, [signaling, role, createPCForReceiver]);
 
   const createRoom = useCallback(() => {
     signaling.send({ type: 'create-room' });
@@ -184,39 +295,43 @@ export function useWebRTC(
   const startBroadcast = useCallback(
     (stream: MediaStream) => {
       if (!roomId) return;
-      setStatus('connecting');
-      const pc = createPC();
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+      setStatus('on-air');
+      broadcastStreamRef.current = stream;
 
-      // Create offer when peer joins
-      const unsub = signaling.subscribe(async (msg) => {
-        if (msg.type === 'peer-joined' || msg.type === 'joined') {
-          try {
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            signaling.send({ type: 'offer', sdp: offer });
-          } catch (e) {
-            console.error('Failed to create offer:', e);
-            setStatus('error');
+      // Stats polling for broadcaster — uses first connected PC
+      statsIntervalRef.current = setInterval(async () => {
+        for (const pc of pcsRef.current.values()) {
+          if (pc.connectionState === 'connected') {
+            const s = await parseStats(pc, 'broadcaster');
+            setStats(s);
+            break;
           }
         }
-      });
+      }, 1000);
 
-      // If peer is already connected, create offer immediately
+      reportIntervalRef.current = setInterval(async () => {
+        for (const pc of pcsRef.current.values()) {
+          if (pc.connectionState === 'connected') {
+            const s = await parseStats(pc, 'broadcaster');
+            signaling.send({ type: 'stats', data: s });
+            break;
+          }
+        }
+      }, 5000);
+
+      // Tell the server we're ready — it will send peer-joined for each existing receiver
       signaling.send({ type: 'ready', roomId });
-
-      return () => unsub();
     },
-    [roomId, createPC, signaling]
+    [roomId, signaling],
   );
 
   const joinAsReceiver = useCallback(
     (joinRoomId: string) => {
       setStatus('connecting');
-      createPC();
+      createReceiverPC();
       signaling.send({ type: 'join-room', roomId: joinRoomId, role: 'receiver' });
     },
-    [createPC, signaling]
+    [createReceiverPC, signaling],
   );
 
   const stop = useCallback(() => {

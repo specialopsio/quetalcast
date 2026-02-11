@@ -1,6 +1,8 @@
 import crypto from 'crypto';
 import { createStatsLogger } from './logger.js';
 
+const MAX_RECEIVERS = 4;
+
 export class RoomManager {
   constructor(logger) {
     this.rooms = new Map();
@@ -13,19 +15,15 @@ export class RoomManager {
     this.rooms.set(roomId, {
       roomId,
       broadcaster: null,
-      receiver: null,
+      receivers: new Map(), // receiverId → ws
       createdAt: new Date().toISOString(),
     });
     return roomId;
   }
 
   join(roomId, role, ws) {
-    let room = this.rooms.get(roomId);
+    const room = this.rooms.get(roomId);
 
-    // Auto-create room if joining as receiver and room doesn't exist
-    if (!room && role === 'receiver') {
-      return { ok: false, error: 'Room not found', code: 'ROOM_NOT_FOUND' };
-    }
     if (!room) {
       return { ok: false, error: 'Room not found', code: 'ROOM_NOT_FOUND' };
     }
@@ -34,43 +32,76 @@ export class RoomManager {
       return { ok: false, error: 'Invalid role', code: 'INVALID_ROLE' };
     }
 
-    // Lock broadcaster slot — reject if another broadcaster is already live
-    if (role === 'broadcaster' && room.broadcaster && room.broadcaster.readyState === 1) {
-      this.logger.warn({ roomId: roomId.slice(0, 8) }, 'Broadcaster join rejected — slot already occupied');
-      return { ok: false, error: 'Broadcast already in progress', code: 'BROADCASTER_OCCUPIED' };
+    if (role === 'broadcaster') {
+      // Lock broadcaster slot — reject if another broadcaster is already live
+      if (room.broadcaster && room.broadcaster.readyState === 1) {
+        this.logger.warn({ roomId: roomId.slice(0, 8) }, 'Broadcaster join rejected — slot occupied');
+        return { ok: false, error: 'Broadcast already in progress', code: 'BROADCASTER_OCCUPIED' };
+      }
+      room.broadcaster = ws;
+      return { ok: true };
     }
 
-    // For receivers, disconnect prior client if same role (allows reconnects)
-    if (role === 'receiver' && room[role]) {
-      try {
-        room[role].send(JSON.stringify({ type: 'error', message: 'Replaced by new connection', code: 'REPLACED' }));
-        room[role].close();
-      } catch {}
-      this.logger.info({ roomId: roomId.slice(0, 8), role }, 'Prior receiver disconnected');
+    // Receiver — enforce max
+    if (room.receivers.size >= MAX_RECEIVERS) {
+      this.logger.warn({ roomId: roomId.slice(0, 8) }, 'Receiver join rejected — room full');
+      return { ok: false, error: 'Room is full', code: 'ROOM_FULL' };
     }
 
-    room[role] = ws;
-    return { ok: true };
+    const receiverId = crypto.randomBytes(4).toString('hex');
+    room.receivers.set(receiverId, ws);
+    return { ok: true, receiverId };
   }
 
-  leave(roomId, role) {
+  leave(roomId, role, receiverId) {
     const room = this.rooms.get(roomId);
     if (!room) return;
 
-    room[role] = null;
+    if (role === 'broadcaster') {
+      room.broadcaster = null;
+    } else if (role === 'receiver' && receiverId) {
+      room.receivers.delete(receiverId);
+    }
 
     // Clean up empty rooms
-    if (!room.broadcaster && !room.receiver) {
+    if (!room.broadcaster && room.receivers.size === 0) {
       this.rooms.delete(roomId);
       this.logger.info({ roomId: roomId.slice(0, 8) }, 'Room destroyed (empty)');
     }
   }
 
-  getPeer(roomId, role) {
+  getBroadcaster(roomId) {
+    const room = this.rooms.get(roomId);
+    if (!room || !room.broadcaster || room.broadcaster.readyState !== 1) return null;
+    return room.broadcaster;
+  }
+
+  getReceiver(roomId, receiverId) {
     const room = this.rooms.get(roomId);
     if (!room) return null;
-    const ws = room[role];
-    if (ws && ws.readyState === 1) return ws; // WebSocket.OPEN = 1
+    const ws = room.receivers.get(receiverId);
+    if (ws && ws.readyState === 1) return ws;
+    return null;
+  }
+
+  /** Returns all live receiverIds */
+  getReceiverIds(roomId) {
+    const room = this.rooms.get(roomId);
+    if (!room) return [];
+    const ids = [];
+    for (const [id, ws] of room.receivers) {
+      if (ws.readyState === 1) ids.push(id);
+    }
+    return ids;
+  }
+
+  /** Find the receiverId associated with a WebSocket */
+  findReceiverIdByWs(roomId, ws) {
+    const room = this.rooms.get(roomId);
+    if (!room) return null;
+    for (const [id, rws] of room.receivers) {
+      if (rws === ws) return id;
+    }
     return null;
   }
 
@@ -80,7 +111,7 @@ export class RoomManager {
       result.push({
         roomId: room.roomId,
         broadcaster: !!room.broadcaster,
-        receiver: !!room.receiver,
+        receivers: room.receivers.size,
         createdAt: room.createdAt,
       });
     }
@@ -88,10 +119,20 @@ export class RoomManager {
   }
 
   logStats(roomId, role, data) {
+    // Sanitize: only allow primitive values, block prototype pollution
+    const safe = {};
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      for (const [key, val] of Object.entries(data)) {
+        if (key === '__proto__' || key === 'constructor' || key === 'roomId' || key === 'role') continue;
+        if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') {
+          safe[key] = val;
+        }
+      }
+    }
     this.statsLogger.info({
       roomId: roomId.slice(0, 8),
       role,
-      ...data,
+      ...safe,
     });
   }
 }
