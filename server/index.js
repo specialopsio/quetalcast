@@ -184,6 +184,31 @@ app.post('/api/integration-test', requireAuth, integrationTestLimiter, async (re
   res.json(result);
 });
 
+// Deezer search proxy — avoids CORS issues with the Deezer API
+app.get('/api/music-search', async (req, res) => {
+  const query = req.query.q;
+  if (!query || typeof query !== 'string' || query.length < 2) {
+    return res.json({ data: [] });
+  }
+  try {
+    const url = `https://api.deezer.com/search?q=${encodeURIComponent(query)}&limit=8`;
+    const response = await fetch(url);
+    const data = await response.json();
+    // Return only the fields we need to keep payload small
+    const results = (data.data || []).map(t => ({
+      id: t.id,
+      title: t.title,
+      artist: t.artist?.name || '',
+      album: t.album?.title || '',
+      cover: t.album?.cover_small || '',
+    }));
+    res.json({ data: results });
+  } catch (e) {
+    logger.warn({ error: e.message }, 'Deezer search proxy error');
+    res.json({ data: [] });
+  }
+});
+
 // Serve static frontend (production)
 const staticPath = path.join(__dirname, '..', 'dist');
 app.use(express.static(staticPath));

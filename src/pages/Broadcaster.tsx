@@ -8,7 +8,7 @@ import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
-import { Copy, Mic, MicOff, Radio, Headphones, Music, Sparkles, Zap, Plug2, Circle, Square, Disc3, Keyboard, ListMusic, Trash2 } from 'lucide-react';
+import { Copy, Mic, MicOff, Radio, Headphones, Music, Sparkles, Zap, Plug2, Circle, Square, Keyboard, ListMusic, Trash2 } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import {
   Select,
@@ -20,6 +20,7 @@ import {
 import { useAudioMixer } from '@/hooks/useAudioMixer';
 import { useMicEffects } from '@/hooks/useMicEffects';
 import { SoundBoard } from '@/components/SoundBoard';
+import { NowPlayingInput } from '@/components/NowPlayingInput';
 import { EffectsBoard } from '@/components/EffectsBoard';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Footer } from '@/components/Footer';
@@ -774,20 +775,8 @@ const Broadcaster = () => {
               </button>
             </div>
 
-            {/* Now Playing */}
-            <div className="flex items-center gap-3 mt-3 pt-3 border-t border-border">
-              <span className="text-xs font-semibold text-foreground flex items-center gap-1.5 shrink-0">
-                <Disc3 className="h-3 w-3" />
-                Now Playing
-              </span>
-              <input
-                value={nowPlaying}
-                onChange={(e) => handleNowPlayingChange(e.target.value)}
-                placeholder="What's playing…"
-                maxLength={200}
-                className="flex-1 bg-input border border-border rounded-md px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-            </div>
+            {/* Now Playing — with Deezer autocomplete */}
+            <NowPlayingInput value={nowPlaying} onChange={handleNowPlayingChange} />
           </div>
         )}
 
