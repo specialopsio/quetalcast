@@ -8,7 +8,7 @@ import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
-import { Copy, Mic, MicOff, Radio, Headphones, Music, Sparkles, Zap, Plug2, Circle, Square } from 'lucide-react';
+import { Copy, Mic, MicOff, Radio, Headphones, Music, Sparkles, Zap, Plug2, Circle, Square, Users } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import {
   Select,
@@ -49,6 +49,7 @@ const Broadcaster = () => {
   const [limiterDb, setLimiterDb] = useState<0 | -3 | -6 | -12>(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [boardTab, setBoardTab] = useState('sounds');
+  const [listenerCount, setListenerCount] = useState(0);
   const [qualityMode, setQualityMode] = useState<AudioQuality>('auto');
   const audioRef = useRef<HTMLAudioElement>(null);
 
@@ -134,6 +135,16 @@ const Broadcaster = () => {
     });
     return unsub;
   }, [signaling, navigate, addLog]);
+
+  // Listen for listener count updates
+  useEffect(() => {
+    const unsub = signaling.subscribe((msg) => {
+      if (msg.type === 'listener-count' && typeof msg.count === 'number') {
+        setListenerCount(msg.count as number);
+      }
+    });
+    return unsub;
+  }, [signaling]);
 
   // Log status changes
   const prevStatus = useRef<ConnectionStatus>('idle');
@@ -335,6 +346,7 @@ const Broadcaster = () => {
       setCueMode(false);
       setLimiterDb(0);
       setElapsedSeconds(0);
+      setListenerCount(0);
     }
   }, [isOnAir]);
 
@@ -442,6 +454,16 @@ const Broadcaster = () => {
           right={audioAnalysis.right}
           label="Input Level"
         />
+
+        {/* Listener count — visible when on air */}
+        {isOnAir && (
+          <div className="flex items-center justify-center gap-4 text-sm font-mono text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <Users className="h-3.5 w-3.5" />
+              {listenerCount === 0 ? 'No listeners' : `${listenerCount} listener${listenerCount !== 1 ? 's' : ''}`}
+            </span>
+          </div>
+        )}
 
         {/* Controls */}
         <div className="flex gap-3">

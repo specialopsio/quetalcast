@@ -273,6 +273,15 @@ function isValidCandidate(candidate) {
   try { return JSON.stringify(candidate).length <= 2000; } catch { return false; }
 }
 
+/** Send current listener count to the broadcaster in a room */
+function sendListenerCount(roomId) {
+  const broadcaster = rooms.getBroadcaster(roomId);
+  if (broadcaster) {
+    const count = rooms.getReceiverIds(roomId).length;
+    broadcaster.send(JSON.stringify({ type: 'listener-count', count }));
+  }
+}
+
 wss.on('connection', (ws, req) => {
   // Fix #4: Use socket IP, not X-Forwarded-For (can't be spoofed)
   const ip = req.socket.remoteAddress || 'unknown';
@@ -336,6 +345,7 @@ wss.on('connection', (ws, req) => {
         rooms.join(roomId, 'broadcaster', ws);
         ws.send(JSON.stringify({ type: 'room-created', roomId }));
         ws.send(JSON.stringify({ type: 'joined', roomId, role: 'broadcaster' }));
+        ws.send(JSON.stringify({ type: 'listener-count', count: 0 }));
         logger.info({ roomId: roomId.slice(0, 8), ip }, 'Room created');
         break;
       }
@@ -369,6 +379,7 @@ wss.on('connection', (ws, req) => {
             broadcaster.send(JSON.stringify({ type: 'peer-joined', role: 'receiver', receiverId: clientReceiverId }));
             ws.send(JSON.stringify({ type: 'peer-joined', role: 'broadcaster' }));
           }
+          sendListenerCount(roomId);
         } else {
           // Broadcaster joining an existing room
           ws.send(JSON.stringify({ type: 'joined', roomId, role }));
@@ -453,7 +464,6 @@ wss.on('connection', (ws, req) => {
       case 'leave': {
         if (clientRoom && clientRole) {
           if (clientRole === 'broadcaster') {
-            // Notify all receivers
             const receiverIds = rooms.getReceiverIds(clientRoom);
             for (const rid of receiverIds) {
               const rws = rooms.getReceiver(clientRoom, rid);
@@ -461,12 +471,12 @@ wss.on('connection', (ws, req) => {
             }
             rooms.leave(clientRoom, 'broadcaster');
           } else if (clientRole === 'receiver') {
-            // Notify broadcaster
             const broadcaster = rooms.getBroadcaster(clientRoom);
             if (broadcaster) {
               broadcaster.send(JSON.stringify({ type: 'peer-left', role: 'receiver', receiverId: clientReceiverId }));
             }
             rooms.leave(clientRoom, 'receiver', clientReceiverId);
+            sendListenerCount(clientRoom);
           }
           logger.info({ roomId: clientRoom.slice(0, 8), role: clientRole }, 'Left room');
         }
@@ -503,6 +513,7 @@ wss.on('connection', (ws, req) => {
           broadcaster.send(JSON.stringify({ type: 'peer-left', role: 'receiver', receiverId: clientReceiverId }));
         }
         rooms.leave(clientRoom, 'receiver', clientReceiverId);
+        sendListenerCount(clientRoom);
       }
       logger.info({ roomId: clientRoom?.slice(0, 8), role: clientRole, code, reason: reason?.toString() }, 'Disconnected');
     }
