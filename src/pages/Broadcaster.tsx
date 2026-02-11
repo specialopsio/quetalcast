@@ -369,13 +369,6 @@ const Broadcaster = () => {
           />
           <EventLog entries={logs} />
         </div>
-
-        {!signaling.connected && (
-          <div className="panel text-center text-sm text-muted-foreground">
-            <p className="mb-1">Signaling server not connected</p>
-            <p className="text-xs font-mono">Start the server: <code className="text-accent">cd server && npm start</code></p>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -8,7 +8,7 @@ import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
-import { Headphones, Volume2 } from 'lucide-react';
+import { Headphones, Radio, Volume2 } from 'lucide-react';
 
 const WS_URL = import.meta.env.VITE_WS_URL || (
   window.location.protocol === 'https:'
@@ -166,10 +166,11 @@ const Receiver = () => {
           <EventLog entries={logs} />
         </div>
 
-        {!signaling.connected && (
-          <div className="panel text-center text-sm text-muted-foreground">
-            <p className="mb-1">Signaling server not connected</p>
-            <p className="text-xs font-mono">Start the server: <code className="text-accent">cd server && npm start</code></p>
+        {!joined && !signaling.connected && (
+          <div className="panel text-center py-12">
+            <Radio className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">This broadcast isn't on air right now</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Check back later or enter a room ID above</p>
           </div>
         )}
       </div>
