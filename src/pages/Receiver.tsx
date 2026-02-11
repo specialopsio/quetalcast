@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { isAuthenticated } from '@/lib/auth';
+import { useParams } from 'react-router-dom';
+
 import { useSignaling } from '@/hooks/useSignaling';
 import { useWebRTC, type ConnectionStatus } from '@/hooks/useWebRTC';
 import { useAudioAnalyser } from '@/hooks/useAudioAnalyser';
@@ -17,7 +17,6 @@ const WS_URL = import.meta.env.VITE_WS_URL || (
 );
 
 const Receiver = () => {
-  const navigate = useNavigate();
   const { roomId: paramRoomId } = useParams();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [roomInput, setRoomInput] = useState(paramRoomId || '');
@@ -33,9 +32,6 @@ const Receiver = () => {
   const webrtc = useWebRTC(signaling, 'receiver');
   const audioAnalysis = useAudioAnalyser(audioStarted ? webrtc.remoteStream : null);
 
-  useEffect(() => {
-    if (!isAuthenticated()) navigate('/login');
-  }, [navigate]);
 
   useEffect(() => {
     signaling.connect();
