@@ -147,7 +147,7 @@ export function EffectsBoard({ effects, onToggle, onUpdate }: EffectsBoardProps)
             <div key={effectName} className="relative aspect-square">
               <button
                 onClick={() => onToggle(effectName)}
-                className={`w-full h-full rounded-md border flex flex-col items-center justify-center gap-1.5 transition-all ${
+                className={`w-full h-full rounded-md border flex flex-col items-center justify-center gap-2.5 transition-all ${
                   effect.enabled
                     ? 'border-primary bg-primary/15 glow-ring'
                     : 'border-border bg-secondary/50 hover:bg-secondary'
