@@ -6,7 +6,7 @@ import rateLimit from 'express-rate-limit';
 import { createLogger } from './logger.js';
 import { RoomManager } from './room-manager.js';
 import { SessionManager } from './auth.js';
-import { testConnection, connectToServer } from './integration-relay.js';
+import { testConnection, connectToServer, updateStreamMetadata } from './integration-relay.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -411,6 +411,11 @@ wss.on('connection', (ws, req) => {
           if (currentMeta) {
             ws.send(JSON.stringify({ type: 'metadata', text: currentMeta }));
           }
+          // Send track list history
+          const trackList = rooms.getTrackList(roomId);
+          if (trackList.length > 0) {
+            ws.send(JSON.stringify({ type: 'track-list', tracks: trackList }));
+          }
         } else {
           // Broadcaster joining an existing room
           ws.send(JSON.stringify({ type: 'joined', roomId, role }));
@@ -527,13 +532,40 @@ wss.on('connection', (ws, req) => {
       case 'metadata': {
         if (!clientRoom || clientRole !== 'broadcaster') break;
         const metaText = typeof msg.text === 'string' ? msg.text.slice(0, 200) : '';
+        const prevMeta = rooms.getMetadata(clientRoom);
         rooms.setMetadata(clientRoom, metaText);
-        // Broadcast to all receivers
+
+        // Add to track list if the text changed and is non-empty
+        if (metaText && metaText !== prevMeta) {
+          rooms.addTrack(clientRoom, metaText);
+          // Broadcast updated track list to all receivers
+          const trackListMsg = JSON.stringify({ type: 'track-list', tracks: rooms.getTrackList(clientRoom) });
+          const tlReceiverIds = rooms.getReceiverIds(clientRoom);
+          for (const rid of tlReceiverIds) {
+            const rws = rooms.getReceiver(clientRoom, rid);
+            if (rws) rws.send(trackListMsg);
+          }
+          // Also send to broadcaster so they get the server timestamp
+          ws.send(trackListMsg);
+        }
+
+        // Broadcast metadata to all receivers
         const metaMsg = JSON.stringify({ type: 'metadata', text: metaText });
         const metaReceiverIds = rooms.getReceiverIds(clientRoom);
         for (const rid of metaReceiverIds) {
           const rws = rooms.getReceiver(clientRoom, rid);
           if (rws) rws.send(metaMsg);
+        }
+
+        // Push metadata to integration stream if active
+        if (metaText) {
+          const integrationInfo = rooms.getIntegrationInfo(clientRoom);
+          if (integrationInfo) {
+            updateStreamMetadata(integrationInfo.type, integrationInfo.credentials, metaText, logger)
+              .then((ok) => {
+                if (ok) logger.debug({ roomId: clientRoom.slice(0, 8) }, 'Integration metadata updated');
+              });
+          }
         }
         break;
       }
@@ -620,6 +652,7 @@ integrationWss.on('connection', (ws, req) => {
 
   let sourceSocket = null;
   let initialized = false;
+  let integrationRoomId = null;
 
   logger.info({ ip }, 'Integration stream WebSocket connected');
 
@@ -628,7 +661,7 @@ integrationWss.on('connection', (ws, req) => {
     if (!initialized) {
       try {
         const msg = JSON.parse(raw.toString());
-        const { type, credentials } = msg;
+        const { type, credentials, roomId: msgRoomId } = msg;
 
         if (!type || !credentials) {
           ws.send(JSON.stringify({ type: 'error', error: 'Missing type or credentials' }));
@@ -656,6 +689,13 @@ integrationWss.on('connection', (ws, req) => {
           });
 
           initialized = true;
+
+          // Store integration info on the room for metadata updates
+          if (msgRoomId) {
+            integrationRoomId = msgRoomId;
+            rooms.setIntegrationInfo(msgRoomId, { type, credentials });
+          }
+
           ws.send(JSON.stringify({ type: 'connected' }));
           logger.info({ type, ip }, 'Integration stream: connected and relaying');
         } catch (err) {
@@ -686,6 +726,9 @@ integrationWss.on('connection', (ws, req) => {
       sourceSocket.destroy();
       sourceSocket = null;
     }
+    if (integrationRoomId) {
+      rooms.setIntegrationInfo(integrationRoomId, null);
+    }
     logger.info({ ip }, 'Integration stream WebSocket closed');
   });
 
@@ -694,6 +737,9 @@ integrationWss.on('connection', (ws, req) => {
     if (sourceSocket && !sourceSocket.destroyed) {
       sourceSocket.destroy();
       sourceSocket = null;
+    }
+    if (integrationRoomId) {
+      rooms.setIntegrationInfo(integrationRoomId, null);
     }
   });
 });

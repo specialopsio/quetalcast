@@ -17,7 +17,7 @@ async function loadLame() {
 export interface UseIntegrationStreamReturn {
   streaming: boolean;
   error: string | null;
-  startStream: (stream: MediaStream, config: IntegrationConfig) => Promise<void>;
+  startStream: (stream: MediaStream, config: IntegrationConfig, roomId?: string | null) => Promise<void>;
   stopStream: () => void;
 }
 
@@ -63,7 +63,7 @@ export function useIntegrationStream(): UseIntegrationStreamReturn {
     setStreaming(false);
   }, []);
 
-  const startStream = useCallback(async (stream: MediaStream, config: IntegrationConfig) => {
+  const startStream = useCallback(async (stream: MediaStream, config: IntegrationConfig, roomId?: string | null) => {
     setError(null);
 
     const integration = getIntegration(config.integrationId);
@@ -88,10 +88,11 @@ export function useIntegrationStream(): UseIntegrationStreamReturn {
         ws.onopen = () => { clearTimeout(timeout); resolve(); };
       });
 
-      // Send integration config as first message
+      // Send integration config as first message (include roomId for metadata updates)
       ws.send(JSON.stringify({
         type: integration.type,
         credentials: config.credentials,
+        roomId: roomId || undefined,
       }));
 
       // Wait for server ack

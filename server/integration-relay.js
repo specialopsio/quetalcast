@@ -149,6 +149,62 @@ export function connectToServer(type, credentials, logger) {
 }
 
 /**
+ * Update stream metadata on an Icecast server.
+ * Uses the admin endpoint: /admin/metadata?mount=/mount&mode=updinfo&song=...
+ */
+export async function updateIcecastMetadata({ host, port, mount, password }, songTitle) {
+  const mountPath = mount.startsWith('/') ? mount : `/${mount}`;
+  const url = `http://${host}:${port}/admin/metadata?mount=${encodeURIComponent(mountPath)}&mode=updinfo&song=${encodeURIComponent(songTitle)}`;
+  const authStr = Buffer.from(`source:${password}`).toString('base64');
+
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: `Basic ${authStr}` },
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Update stream metadata on a Shoutcast server.
+ * Uses the admin endpoint: /admin.cgi?mode=updinfo&song=...
+ */
+export async function updateShoutcastMetadata({ host, port, password }, songTitle) {
+  const url = `http://${host}:${port}/admin.cgi?mode=updinfo&song=${encodeURIComponent(songTitle)}&pass=${encodeURIComponent(password)}`;
+
+  try {
+    const res = await fetch(url);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Update stream metadata based on integration type.
+ * Radio.co uses the Icecast protocol.
+ */
+export function updateStreamMetadata(type, credentials, songTitle, logger) {
+  switch (type) {
+    case 'icecast':
+    case 'radio-co':
+      return updateIcecastMetadata(credentials, songTitle).catch((e) => {
+        logger?.warn({ error: e.message }, 'Icecast metadata update failed');
+        return false;
+      });
+    case 'shoutcast':
+      return updateShoutcastMetadata(credentials, songTitle).catch((e) => {
+        logger?.warn({ error: e.message }, 'Shoutcast metadata update failed');
+        return false;
+      });
+    default:
+      return Promise.resolve(false);
+  }
+}
+
+/**
  * Test connection to a streaming server.
  * Connects, verifies auth succeeds, then immediately disconnects.
  */

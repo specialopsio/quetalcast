@@ -17,6 +17,8 @@ export class RoomManager {
       broadcaster: null,
       receivers: new Map(), // receiverId → ws
       metadata: null, // now-playing text
+      trackList: [],  // { title, time } — chronological track list
+      integrationInfo: null, // { type, credentials } — active integration connection
       createdAt: new Date().toISOString(),
     });
     return roomId;
@@ -114,6 +116,30 @@ export class RoomManager {
   getMetadata(roomId) {
     const room = this.rooms.get(roomId);
     return room ? room.metadata : null;
+  }
+
+  addTrack(roomId, title) {
+    const room = this.rooms.get(roomId);
+    if (!room || !title) return;
+    const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    room.trackList.unshift({ title, time }); // newest first
+    // Cap at 100 tracks
+    if (room.trackList.length > 100) room.trackList.length = 100;
+  }
+
+  getTrackList(roomId) {
+    const room = this.rooms.get(roomId);
+    return room ? room.trackList : [];
+  }
+
+  setIntegrationInfo(roomId, info) {
+    const room = this.rooms.get(roomId);
+    if (room) room.integrationInfo = info || null;
+  }
+
+  getIntegrationInfo(roomId) {
+    const room = this.rooms.get(roomId);
+    return room ? room.integrationInfo : null;
   }
 
   listRooms() {

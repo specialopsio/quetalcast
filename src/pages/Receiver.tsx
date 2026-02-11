@@ -11,6 +11,7 @@ import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
 import { Headphones, Radio, Volume2, ExternalLink, RefreshCw, Disc3 } from 'lucide-react';
 import { Footer } from '@/components/Footer';
 import { ChatPanel } from '@/components/ChatPanel';
+import { TrackList, type Track } from '@/components/TrackList';
 
 const WS_URL = import.meta.env.VITE_WS_URL || (
   window.location.protocol === 'https:'
@@ -26,6 +27,7 @@ const Receiver = () => {
   const [audioStarted, setAudioStarted] = useState(false);
   const [externalStream, setExternalStream] = useState(false);
   const [nowPlaying, setNowPlaying] = useState('');
+  const [trackList, setTrackList] = useState<Track[]>([]);
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const noAudioTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -57,11 +59,14 @@ const Receiver = () => {
     if (signaling.connected) addLog('Connected to server');
   }, [signaling.connected]);
 
-  // Listen for metadata updates
+  // Listen for metadata and track list updates
   useEffect(() => {
     const unsub = signaling.subscribe((msg) => {
       if (msg.type === 'metadata' && typeof msg.text === 'string') {
         setNowPlaying(msg.text as string);
+      }
+      if (msg.type === 'track-list' && Array.isArray(msg.tracks)) {
+        setTrackList(msg.tracks as Track[]);
       }
     });
     return unsub;
@@ -276,6 +281,9 @@ const Receiver = () => {
             <EventLog entries={logs} />
           </div>
         )}
+
+        {/* Track List */}
+        <TrackList tracks={trackList} />
       </div>
 
       <Footer />

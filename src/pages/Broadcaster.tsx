@@ -21,6 +21,7 @@ import { useAudioMixer } from '@/hooks/useAudioMixer';
 import { useMicEffects } from '@/hooks/useMicEffects';
 import { SoundBoard } from '@/components/SoundBoard';
 import { NowPlayingInput } from '@/components/NowPlayingInput';
+import { TrackList, type Track } from '@/components/TrackList';
 import { EffectsBoard } from '@/components/EffectsBoard';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Footer } from '@/components/Footer';
@@ -64,6 +65,7 @@ const Broadcaster = () => {
   const [listenerCount, setListenerCount] = useState(0);
   const [nowPlaying, setNowPlaying] = useState('');
   const nowPlayingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [trackList, setTrackList] = useState<Track[]>([]);
   const [presets, setPresets] = useState(() => getPresets());
   const [savePresetOpen, setSavePresetOpen] = useState(false);
   const [newPresetName, setNewPresetName] = useState('');
@@ -154,7 +156,7 @@ const Broadcaster = () => {
     return unsub;
   }, [signaling, navigate, addLog]);
 
-  // Listen for listener count + chat updates
+  // Listen for listener count, chat, and track list updates
   useEffect(() => {
     const unsub = signaling.subscribe((msg) => {
       if (msg.type === 'listener-count' && typeof msg.count === 'number') {
@@ -162,6 +164,9 @@ const Broadcaster = () => {
       }
       if (msg.type === 'chat' && typeof msg.name === 'string' && typeof msg.text === 'string') {
         addLog(`${msg.name}: ${msg.text}`, 'chat');
+      }
+      if (msg.type === 'track-list' && Array.isArray(msg.tracks)) {
+        setTrackList(msg.tracks as Track[]);
       }
     });
     return unsub;
@@ -237,7 +242,7 @@ const Broadcaster = () => {
   useEffect(() => {
     if (isOnAir && selectedIntegration && mixer.mixedStream && !integrationStartedRef.current) {
       integrationStartedRef.current = true;
-      integrationStream.startStream(mixer.mixedStream, selectedIntegration).then(() => {
+      integrationStream.startStream(mixer.mixedStream, selectedIntegration, webrtc.roomId).then(() => {
         const integrationInfo = getIntegration(selectedIntegration.integrationId);
         addLog(`Live on ${integrationInfo?.name || 'integration'}!`);
       }).catch(() => {
@@ -429,6 +434,7 @@ const Broadcaster = () => {
       setElapsedSeconds(0);
       setListenerCount(0);
       setNowPlaying('');
+      setTrackList([]);
     }
   }, [isOnAir]);
 
@@ -833,6 +839,9 @@ const Broadcaster = () => {
           />
           <EventLog entries={logs} />
         </div>
+
+        {/* Track List */}
+        <TrackList tracks={trackList} />
       </div>
 
       <Footer />
