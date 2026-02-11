@@ -321,6 +321,7 @@ wss.on('connection', (ws, req) => {
   let clientRoom = null;
   let clientRole = null;
   let clientReceiverId = null; // set when joining as receiver
+  let lastChatTime = 0; // rate limit: 1 chat msg per second
 
   logger.info({ ip, authed: isAuthed }, 'WebSocket connected');
 
@@ -489,6 +490,35 @@ wss.on('connection', (ws, req) => {
       case 'stats': {
         if (clientRoom && clientRole) {
           rooms.logStats(clientRoom, clientRole, msg.data);
+        }
+        break;
+      }
+
+      case 'chat': {
+        if (!clientRoom) break;
+        // Validate
+        const chatText = msg.text;
+        const chatName = msg.name;
+        if (typeof chatText !== 'string' || chatText.length === 0 || chatText.length > 280) break;
+        if (typeof chatName !== 'string' || chatName.length === 0 || chatName.length > 50) break;
+        // Rate limit: 1 message per second per connection
+        const chatNow = Date.now();
+        if (chatNow - lastChatTime < 1000) break;
+        lastChatTime = chatNow;
+
+        const chatMsg = JSON.stringify({ type: 'chat', name: chatName, text: chatText });
+
+        if (clientRole === 'receiver') {
+          // Relay to broadcaster
+          const broadcaster = rooms.getBroadcaster(clientRoom);
+          if (broadcaster) broadcaster.send(chatMsg);
+        } else if (clientRole === 'broadcaster') {
+          // Broadcast to all receivers
+          const receiverIds = rooms.getReceiverIds(clientRoom);
+          for (const rid of receiverIds) {
+            const rws = rooms.getReceiver(clientRoom, rid);
+            if (rws) rws.send(chatMsg);
+          }
         }
         break;
       }

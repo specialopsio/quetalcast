@@ -1,9 +1,10 @@
 import { useRef, useEffect } from 'react';
+import { MessageCircle } from 'lucide-react';
 
 export interface LogEntry {
   time: string;
   message: string;
-  level: 'info' | 'warn' | 'error';
+  level: 'info' | 'warn' | 'error' | 'chat';
 }
 
 interface EventLogProps {
@@ -15,6 +16,7 @@ const levelColors: Record<string, string> = {
   info: 'text-foreground',
   warn: 'text-accent',
   error: 'text-destructive',
+  chat: 'text-blue-400',
 };
 
 export function EventLog({ entries, maxEntries = 30 }: EventLogProps) {
@@ -40,7 +42,10 @@ export function EventLog({ entries, maxEntries = 30 }: EventLogProps) {
         {visible.map((entry, i) => (
           <div key={i} className="event-log-entry flex">
             <span className="event-log-time shrink-0">{entry.time}</span>
-            <span className={levelColors[entry.level]}>{entry.message}</span>
+            <span className={`flex items-center gap-1 ${levelColors[entry.level]}`}>
+              {entry.level === 'chat' && <MessageCircle className="h-3 w-3 shrink-0" />}
+              {entry.message}
+            </span>
           </div>
         ))}
       </div>

@@ -23,6 +23,7 @@ import { SoundBoard } from '@/components/SoundBoard';
 import { EffectsBoard } from '@/components/EffectsBoard';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Footer } from '@/components/Footer';
+import { ChatPanel } from '@/components/ChatPanel';
 import { IntegrationsSheet } from '@/components/IntegrationsSheet';
 import { useIntegrationStream } from '@/hooks/useIntegrationStream';
 import { getIntegration, type IntegrationConfig } from '@/lib/integrations';
@@ -136,15 +137,18 @@ const Broadcaster = () => {
     return unsub;
   }, [signaling, navigate, addLog]);
 
-  // Listen for listener count updates
+  // Listen for listener count + chat updates
   useEffect(() => {
     const unsub = signaling.subscribe((msg) => {
       if (msg.type === 'listener-count' && typeof msg.count === 'number') {
         setListenerCount(msg.count as number);
       }
+      if (msg.type === 'chat' && typeof msg.name === 'string' && typeof msg.text === 'string') {
+        addLog(`${msg.name}: ${msg.text}`, 'chat');
+      }
     });
     return unsub;
-  }, [signaling]);
+  }, [signaling, addLog]);
 
   // Log status changes
   const prevStatus = useRef<ConnectionStatus>('idle');
@@ -684,6 +688,11 @@ const Broadcaster = () => {
             </TabsContent>
           </Tabs>
         </div>
+
+        {/* Chat — visible when on air */}
+        {isOnAir && (
+          <ChatPanel signaling={signaling} active={isOnAir} />
+        )}
 
         {/* Health + Log */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

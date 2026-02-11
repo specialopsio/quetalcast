@@ -10,6 +10,7 @@ import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
 import { Headphones, Radio, Volume2, ExternalLink, RefreshCw } from 'lucide-react';
 import { Footer } from '@/components/Footer';
+import { ChatPanel } from '@/components/ChatPanel';
 
 const WS_URL = import.meta.env.VITE_WS_URL || (
   window.location.protocol === 'https:'
@@ -241,6 +242,11 @@ const Receiver = () => {
             right={audioAnalysis.right}
             label="Output Level"
           />
+        )}
+
+        {/* Chat — visible when listening or in external stream room */}
+        {joined && (audioStarted || externalStream) && (
+          <ChatPanel signaling={signaling} active={true} />
         )}
 
         {/* Health + Log — only when actively connected */}
