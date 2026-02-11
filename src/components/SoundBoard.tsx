@@ -1,10 +1,20 @@
 import { useState, useRef, useCallback } from 'react';
-import { Plus, Repeat, Square, Play, X } from 'lucide-react';
+import { Plus, Repeat, Square, Play, X, Settings } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Slider } from '@/components/ui/slider';
 
 interface PadState {
   file: File | null;
   audioEl: HTMLAudioElement | null;
   objectUrl: string | null;
+  title: string;
+  volume: number; // 0–100
   loop: boolean;
   isPlaying: boolean;
 }
@@ -13,9 +23,13 @@ const EMPTY_PAD: PadState = {
   file: null,
   audioEl: null,
   objectUrl: null,
+  title: '',
+  volume: 100,
   loop: false,
   isPlaying: false,
 };
+
+const PAD_COUNT = 10;
 
 interface SoundBoardProps {
   connectElement: (audio: HTMLAudioElement) => void;
@@ -23,10 +37,15 @@ interface SoundBoardProps {
 
 export function SoundBoard({ connectElement }: SoundBoardProps) {
   const [pads, setPads] = useState<PadState[]>(() =>
-    Array.from({ length: 16 }, () => ({ ...EMPTY_PAD })),
+    Array.from({ length: PAD_COUNT }, () => ({ ...EMPTY_PAD })),
   );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activePadRef = useRef<number | null>(null);
+
+  // Edit modal state
+  const [editIndex, setEditIndex] = useState<number | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editVolume, setEditVolume] = useState(100);
 
   const updatePad = useCallback((index: number, update: Partial<PadState>) => {
     setPads((prev) => prev.map((p, i) => (i === index ? { ...p, ...update } : p)));
@@ -62,10 +81,14 @@ export function SoundBoard({ connectElement }: SoundBoardProps) {
       updatePad(index, { isPlaying: false });
     });
 
+    const defaultTitle = file.name.replace(/\.[^.]+$/, '');
+
     updatePad(index, {
       file,
       audioEl: audio,
       objectUrl,
+      title: defaultTitle,
+      volume: 100,
       loop: false,
       isPlaying: false,
     });
@@ -115,16 +138,35 @@ export function SoundBoard({ connectElement }: SoundBoardProps) {
     setPads((prev) => prev.map((p, i) => (i === index ? { ...EMPTY_PAD } : p)));
   };
 
-  const truncateName = (name: string, maxLen = 12) => {
-    const base = name.replace(/\.[^.]+$/, '');
-    if (base.length <= maxLen) return base;
-    return base.slice(0, maxLen - 1) + '…';
+  const openEditModal = (index: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const pad = pads[index];
+    setEditTitle(pad.title);
+    setEditVolume(pad.volume);
+    setEditIndex(index);
   };
+
+  const handleEditSave = () => {
+    if (editIndex === null) return;
+    const pad = pads[editIndex];
+    if (pad.audioEl) {
+      pad.audioEl.volume = editVolume / 100;
+    }
+    updatePad(editIndex, { title: editTitle, volume: editVolume });
+    setEditIndex(null);
+  };
+
+  const truncateTitle = (title: string, maxLen = 14) => {
+    if (title.length <= maxLen) return title;
+    return title.slice(0, maxLen - 1) + '…';
+  };
+
+  const editPad = editIndex !== null ? pads[editIndex] : null;
 
   return (
     <div className="panel">
       <div className="panel-header">Soundboard</div>
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-5 gap-2">
         {pads.map((pad, i) => (
           <div key={i} className="relative aspect-square">
             {pad.file ? (
@@ -143,7 +185,7 @@ export function SoundBoard({ connectElement }: SoundBoardProps) {
                   <Play className="h-4 w-4 text-muted-foreground" />
                 )}
                 <span className="text-[10px] font-mono text-muted-foreground leading-tight text-center px-1 break-all">
-                  {truncateName(pad.file.name)}
+                  {truncateTitle(pad.title)}
                 </span>
               </button>
             ) : (
@@ -181,6 +223,17 @@ export function SoundBoard({ connectElement }: SoundBoardProps) {
                 <X className="h-3 w-3" />
               </button>
             )}
+
+            {/* Edit — bottom-right */}
+            {pad.file && (
+              <button
+                onClick={(e) => openEditModal(i, e)}
+                className="absolute bottom-0.5 right-0.5 p-0.5 rounded text-muted-foreground/40 hover:text-foreground transition-colors"
+                title="Edit"
+              >
+                <Settings className="h-3 w-3" />
+              </button>
+            )}
           </div>
         ))}
       </div>
@@ -193,6 +246,62 @@ export function SoundBoard({ connectElement }: SoundBoardProps) {
         onChange={handleFileChange}
         className="hidden"
       />
+
+      {/* Edit modal */}
+      <Dialog open={editIndex !== null} onOpenChange={(open) => { if (!open) setEditIndex(null); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Edit Pad</DialogTitle>
+            <DialogDescription className="text-xs font-mono text-muted-foreground">
+              {editPad?.file?.name}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 pt-2">
+            {/* Title */}
+            <div className="space-y-2">
+              <label className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+                Title
+              </label>
+              <input
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                className="w-full bg-input border border-border rounded-md px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                placeholder="Pad title…"
+              />
+            </div>
+
+            {/* Volume */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+                  Volume
+                </label>
+                <span className="text-xs font-mono text-muted-foreground tabular-nums">
+                  {editVolume}%
+                </span>
+              </div>
+              <Slider
+                value={[editVolume]}
+                onValueChange={([v]) => setEditVolume(v)}
+                min={0}
+                max={100}
+                step={1}
+              />
+            </div>
+          </div>
+
+          {/* Save */}
+          <div className="flex justify-end pt-2">
+            <button
+              onClick={handleEditSave}
+              className="bg-primary text-primary-foreground rounded-md px-6 py-2 text-sm font-semibold hover:opacity-90 transition-opacity"
+            >
+              Save
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
