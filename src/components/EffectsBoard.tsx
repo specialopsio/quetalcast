@@ -160,22 +160,15 @@ const EFFECT_SETTINGS: Record<EffectName, SliderConfig[]> = {
 
 export function EffectsBoard({ effects, onToggle, onUpdate }: EffectsBoardProps) {
   const [editEffect, setEditEffect] = useState<EffectName | null>(null);
-  const [editParams, setEditParams] = useState<Record<string, number>>({});
 
   const openSettings = (name: EffectName, e: React.MouseEvent) => {
     e.stopPropagation();
-    setEditParams({ ...effects[name].params });
     setEditEffect(name);
   };
 
   const handleParamChange = (key: string, value: number) => {
-    setEditParams((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const handleSave = () => {
     if (editEffect) {
-      onUpdate(editEffect, editParams);
-      setEditEffect(null);
+      onUpdate(editEffect, { [key]: value });
     }
   };
 
@@ -243,7 +236,7 @@ export function EffectsBoard({ effects, onToggle, onUpdate }: EffectsBoardProps)
           <div className="space-y-4 pt-2">
             {editEffect &&
               EFFECT_SETTINGS[editEffect].map((config) => {
-                const value = editParams[config.key] ?? config.defaultValue;
+                const value = effects[editEffect].params[config.key] ?? config.defaultValue;
                 return (
                   <div key={config.key} className="space-y-2">
                     <div className="flex items-center justify-between">
@@ -276,15 +269,6 @@ export function EffectsBoard({ effects, onToggle, onUpdate }: EffectsBoardProps)
                   </div>
                 );
               })}
-          </div>
-
-          <div className="flex justify-end pt-2">
-            <button
-              onClick={handleSave}
-              className="bg-primary text-primary-foreground rounded-md px-6 py-2 text-sm font-semibold hover:opacity-90 transition-opacity"
-            >
-              Save
-            </button>
           </div>
         </DialogContent>
       </Dialog>
