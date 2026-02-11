@@ -27,7 +27,7 @@ const Receiver = () => {
 
   const signaling = useSignaling(WS_URL);
   const webrtc = useWebRTC(signaling, 'receiver');
-  const audioAnalysis = useAudioAnalyser(webrtc.remoteStream);
+  const audioAnalysis = useAudioAnalyser(audioStarted ? webrtc.remoteStream : null);
 
   useEffect(() => {
     if (!isAuthenticated()) navigate('/login');

@@ -54,6 +54,9 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
     }
 
     const ctx = new AudioContext();
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 2048;
     analyser.smoothingTimeConstant = 0.3;
