@@ -5,7 +5,7 @@ Real-time audio broadcasting application built with WebRTC, React, and Node.js. 
 ## Features
 
 - **High-fidelity audio** — Opus codec at up to 510 kbps stereo with adaptive quality (High / Auto / Low)
-- **Soundboard** — 4x2 pad grid with MP3 loading, loop toggle, per-pad volume (up to 300%), and broadcast mixing
+- **Soundboard** — 5x2 pad grid with MP3 loading, loop toggle, per-pad volume (up to 300%), and broadcast mixing
 - **Mic effects** — Enhance (noise gate, rumble filter, clarity boost), tone/EQ, compressor, pitch shift, delay, and reverb with per-effect settings
 - **Stereo VU meter** — Calibrated dBFS metering with peak hold
 - **Output limiter** — Selectable ceiling (0 dB, -3 dB, -6 dB, -12 dB)
@@ -139,7 +139,7 @@ fly deploy
 ├── src/                        # React frontend (Vite + TypeScript)
 │   ├── components/
 │   │   ├── EffectsBoard.tsx    # Mic effects UI (enhance, tone, compressor, pitch, delay, reverb)
-│   │   ├── SoundBoard.tsx      # 4x2 soundboard pad grid
+│   │   ├── SoundBoard.tsx      # 5x2 soundboard pad grid
 │   │   ├── LevelMeter.tsx      # Stereo VU meter with dBFS scale
 │   │   ├── StatusBar.tsx       # Room ID, timer, connection status
 │   │   ├── HealthPanel.tsx     # RTT, packet loss, jitter display
