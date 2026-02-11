@@ -88,6 +88,11 @@ export function useAudioMixer(): UseAudioMixerReturn {
     const sbLocalGain = ctx.createGain(); // soundboard → local speakers
     const listenGain = ctx.createGain(); // broadcast → local speakers
 
+    // Force broadcastBus to always process in stereo so a mono mic
+    // is properly upmixed to both L and R channels before output.
+    broadcastBus.channelCount = 2;
+    broadcastBus.channelCountMode = 'explicit';
+
     // Default gains
     micGain.gain.value = 1;
     broadcastBus.gain.value = 1;

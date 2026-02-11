@@ -145,7 +145,6 @@ const Broadcaster = () => {
           noiseSuppression: false,
           autoGainControl: false,
           sampleRate: { ideal: 48000 },
-          channelCount: { ideal: 2 },
         },
       };
 
