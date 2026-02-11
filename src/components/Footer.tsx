@@ -186,6 +186,12 @@ export function Footer() {
                 </p>
                 <ul className="list-disc list-inside mt-1 space-y-1 pl-1">
                   <li>
+                    <strong className="text-foreground">Enhance</strong> — Cleans
+                    up your mic with a noise gate (cuts background noise when
+                    you're not speaking), a rumble filter, and a clarity boost
+                    to help your voice cut through.
+                  </li>
+                  <li>
                     <strong className="text-foreground">Reverb</strong> — Adds a
                     room or hall-like ambience to your voice.
                   </li>

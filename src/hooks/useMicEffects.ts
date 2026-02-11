@@ -2,16 +2,17 @@ import { useCallback, useRef, useState } from 'react';
 
 // ── Types ──────────────────────────────────────────────────────────
 
-export type EffectName = 'tone' | 'voiceShift' | 'delay' | 'echo' | 'compressor';
+export type EffectName = 'enhance' | 'tone' | 'voiceShift' | 'delay' | 'echo' | 'compressor';
 
 export interface EffectState {
   enabled: boolean;
   params: Record<string, number>;
 }
 
-export const CHAIN_ORDER: EffectName[] = ['tone', 'compressor', 'voiceShift', 'delay', 'echo'];
+export const CHAIN_ORDER: EffectName[] = ['enhance', 'tone', 'compressor', 'voiceShift', 'delay', 'echo'];
 
 export const EFFECT_LABELS: Record<EffectName, string> = {
+  enhance: 'Enhance',
   tone: 'Tone',
   compressor: 'Compressor',
   voiceShift: 'Voice Shift',
@@ -20,6 +21,7 @@ export const EFFECT_LABELS: Record<EffectName, string> = {
 };
 
 export const DEFAULT_PARAMS: Record<EffectName, Record<string, number>> = {
+  enhance: { gate: 30, cleanup: 30, clarity: 0 },
   tone: { bass: 0, mids: 0, treble: 0 },
   compressor: { amount: 50, speed: 50, makeup: 0 },
   voiceShift: { shift: 50 },
@@ -55,6 +57,30 @@ function generateImpulse(ctx: AudioContext, space: number, fade: number): AudioB
 }
 
 // ── Node creators ──────────────────────────────────────────────────
+
+/**
+ * Enhance: noise gate (worklet) → high-pass filter → presence boost.
+ * The noise gate worklet MUST be loaded before calling this function.
+ */
+function createEnhanceNodes(ctx: AudioContext): EffectNodeSet {
+  const gate = new AudioWorkletNode(ctx, 'noise-gate-processor');
+
+  const highpass = ctx.createBiquadFilter();
+  highpass.type = 'highpass';
+  highpass.frequency.value = 80; // default for cleanup=30
+  highpass.Q.value = 0.7;
+
+  const presence = ctx.createBiquadFilter();
+  presence.type = 'peaking';
+  presence.frequency.value = 3500;
+  presence.Q.value = 1.2;
+  presence.gain.value = 0; // default for clarity=0
+
+  gate.connect(highpass);
+  highpass.connect(presence);
+
+  return { input: gate, output: presence, internals: { gate, highpass, presence } };
+}
 
 function createToneNodes(ctx: AudioContext): EffectNodeSet {
   const lowshelf = ctx.createBiquadFilter();
@@ -164,6 +190,22 @@ function createEchoNodes(ctx: AudioContext): EffectNodeSet {
 
 // ── Parameter applicators ──────────────────────────────────────────
 
+function applyEnhanceParams(nodes: EffectNodeSet, params: Record<string, number>) {
+  const gate = params.gate ?? 30;
+  const cleanup = params.cleanup ?? 30;
+  const clarity = params.clarity ?? 0;
+
+  // Gate: 0 = off (-100 dB, effectively disabled), 100 = aggressive (-20 dB)
+  const thresholdDb = gate === 0 ? -100 : -80 + (gate / 100) * 60;
+  (nodes.internals.gate as AudioWorkletNode).port.postMessage({ thresholdDb });
+
+  // Cleanup: high-pass cutoff from 20 Hz (0) to 300 Hz (100)
+  (nodes.internals.highpass as BiquadFilterNode).frequency.value = 20 + (cleanup / 100) * 280;
+
+  // Clarity: presence boost 0 to +12 dB at 3.5 kHz
+  (nodes.internals.presence as BiquadFilterNode).gain.value = (clarity / 100) * 12;
+}
+
 function applyToneParams(nodes: EffectNodeSet, params: Record<string, number>) {
   (nodes.internals.lowshelf as BiquadFilterNode).gain.value = params.bass ?? 0;
   (nodes.internals.peaking as BiquadFilterNode).gain.value = params.mids ?? 0;
@@ -246,6 +288,7 @@ export function useMicEffects(): UseMicEffectsReturn {
 
   const createAllNodes = useCallback((ctx: AudioContext): Record<EffectName, EffectNodeSet> => {
     return {
+      enhance: createEnhanceNodes(ctx),
       tone: createToneNodes(ctx),
       compressor: createCompressorNodes(ctx),
       voiceShift: createVoiceShiftNodes(ctx),
@@ -286,11 +329,14 @@ export function useMicEffects(): UseMicEffectsReturn {
     chainConnectionsRef.current = connections;
   }, []);
 
-  /** Ensure the pitch-shift AudioWorklet module is loaded on this context */
+  /** Ensure all AudioWorklet modules are loaded on this context */
   const workletLoadedRef = useRef(false);
   const ensureWorkletLoaded = useCallback(async (ctx: AudioContext) => {
     if (workletLoadedRef.current) return;
-    await ctx.audioWorklet.addModule('/pitch-shift-processor.js');
+    await Promise.all([
+      ctx.audioWorklet.addModule('/pitch-shift-processor.js'),
+      ctx.audioWorklet.addModule('/noise-gate-processor.js'),
+    ]);
     workletLoadedRef.current = true;
   }, []);
 
@@ -352,6 +398,9 @@ export function useMicEffects(): UseMicEffectsReturn {
       const nodeSet = effectNodesRef.current[name];
       const fullParams = newState[name].params;
       switch (name) {
+        case 'enhance':
+          applyEnhanceParams(nodeSet, fullParams);
+          break;
         case 'tone':
           applyToneParams(nodeSet, fullParams);
           break;

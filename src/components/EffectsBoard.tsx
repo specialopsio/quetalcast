@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AudioLines, MicVocal, Timer, SlidersHorizontal, Gauge, Settings } from 'lucide-react';
+import { AudioLines, MicVocal, Timer, SlidersHorizontal, Gauge, Wand2, Settings } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -24,9 +24,10 @@ interface EffectsBoardProps {
 
 // ── Config ─────────────────────────────────────────────────────────
 
-const EFFECT_ORDER: EffectName[] = ['echo', 'voiceShift', 'delay', 'tone', 'compressor'];
+const EFFECT_ORDER: EffectName[] = ['enhance', 'echo', 'voiceShift', 'delay', 'tone', 'compressor'];
 
 const EFFECT_ICONS: Record<EffectName, React.ComponentType<{ className?: string }>> = {
+  enhance: Wand2,
   echo: AudioLines,
   voiceShift: MicVocal,
   delay: Timer,
@@ -48,6 +49,26 @@ interface SliderConfig {
 }
 
 const EFFECT_SETTINGS: Record<EffectName, SliderConfig[]> = {
+  enhance: [
+    {
+      key: 'gate', label: 'Noise Gate',
+      description: 'Cuts background noise when you\'re not speaking. Higher = more aggressive.',
+      min: 0, max: 100, step: 1, defaultValue: 30,
+      minLabel: 'Off', maxLabel: 'Aggressive',
+    },
+    {
+      key: 'cleanup', label: 'Clean Up',
+      description: 'Removes low-end rumble, hum, and plosives.',
+      min: 0, max: 100, step: 1, defaultValue: 30,
+      minLabel: 'None', maxLabel: 'Heavy',
+    },
+    {
+      key: 'clarity', label: 'Clarity',
+      description: 'Adds presence to make your voice cut through clearly.',
+      min: 0, max: 100, step: 1, defaultValue: 0,
+      formatValue: (v) => `+${Math.round((v / 100) * 12)} dB`,
+    },
+  ],
   echo: [
     {
       key: 'space', label: 'Space',
@@ -160,7 +181,7 @@ export function EffectsBoard({ effects, onToggle, onUpdate }: EffectsBoardProps)
 
   return (
     <>
-      <div className="grid grid-cols-5 gap-2">
+      <div className="grid grid-cols-3 gap-2">
         {EFFECT_ORDER.map((effectName) => {
           const effect = effects[effectName];
           const Icon = EFFECT_ICONS[effectName];
