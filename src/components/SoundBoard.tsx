@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Plus, Repeat, Square, Play, X, Settings } from 'lucide-react';
 import {
   Dialog,
@@ -35,9 +35,11 @@ const PAD_COUNT = 10;
 
 interface SoundBoardProps {
   connectElement: (audio: HTMLAudioElement) => GainNode | null;
+  /** Ref that receives a triggerPad function for keyboard shortcuts */
+  triggerRef?: React.MutableRefObject<((index: number) => void) | null>;
 }
 
-export function SoundBoard({ connectElement }: SoundBoardProps) {
+export function SoundBoard({ connectElement, triggerRef }: SoundBoardProps) {
   const [pads, setPads] = useState<PadState[]>(() =>
     Array.from({ length: PAD_COUNT }, () => ({ ...EMPTY_PAD })),
   );
@@ -161,6 +163,20 @@ export function SoundBoard({ connectElement }: SoundBoardProps) {
     updatePad(editIndex, { title: editTitle, volume: editVolume });
     setEditIndex(null);
   };
+
+  // Expose triggerPad for keyboard shortcuts
+  useEffect(() => {
+    if (triggerRef) {
+      triggerRef.current = (index: number) => {
+        if (index >= 0 && index < PAD_COUNT) {
+          handlePlayStop(index);
+        }
+      };
+    }
+    return () => {
+      if (triggerRef) triggerRef.current = null;
+    };
+  }, [pads]); // re-bind when pads change so handlePlayStop captures latest state
 
   const editPad = editIndex !== null ? pads[editIndex] : null;
 

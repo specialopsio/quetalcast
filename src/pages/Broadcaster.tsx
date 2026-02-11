@@ -8,7 +8,7 @@ import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
-import { Copy, Mic, MicOff, Radio, Headphones, Music, Sparkles, Zap, Plug2, Circle, Square, Users, Disc3 } from 'lucide-react';
+import { Copy, Mic, MicOff, Radio, Headphones, Music, Sparkles, Zap, Plug2, Circle, Square, Users, Disc3, Keyboard } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import {
   Select,
@@ -28,6 +28,14 @@ import { IntegrationsSheet } from '@/components/IntegrationsSheet';
 import { useIntegrationStream } from '@/hooks/useIntegrationStream';
 import { getIntegration, type IntegrationConfig } from '@/lib/integrations';
 import { useRecorder } from '@/hooks/useRecorder';
+import { useKeyboardShortcuts, SHORTCUT_MAP } from '@/hooks/useKeyboardShortcuts';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 
 const WS_URL = import.meta.env.VITE_WS_URL || (
   window.location.protocol === 'https:'
@@ -61,6 +69,7 @@ const Broadcaster = () => {
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
   const integrationStream = useIntegrationStream();
   const recorder = useRecorder();
+  const soundboardTriggerRef = useRef<((index: number) => void) | null>(null);
 
   const addLog = useCallback((msg: string, level: LogEntry['level'] = 'info') => {
     setLogs((prev) => [...prev.slice(-100), createLogEntry(msg, level)]);
@@ -352,6 +361,15 @@ const Broadcaster = () => {
     addLog(`Limiter set to ${db} dB`);
   };
 
+  // Keyboard shortcuts
+  const { showHelp, setShowHelp } = useKeyboardShortcuts(isOnAir, {
+    onToggleMute: handleToggleMute,
+    onToggleRecording: handleToggleRecording,
+    onToggleListen: handleToggleListen,
+    onToggleCue: handleToggleCue,
+    onTriggerPad: (index: number) => soundboardTriggerRef.current?.(index),
+  });
+
   // Reset controls when going off air
   useEffect(() => {
     if (!isOnAir) {
@@ -405,10 +423,21 @@ const Broadcaster = () => {
       <div className="flex-1 p-4 max-w-4xl mx-auto w-full space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h1 className="text-lg font-semibold text-foreground flex items-center gap-2">
-            <Radio className="h-5 w-5 text-primary" />
-            Broadcaster
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-semibold text-foreground flex items-center gap-2">
+              <Radio className="h-5 w-5 text-primary" />
+              Broadcaster
+            </h1>
+            {isOnAir && (
+              <button
+                onClick={() => setShowHelp(true)}
+                className="text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                title="Keyboard shortcuts"
+              >
+                <Keyboard className="h-4 w-4" />
+              </button>
+            )}
+          </div>
           {/* Before on-air: show Integrations button */}
           {!isOnAir && (
             <button
@@ -704,7 +733,7 @@ const Broadcaster = () => {
               </div>
             </div>
             <TabsContent value="sounds">
-              <SoundBoard connectElement={mixer.connectElement} />
+              <SoundBoard connectElement={mixer.connectElement} triggerRef={soundboardTriggerRef} />
             </TabsContent>
             <TabsContent value="effects">
               <EffectsBoard
@@ -742,6 +771,31 @@ const Broadcaster = () => {
         selectedIntegration={selectedIntegration}
         onSelectIntegration={setSelectedIntegration}
       />
+
+      {/* Keyboard shortcuts dialog */}
+      <Dialog open={showHelp} onOpenChange={setShowHelp}>
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Keyboard className="h-4 w-4" />
+              Keyboard Shortcuts
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Active while on air. Disabled when typing in inputs.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 pt-2">
+            {SHORTCUT_MAP.map((s) => (
+              <div key={s.key} className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">{s.description}</span>
+                <kbd className="bg-secondary border border-border rounded px-2 py-0.5 text-xs font-mono text-foreground">
+                  {s.key}
+                </kbd>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
