@@ -101,8 +101,8 @@ const Receiver = () => {
           Receiver
         </h1>
 
-        {/* Off-air / not joined / error — show message + room ID input */}
-        {(!joined || (joined && !webrtc.remoteStream && webrtc.status === 'error')) && (
+        {/* Off-air / not joined / error / disconnected — show message + room ID input */}
+        {(!joined || (joined && !webrtc.remoteStream && (webrtc.status === 'error' || webrtc.status === 'disconnected'))) && (
           <div className="panel text-center py-10 space-y-5">
             <div>
               <Radio className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
@@ -125,7 +125,7 @@ const Receiver = () => {
                   Join
                 </button>
               </div>
-              {joined && webrtc.status === 'error' && (
+              {joined && (webrtc.status === 'error' || webrtc.status === 'disconnected') && (
                 <button
                   onClick={() => window.location.reload()}
                   className="mt-4 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
@@ -149,8 +149,8 @@ const Receiver = () => {
           </button>
         )}
 
-        {/* Waiting state — only when joined and actively connecting (not errored) */}
-        {joined && !webrtc.remoteStream && webrtc.status !== 'error' && (
+        {/* Waiting state — only when joined and actively connecting */}
+        {joined && !webrtc.remoteStream && webrtc.status !== 'error' && webrtc.status !== 'disconnected' && (
           <div className="panel text-center py-8">
             <div className="text-muted-foreground text-sm">Waiting for broadcaster…</div>
             <div className="text-xs text-muted-foreground/60 mt-1 font-mono">
@@ -170,7 +170,7 @@ const Receiver = () => {
         )}
 
         {/* Health + Log — only when actively connected */}
-        {joined && webrtc.status !== 'error' && (
+        {joined && webrtc.status !== 'error' && webrtc.status !== 'disconnected' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <HealthPanel
               stats={webrtc.stats}

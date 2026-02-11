@@ -28,7 +28,7 @@ export function StatusBar({ status, roomId }: StatusBarProps) {
         </div>
         {roomId && (
           <span className="text-xs font-mono text-muted-foreground">
-            ROOM: {roomId.slice(0, 8)}…
+            ROOM: {roomId}
           </span>
         )}
       </div>
