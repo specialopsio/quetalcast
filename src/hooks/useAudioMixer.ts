@@ -21,9 +21,10 @@ export interface UseAudioMixerReturn {
  *   broadcastBus → listenGain → ctx.destination
  *
  * Gain state table:
- *   Default  (listen OFF, cue OFF): micGain=vol, sbToBroadcast=1, sbLocal=1, listen=0
- *   Listen ON (cue OFF):            micGain=vol, sbToBroadcast=1, sbLocal=0, listen=1
- *   Cue ON   (listen auto-ON):      micGain=vol, sbToBroadcast=0, sbLocal=1, listen=1
+ *   Default  (listen OFF, cue OFF): micGain=vol, broadcastBus=1, sbToBroadcast=1, sbLocal=1, listen=0
+ *   Listen ON (cue OFF):            micGain=vol, broadcastBus=1, sbToBroadcast=1, sbLocal=0, listen=1
+ *   Cue ON:                         micGain=vol, broadcastBus=0, sbToBroadcast=0, sbLocal=1, listen=0
+ *                                   (nothing reaches receiver; soundboard plays locally only)
  */
 export function useAudioMixer(): UseAudioMixerReturn {
   const ctxRef = useRef<AudioContext | null>(null);
@@ -183,17 +184,18 @@ export function useAudioMixer(): UseAudioMixerReturn {
   }, []);
 
   const setCueMode = useCallback((on: boolean) => {
+    // Mute the entire broadcast output in cue mode so receiver hears nothing
+    if (broadcastBusRef.current) {
+      broadcastBusRef.current.gain.value = on ? 0 : 1;
+    }
     if (sbToBroadcastGainRef.current) {
       sbToBroadcastGainRef.current.gain.value = on ? 0 : 1;
     }
-    // In cue mode: sbLocal=1 (hear soundboard locally), listen=1 (hear broadcast)
+    // In cue mode: sbLocal=1 (hear soundboard locally)
     // When cue off: defer to the listen state set by setListening
     if (on) {
       if (sbLocalGainRef.current) {
         sbLocalGainRef.current.gain.value = 1;
-      }
-      if (listenGainRef.current) {
-        listenGainRef.current.gain.value = 1;
       }
     }
   }, []);
