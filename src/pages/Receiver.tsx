@@ -114,7 +114,7 @@ const Receiver = () => {
                 <input
                   value={roomInput}
                   onChange={(e) => setRoomInput(e.target.value)}
-                  placeholder="Room ID"
+                  placeholder="Enter room ID"
                   className="flex-1 bg-input border border-border rounded-md px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                 />
                 <button
