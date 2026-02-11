@@ -8,7 +8,7 @@ import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
-import { Copy, Mic, MicOff, Radio, Headphones, Clock, Music, Sparkles, Zap, Plug2, Circle, Square } from 'lucide-react';
+import { Copy, Mic, MicOff, Radio, Headphones, Music, Sparkles, Zap, Plug2, Circle, Square } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import {
   Select,
@@ -170,20 +170,19 @@ const Broadcaster = () => {
 
       addLog('Mic connected');
 
+      // Always create a room for signaling (chat, listener count, metadata)
+      if (!webrtc.roomId) {
+        webrtc.createRoom();
+        addLog('Setting up room…');
+      }
+      broadcastStartedRef.current = false;
+
       if (selectedIntegration) {
-        // Integration mode — stream to external server, no room
         const integrationInfo = getIntegration(selectedIntegration.integrationId);
         addLog(`Connecting to ${integrationInfo?.name || 'integration'}…`);
-        setIsOnAir(true);
-      } else {
-        // Native mode — create room and use WebRTC
-        if (!webrtc.roomId) {
-          webrtc.createRoom();
-          addLog('Setting up room…');
-        }
-        broadcastStartedRef.current = false;
-        setIsOnAir(true);
       }
+
+      setIsOnAir(true);
     } catch (e) {
       addLog('Couldn\'t start broadcast — check mic permissions', 'error');
     }
@@ -238,12 +237,11 @@ const Broadcaster = () => {
     setLocalStream(null);
     mixer.disconnectMic();
 
+    // Always stop WebRTC (room exists in both modes for signaling)
+    webrtc.stop();
+
     if (selectedIntegration) {
-      // Integration mode — stop the integration stream
       integrationStream.stopStream();
-    } else {
-      // Native mode — stop WebRTC
-      webrtc.stop();
     }
 
     setIsOnAir(false);
@@ -397,22 +395,23 @@ const Broadcaster = () => {
               {selectedIntegration ? integrationInfo?.name : 'Integrations'}
             </button>
           )}
-          {/* On-air native mode: show Copy Receiver Link */}
-          {isOnAir && !selectedIntegration && webrtc.roomId && (
-            <button
-              onClick={copyReceiverLink}
-              className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-foreground transition-colors bg-secondary px-3 py-1.5 rounded-md"
-            >
-              <Copy className="h-3 w-3" />
-              {copied ? 'Copied!' : 'Copy Receiver Link'}
-            </button>
-          )}
-          {/* On-air integration mode: show "Live on X" */}
-          {isOnAir && selectedIntegration && integrationInfo && (
-            <span className="flex items-center gap-1.5 text-xs font-mono text-primary bg-primary/10 px-3 py-1.5 rounded-md">
-              <Radio className="h-3 w-3" />
-              Live on {integrationInfo.name}
-            </span>
+          {/* On-air: show Copy Receiver Link (always — room exists in both modes) */}
+          {isOnAir && webrtc.roomId && (
+            <div className="flex items-center gap-2">
+              {selectedIntegration && integrationInfo && (
+                <span className="flex items-center gap-1.5 text-xs font-mono text-primary bg-primary/10 px-3 py-1.5 rounded-md">
+                  <Radio className="h-3 w-3" />
+                  Streaming on {integrationInfo.name}
+                </span>
+              )}
+              <button
+                onClick={copyReceiverLink}
+                className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-foreground transition-colors bg-secondary px-3 py-1.5 rounded-md"
+              >
+                <Copy className="h-3 w-3" />
+                {copied ? 'Copied!' : 'Copy Receiver Link'}
+              </button>
+            </div>
           )}
         </div>
 
@@ -444,19 +443,11 @@ const Broadcaster = () => {
           label="Input Level"
         />
 
-        {/* Broadcast timer */}
-        {isOnAir && (
-          <div className="flex items-center justify-center gap-2 text-sm font-mono text-muted-foreground">
-            <Clock className="h-3.5 w-3.5" />
-            <span className="tabular-nums">{formatTime(elapsedSeconds)}</span>
-          </div>
-        )}
-
         {/* Controls */}
         <div className="flex gap-3">
           <button
             onClick={handleGoOnAir}
-            disabled={isOnAir || (!selectedIntegration && !signaling.connected)}
+            disabled={isOnAir || !signaling.connected}
             className={`flex-1 flex items-center justify-center gap-2 py-4 rounded-md text-sm font-semibold transition-all ${
               isOnAir
                 ? 'bg-muted text-muted-foreground cursor-not-allowed'
@@ -464,7 +455,7 @@ const Broadcaster = () => {
             }`}
           >
             <Mic className="h-5 w-5" />
-            {isOnAir ? 'On Air' : 'Go On Air'}
+            {isOnAir ? `On Air - ${formatTime(elapsedSeconds)}` : 'Go On Air'}
           </button>
           <button
             onClick={handleEndBroadcast}

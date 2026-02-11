@@ -29,7 +29,7 @@ export function StatusBar({ status, roomId, integrationName }: StatusBarProps) {
         </div>
         {integrationName ? (
           <span className="text-xs font-mono text-primary">
-            LIVE ON {integrationName.toUpperCase()}
+            STREAMING ON {integrationName.toUpperCase()}
           </span>
         ) : roomId ? (
           <span className="text-xs font-mono text-muted-foreground">

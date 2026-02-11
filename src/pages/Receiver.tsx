@@ -8,7 +8,7 @@ import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
-import { Headphones, Radio, Volume2 } from 'lucide-react';
+import { Headphones, Radio, Volume2, ExternalLink } from 'lucide-react';
 import { Footer } from '@/components/Footer';
 
 const WS_URL = import.meta.env.VITE_WS_URL || (
@@ -23,7 +23,9 @@ const Receiver = () => {
   const [roomInput, setRoomInput] = useState(paramRoomId || '');
   const [joined, setJoined] = useState(false);
   const [audioStarted, setAudioStarted] = useState(false);
+  const [externalStream, setExternalStream] = useState(false);
   const audioElRef = useRef<HTMLAudioElement | null>(null);
+  const noAudioTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const addLog = useCallback((msg: string, level: LogEntry['level'] = 'info') => {
     setLogs((prev) => [...prev.slice(-100), createLogEntry(msg, level)]);
@@ -100,6 +102,31 @@ const Receiver = () => {
     }
   }, [webrtc.remoteStream]);
 
+  // Detect integration rooms — if joined + peer connected but no audio track after 5s,
+  // this is an integration broadcast (audio goes through external service)
+  useEffect(() => {
+    if (joined && webrtc.peerConnected && !webrtc.remoteStream && !externalStream) {
+      noAudioTimerRef.current = setTimeout(() => {
+        setExternalStream(true);
+        addLog('This broadcast is streaming externally');
+      }, 5000);
+    }
+    if (webrtc.remoteStream) {
+      // Audio arrived — not an external stream
+      if (noAudioTimerRef.current) {
+        clearTimeout(noAudioTimerRef.current);
+        noAudioTimerRef.current = null;
+      }
+      setExternalStream(false);
+    }
+    return () => {
+      if (noAudioTimerRef.current) {
+        clearTimeout(noAudioTimerRef.current);
+        noAudioTimerRef.current = null;
+      }
+    };
+  }, [joined, webrtc.peerConnected, webrtc.remoteStream, externalStream, addLog]);
+
   return (
     <div className="min-h-[100dvh] bg-background flex flex-col">
       <StatusBar status={webrtc.status} roomId={roomInput || null} />
@@ -158,8 +185,19 @@ const Receiver = () => {
           </button>
         )}
 
+        {/* External stream notice — integration room with no audio */}
+        {joined && externalStream && !webrtc.remoteStream && (
+          <div className="panel text-center py-8 space-y-2">
+            <ExternalLink className="h-8 w-8 text-primary mx-auto" />
+            <p className="text-sm font-semibold text-foreground">This broadcast is streaming externally</p>
+            <p className="text-xs text-muted-foreground">
+              Audio is being broadcast on an external platform. You can still use chat below.
+            </p>
+          </div>
+        )}
+
         {/* Waiting state — only when joined and actively connecting */}
-        {joined && !webrtc.remoteStream && webrtc.status !== 'error' && webrtc.status !== 'disconnected' && (
+        {joined && !webrtc.remoteStream && !externalStream && webrtc.status !== 'error' && webrtc.status !== 'disconnected' && (
           <div className="panel text-center py-8">
             <div className="text-muted-foreground text-sm">Connecting to broadcast…</div>
             <div className="text-xs text-muted-foreground/60 mt-1">
