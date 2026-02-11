@@ -8,7 +8,8 @@ import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
-import { Copy, Mic, MicOff, Radio } from 'lucide-react';
+import { Copy, Mic, MicOff, Radio, Headphones } from 'lucide-react';
+import { Slider } from '@/components/ui/slider';
 import {
   Select,
   SelectContent,
@@ -29,6 +30,10 @@ const Broadcaster = () => {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [isOnAir, setIsOnAir] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [micVolume, setMicVolume] = useState(100);
+  const [micMuted, setMicMuted] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [cueMode, setCueMode] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const addLog = useCallback((msg: string, level: LogEntry['level'] = 'info') => {
@@ -141,6 +146,55 @@ const Broadcaster = () => {
     addLog('Broadcast ended');
   };
 
+  // --- Mixer control handlers ---
+
+  const handleMicVolumeChange = (v: number) => {
+    setMicVolume(v);
+    if (!micMuted) {
+      mixer.setMicVolume(v / 100);
+    }
+  };
+
+  const handleToggleMute = () => {
+    const newMuted = !micMuted;
+    setMicMuted(newMuted);
+    mixer.setMicMuted(newMuted);
+    addLog(newMuted ? 'Mic muted' : 'Mic unmuted');
+  };
+
+  const handleToggleListen = () => {
+    const newListening = !listening;
+    setListening(newListening);
+    mixer.setListening(newListening);
+    addLog(newListening ? 'Listen on' : 'Listen off');
+  };
+
+  const handleToggleCue = () => {
+    const newCue = !cueMode;
+    setCueMode(newCue);
+    mixer.setCueMode(newCue);
+    if (newCue) {
+      // Cue on → auto-enable listen
+      setListening(true);
+      addLog('Cue mode on (listen enabled)');
+    } else {
+      // Cue off → auto-disable listen
+      setListening(false);
+      mixer.setListening(false);
+      addLog('Cue mode off');
+    }
+  };
+
+  // Reset controls when going off air
+  useEffect(() => {
+    if (!isOnAir) {
+      setMicVolume(100);
+      setMicMuted(false);
+      setListening(false);
+      setCueMode(false);
+    }
+  }, [isOnAir]);
+
   const copyReceiverLink = () => {
     if (webrtc.roomId) {
       const link = `${window.location.origin}/receive/${webrtc.roomId}`;
@@ -229,6 +283,73 @@ const Broadcaster = () => {
             End Broadcast
           </button>
         </div>
+
+        {/* Mixer controls — visible when on air */}
+        {isOnAir && (
+          <div className="panel">
+            <div className="panel-header">Mixer Controls</div>
+            <div className="flex items-center gap-4">
+              {/* Mic volume */}
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground shrink-0">
+                  Mic
+                </span>
+                <Slider
+                  value={[micVolume]}
+                  onValueChange={([v]) => handleMicVolumeChange(v)}
+                  min={0}
+                  max={100}
+                  step={1}
+                  className="flex-1"
+                />
+                <span className="text-xs font-mono text-muted-foreground tabular-nums w-8 text-right shrink-0">
+                  {micMuted ? '—' : `${micVolume}%`}
+                </span>
+              </div>
+
+              {/* Mute mic */}
+              <button
+                onClick={handleToggleMute}
+                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  micMuted
+                    ? 'bg-destructive/20 text-destructive'
+                    : 'bg-secondary text-muted-foreground hover:text-foreground'
+                }`}
+                title={micMuted ? 'Unmute mic' : 'Mute mic'}
+              >
+                <MicOff className="h-3.5 w-3.5" />
+                Mute
+              </button>
+
+              {/* Listen */}
+              <button
+                onClick={handleToggleListen}
+                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  listening
+                    ? 'bg-primary/20 text-primary'
+                    : 'bg-secondary text-muted-foreground hover:text-foreground'
+                }`}
+                title={listening ? 'Stop listening' : 'Listen to broadcast'}
+              >
+                <Headphones className="h-3.5 w-3.5" />
+                Listen
+              </button>
+
+              {/* Cue */}
+              <button
+                onClick={handleToggleCue}
+                className={`shrink-0 px-3 py-1.5 rounded-md text-xs font-mono font-bold uppercase tracking-wider transition-all ${
+                  cueMode
+                    ? 'bg-accent/20 text-accent'
+                    : 'bg-secondary text-muted-foreground hover:text-foreground'
+                }`}
+                title={cueMode ? 'Cue mode on — soundboard is local only' : 'Enable cue mode'}
+              >
+                CUE
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Soundboard */}
         <SoundBoard connectElement={mixer.connectElement} />
