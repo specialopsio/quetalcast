@@ -14,7 +14,8 @@ interface PadState {
   audioEl: HTMLAudioElement | null;
   objectUrl: string | null;
   title: string;
-  volume: number; // 0–100
+  volume: number; // 0–300
+  gainNode: GainNode | null;
   loop: boolean;
   isPlaying: boolean;
 }
@@ -25,6 +26,7 @@ const EMPTY_PAD: PadState = {
   objectUrl: null,
   title: '',
   volume: 100,
+  gainNode: null,
   loop: false,
   isPlaying: false,
 };
@@ -32,7 +34,7 @@ const EMPTY_PAD: PadState = {
 const PAD_COUNT = 10;
 
 interface SoundBoardProps {
-  connectElement: (audio: HTMLAudioElement) => void;
+  connectElement: (audio: HTMLAudioElement) => GainNode | null;
 }
 
 export function SoundBoard({ connectElement }: SoundBoardProps) {
@@ -75,7 +77,10 @@ export function SoundBoard({ connectElement }: SoundBoardProps) {
     const audio = new Audio(objectUrl);
 
     // Connect to the mixer so it routes to broadcast + local speakers
-    connectElement(audio);
+    const gainNode = connectElement(audio);
+
+    // Audio element volume stays at 1; gain node handles amplification (0–3x)
+    audio.volume = 1;
 
     audio.addEventListener('ended', () => {
       updatePad(index, { isPlaying: false });
@@ -89,6 +94,7 @@ export function SoundBoard({ connectElement }: SoundBoardProps) {
       objectUrl,
       title: defaultTitle,
       volume: 100,
+      gainNode,
       loop: false,
       isPlaying: false,
     });
@@ -149,8 +155,8 @@ export function SoundBoard({ connectElement }: SoundBoardProps) {
   const handleEditSave = () => {
     if (editIndex === null) return;
     const pad = pads[editIndex];
-    if (pad.audioEl) {
-      pad.audioEl.volume = editVolume / 100;
+    if (pad.gainNode) {
+      pad.gainNode.gain.value = editVolume / 100; // 0–3.0
     }
     updatePad(editIndex, { title: editTitle, volume: editVolume });
     setEditIndex(null);
@@ -272,7 +278,7 @@ export function SoundBoard({ connectElement }: SoundBoardProps) {
                 <label className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
                   Volume
                 </label>
-                <span className="text-xs font-mono text-muted-foreground tabular-nums">
+                <span className={`text-xs font-mono tabular-nums ${editVolume > 100 ? 'text-red-500 font-semibold' : 'text-muted-foreground'}`}>
                   {editVolume}%
                 </span>
               </div>
@@ -280,9 +286,15 @@ export function SoundBoard({ connectElement }: SoundBoardProps) {
                 value={[editVolume]}
                 onValueChange={([v]) => setEditVolume(v)}
                 min={0}
-                max={100}
+                max={300}
                 step={1}
+                className={editVolume > 100 ? 'slider-danger' : ''}
               />
+              {editVolume > 100 && (
+                <p className="text-[11px] font-mono text-red-500">
+                  Volume above 100% may cause distortion
+                </p>
+              )}
             </div>
           </div>
 

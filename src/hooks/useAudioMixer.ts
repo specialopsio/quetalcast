@@ -4,7 +4,7 @@ export interface UseAudioMixerReturn {
   mixedStream: MediaStream | null;
   connectMic: (stream: MediaStream) => void;
   disconnectMic: () => void;
-  connectElement: (audio: HTMLAudioElement) => void;
+  connectElement: (audio: HTMLAudioElement) => GainNode | null;
   setMicVolume: (v: number) => void;
   setMicMuted: (muted: boolean) => void;
   setListening: (on: boolean) => void;
@@ -140,17 +140,21 @@ export function useAudioMixer(): UseAudioMixerReturn {
   }, []);
 
   const connectElement = useCallback(
-    (audio: HTMLAudioElement) => {
+    (audio: HTMLAudioElement): GainNode | null => {
       // Guard against double-connecting the same element
-      if (connectedElements.current.has(audio)) return;
+      if (connectedElements.current.has(audio)) return null;
 
       const { ctx, soundboardBus } = ensureContext();
       const source = ctx.createMediaElementSource(audio);
 
-      // Route to soundboard bus (which fans out to broadcast + local via gain nodes)
-      source.connect(soundboardBus);
+      // Insert a per-element gain node for volume control (supports >1.0 for boost)
+      const elementGain = ctx.createGain();
+      elementGain.gain.value = 1;
+      source.connect(elementGain);
+      elementGain.connect(soundboardBus);
 
       connectedElements.current.add(audio);
+      return elementGain;
     },
     [ensureContext],
   );

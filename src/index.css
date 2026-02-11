@@ -175,3 +175,11 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.7; }
 }
+
+/* Red slider variant for volume boost above 100% */
+.slider-danger span[data-orientation="horizontal"] > span {
+  background-color: hsl(0 84% 60%); /* red-500 */
+}
+.slider-danger span[role="slider"] {
+  border-color: hsl(0 84% 60%);
+}
