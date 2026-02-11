@@ -109,10 +109,16 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
     }
 
     const source = ctx.createMediaStreamSource(stream);
-    const channelCount = source.channelCount || 1;
 
-    // Split into channels (use 2 outputs even for mono — splitter will duplicate)
-    const splitter = ctx.createChannelSplitter(Math.max(2, channelCount));
+    // Force stereo before splitting — ChannelSplitter uses 'discrete'
+    // interpretation so it won't upmix mono. This GainNode upmixes mono
+    // sources to both L and R using 'speakers' interpretation.
+    const stereoUpMix = ctx.createGain();
+    stereoUpMix.channelCount = 2;
+    stereoUpMix.channelCountMode = 'explicit';
+    stereoUpMix.channelInterpretation = 'speakers';
+
+    const splitter = ctx.createChannelSplitter(2);
 
     const leftAnalyser = ctx.createAnalyser();
     leftAnalyser.fftSize = 2048;
@@ -122,10 +128,10 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
     rightAnalyser.fftSize = 2048;
     rightAnalyser.smoothingTimeConstant = 0.3;
 
-    source.connect(splitter);
+    source.connect(stereoUpMix);
+    stereoUpMix.connect(splitter);
     splitter.connect(leftAnalyser, 0);
-    // For mono sources, channel 1 may not exist — connect channel 0 to both
-    splitter.connect(rightAnalyser, channelCount >= 2 ? 1 : 0);
+    splitter.connect(rightAnalyser, 1);
 
     contextRef.current = ctx;
     leftAnalyserRef.current = leftAnalyser;
@@ -136,6 +142,7 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
     return () => {
       cancelAnimationFrame(rafRef.current);
       source.disconnect();
+      stereoUpMix.disconnect();
       splitter.disconnect();
       leftAnalyser.disconnect();
       rightAnalyser.disconnect();
