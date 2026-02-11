@@ -100,24 +100,30 @@ const Receiver = () => {
           Receiver
         </h1>
 
-        {/* Room join */}
+        {/* Not joined — off-air message + room ID input */}
         {!joined && (
-          <div className="panel">
-            <div className="panel-header">Join Room</div>
-            <div className="flex gap-2">
-              <input
-                value={roomInput}
-                onChange={(e) => setRoomInput(e.target.value)}
-                placeholder="Enter Room ID"
-                className="flex-1 bg-input border border-border rounded-md px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-              <button
-                onClick={handleJoin}
-                disabled={!signaling.connected}
-                className="bg-primary text-primary-foreground rounded-md px-6 py-2 text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
-              >
-                Join
-              </button>
+          <div className="panel text-center py-10 space-y-5">
+            <div>
+              <Radio className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
+              <p className="text-sm text-muted-foreground">This broadcast isn't on air right now</p>
+            </div>
+            <div className="max-w-sm mx-auto">
+              <p className="text-xs text-muted-foreground/60 mb-2">Have a Room ID? Paste it below to tune in.</p>
+              <div className="flex gap-2">
+                <input
+                  value={roomInput}
+                  onChange={(e) => setRoomInput(e.target.value)}
+                  placeholder="Room ID"
+                  className="flex-1 bg-input border border-border rounded-md px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+                <button
+                  onClick={handleJoin}
+                  disabled={!signaling.connected}
+                  className="bg-primary text-primary-foreground rounded-md px-6 py-2 text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+                >
+                  Join
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -165,14 +171,6 @@ const Receiver = () => {
           />
           <EventLog entries={logs} />
         </div>
-
-        {!joined && !signaling.connected && (
-          <div className="panel text-center py-12">
-            <Radio className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground">This broadcast isn't on air right now</p>
-            <p className="text-xs text-muted-foreground/60 mt-1">Check back later or enter a room ID above</p>
-          </div>
-        )}
       </div>
     </div>
   );

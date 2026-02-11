@@ -9,7 +9,7 @@ export class RoomManager {
   }
 
   create() {
-    const roomId = crypto.randomBytes(16).toString('hex');
+    const roomId = crypto.randomBytes(4).toString('hex').slice(0, 7);
     this.rooms.set(roomId, {
       roomId,
       broadcaster: null,
