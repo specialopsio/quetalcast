@@ -211,7 +211,7 @@ const Broadcaster = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-[100dvh] bg-background flex flex-col">
       <StatusBar status={webrtc.status} roomId={webrtc.roomId} />
 
       <div className="flex-1 p-4 max-w-4xl mx-auto w-full space-y-4">

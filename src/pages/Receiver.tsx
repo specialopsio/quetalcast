@@ -92,7 +92,7 @@ const Receiver = () => {
   }, [webrtc.remoteStream]);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-[100dvh] bg-background flex flex-col">
       <StatusBar status={webrtc.status} roomId={roomInput || null} />
 
       <div className="flex-1 p-4 max-w-4xl mx-auto w-full space-y-4">
@@ -101,8 +101,8 @@ const Receiver = () => {
           Receiver
         </h1>
 
-        {/* Not joined — off-air message + room ID input */}
-        {!joined && (
+        {/* Off-air / not joined / error — show message + room ID input */}
+        {(!joined || (joined && !webrtc.remoteStream && webrtc.status === 'error')) && (
           <div className="panel text-center py-10 space-y-5">
             <div>
               <Radio className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
@@ -141,8 +141,8 @@ const Receiver = () => {
           </button>
         )}
 
-        {/* Waiting state */}
-        {joined && !webrtc.remoteStream && (
+        {/* Waiting state — only when joined and actively connecting (not errored) */}
+        {joined && !webrtc.remoteStream && webrtc.status !== 'error' && (
           <div className="panel text-center py-8">
             <div className="text-muted-foreground text-sm">Waiting for broadcaster…</div>
             <div className="text-xs text-muted-foreground/60 mt-1 font-mono">
