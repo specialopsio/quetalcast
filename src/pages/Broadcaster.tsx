@@ -782,7 +782,11 @@ const Broadcaster = () => {
             </div>
 
             {/* Now Playing — with Deezer autocomplete */}
-            <NowPlayingInput value={nowPlaying} onChange={handleNowPlayingChange} />
+            <NowPlayingInput
+              value={nowPlaying}
+              onChange={handleNowPlayingChange}
+              onCommit={(text) => signaling.send({ type: 'add-track', text })}
+            />
           </div>
         )}
 

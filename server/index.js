@@ -530,24 +530,11 @@ wss.on('connection', (ws, req) => {
       }
 
       case 'metadata': {
+        // Live metadata update — updates the "now playing" display for receivers
+        // Does NOT add to track list (that's handled by 'add-track')
         if (!clientRoom || clientRole !== 'broadcaster') break;
         const metaText = typeof msg.text === 'string' ? msg.text.slice(0, 200) : '';
-        const prevMeta = rooms.getMetadata(clientRoom);
         rooms.setMetadata(clientRoom, metaText);
-
-        // Add to track list if the text changed and is non-empty
-        if (metaText && metaText !== prevMeta) {
-          rooms.addTrack(clientRoom, metaText);
-          // Broadcast updated track list to all receivers
-          const trackListMsg = JSON.stringify({ type: 'track-list', tracks: rooms.getTrackList(clientRoom) });
-          const tlReceiverIds = rooms.getReceiverIds(clientRoom);
-          for (const rid of tlReceiverIds) {
-            const rws = rooms.getReceiver(clientRoom, rid);
-            if (rws) rws.send(trackListMsg);
-          }
-          // Also send to broadcaster so they get the server timestamp
-          ws.send(trackListMsg);
-        }
 
         // Broadcast metadata to all receivers
         const metaMsg = JSON.stringify({ type: 'metadata', text: metaText });
@@ -556,16 +543,47 @@ wss.on('connection', (ws, req) => {
           const rws = rooms.getReceiver(clientRoom, rid);
           if (rws) rws.send(metaMsg);
         }
+        break;
+      }
+
+      case 'add-track': {
+        // Explicit track commit — adds to track list + pushes integration metadata
+        if (!clientRoom || clientRole !== 'broadcaster') break;
+        const trackText = typeof msg.text === 'string' ? msg.text.slice(0, 200) : '';
+        if (!trackText) break;
+
+        // Avoid duplicate if the last track is the same title
+        const existingTracks = rooms.getTrackList(clientRoom);
+        if (existingTracks.length > 0 && existingTracks[0].title === trackText) break;
+
+        rooms.addTrack(clientRoom, trackText);
+        // Also update metadata to match the committed track
+        rooms.setMetadata(clientRoom, trackText);
+
+        // Broadcast updated track list to all receivers + broadcaster
+        const trackListMsg = JSON.stringify({ type: 'track-list', tracks: rooms.getTrackList(clientRoom) });
+        const tlReceiverIds = rooms.getReceiverIds(clientRoom);
+        for (const rid of tlReceiverIds) {
+          const rws = rooms.getReceiver(clientRoom, rid);
+          if (rws) rws.send(trackListMsg);
+        }
+        ws.send(trackListMsg);
+
+        // Broadcast metadata to all receivers
+        const trackMetaMsg = JSON.stringify({ type: 'metadata', text: trackText });
+        const trackMetaReceiverIds = rooms.getReceiverIds(clientRoom);
+        for (const rid of trackMetaReceiverIds) {
+          const rws = rooms.getReceiver(clientRoom, rid);
+          if (rws) rws.send(trackMetaMsg);
+        }
 
         // Push metadata to integration stream if active
-        if (metaText) {
-          const integrationInfo = rooms.getIntegrationInfo(clientRoom);
-          if (integrationInfo) {
-            updateStreamMetadata(integrationInfo.type, integrationInfo.credentials, metaText, logger)
-              .then((ok) => {
-                if (ok) logger.debug({ roomId: clientRoom.slice(0, 8) }, 'Integration metadata updated');
-              });
-          }
+        const integrationInfo = rooms.getIntegrationInfo(clientRoom);
+        if (integrationInfo) {
+          updateStreamMetadata(integrationInfo.type, integrationInfo.credentials, trackText, logger)
+            .then((ok) => {
+              if (ok) logger.debug({ roomId: clientRoom.slice(0, 8) }, 'Integration metadata updated');
+            });
         }
         break;
       }

@@ -12,9 +12,11 @@ interface DeezerResult {
 interface NowPlayingInputProps {
   value: string;
   onChange: (value: string) => void;
+  /** Called when the user commits a track (Enter, blur, or Deezer selection) */
+  onCommit: (value: string) => void;
 }
 
-export function NowPlayingInput({ value, onChange }: NowPlayingInputProps) {
+export function NowPlayingInput({ value, onChange, onCommit }: NowPlayingInputProps) {
   const [query, setQuery] = useState(value);
   const [results, setResults] = useState<DeezerResult[]>([]);
   const [open, setOpen] = useState(false);
@@ -22,10 +24,12 @@ export function NowPlayingInput({ value, onChange }: NowPlayingInputProps) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const lastCommittedRef = useRef(value);
 
   // Keep local query in sync with external value changes (e.g. reset on off-air)
   useEffect(() => {
     setQuery(value);
+    lastCommittedRef.current = value;
   }, [value]);
 
   const searchDeezer = useCallback(async (q: string) => {
@@ -48,9 +52,17 @@ export function NowPlayingInput({ value, onChange }: NowPlayingInputProps) {
     }
   }, []);
 
+  const commitTrack = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (trimmed && trimmed !== lastCommittedRef.current) {
+      lastCommittedRef.current = trimmed;
+      onCommit(trimmed);
+    }
+  }, [onCommit]);
+
   const handleInput = (val: string) => {
     setQuery(val);
-    // Immediately send the typed value as metadata
+    // Live metadata update for receivers (typing preview)
     onChange(val);
     // Debounce the Deezer search
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -61,17 +73,27 @@ export function NowPlayingInput({ value, onChange }: NowPlayingInputProps) {
     const text = `${result.artist} — ${result.title}`;
     setQuery(text);
     onChange(text);
+    commitTrack(text);
     setOpen(false);
     setResults([]);
-    inputRef.current?.blur();
   };
 
   const handleClear = () => {
     setQuery('');
     onChange('');
+    lastCommittedRef.current = '';
     setResults([]);
     setOpen(false);
     inputRef.current?.focus();
+  };
+
+  const handleBlur = () => {
+    // Small delay to allow dropdown clicks to register before closing
+    setTimeout(() => {
+      if (query.trim()) {
+        commitTrack(query);
+      }
+    }, 200);
   };
 
   // Close dropdown when clicking outside
@@ -85,9 +107,16 @@ export function NowPlayingInput({ value, onChange }: NowPlayingInputProps) {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // Close on Escape
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
+      setOpen(false);
+      inputRef.current?.blur();
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (query.trim()) {
+        commitTrack(query);
+      }
       setOpen(false);
       inputRef.current?.blur();
     }
@@ -108,6 +137,7 @@ export function NowPlayingInput({ value, onChange }: NowPlayingInputProps) {
             value={query}
             onChange={(e) => handleInput(e.target.value)}
             onFocus={() => { if (results.length > 0) setOpen(true); }}
+            onBlur={handleBlur}
             onKeyDown={handleKeyDown}
             placeholder="Search artist or song…"
             maxLength={200}
