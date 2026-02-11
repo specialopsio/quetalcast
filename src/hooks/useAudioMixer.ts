@@ -20,7 +20,7 @@ export interface UseAudioMixerReturn {
  *   micSource → micGain → broadcastBus
  *   soundboardBus → sbToBroadcastGain → broadcastBus
  *   soundboardBus → sbLocalGain → ctx.destination
- *   broadcastBus → limiter → dest (→ mixedStream → WebRTC)
+ *   broadcastBus → limiter → clipper → dest (→ mixedStream → WebRTC)
  *   broadcastBus → listenGain → ctx.destination
  *
  * Gain state table:
@@ -44,9 +44,22 @@ export function useAudioMixer(): UseAudioMixerReturn {
   const sbLocalGainRef = useRef<GainNode | null>(null);
   const listenGainRef = useRef<GainNode | null>(null);
   const limiterRef = useRef<DynamicsCompressorNode | null>(null);
+  const clipperRef = useRef<WaveShaperNode | null>(null);
 
   // Track current mic volume for mute/unmute restore
   const micVolumeRef = useRef(1);
+
+  /** Build a hard-clip transfer curve that caps amplitude at the given dBFS threshold */
+  const buildClipCurve = useCallback((thresholdDb: number): Float32Array => {
+    const samples = 8192;
+    const curve = new Float32Array(samples);
+    const ceiling = thresholdDb >= 0 ? 1.0 : Math.pow(10, thresholdDb / 20);
+    for (let i = 0; i < samples; i++) {
+      const x = (2 * i) / (samples - 1) - 1; // -1 to 1
+      curve[i] = Math.max(-ceiling, Math.min(ceiling, x));
+    }
+    return curve;
+  }, []);
 
   // Lazily initialise the AudioContext + full gain node graph
   const ensureContext = useCallback(() => {
@@ -82,13 +95,18 @@ export function useAudioMixer(): UseAudioMixerReturn {
     sbLocalGain.gain.value = 1;
     listenGain.gain.value = 0; // listen off by default
 
-    // Output limiter (brickwall style)
+    // Output limiter: compressor (smooth gain reduction) + clipper (hard ceiling)
     const limiter = ctx.createDynamicsCompressor();
     limiter.threshold.value = 0;   // default: limit at 0 dBFS
-    limiter.knee.value = 0;        // hard knee for brickwall
+    limiter.knee.value = 0;        // hard knee
     limiter.ratio.value = 20;      // aggressive ratio
-    limiter.attack.value = 0.001;  // 1ms attack
+    limiter.attack.value = 0;      // fastest possible attack
     limiter.release.value = 0.05;  // 50ms release
+
+    // Hard clipper — guarantees nothing exceeds the threshold
+    const clipper = ctx.createWaveShaper();
+    clipper.curve = buildClipCurve(0);
+    clipper.oversample = '4x'; // reduce aliasing from clipping
 
     // Wire the graph
     // micGain → broadcastBus (connected when mic is added)
@@ -98,9 +116,10 @@ export function useAudioMixer(): UseAudioMixerReturn {
     // soundboardBus → sbLocalGain → ctx.destination
     soundboardBus.connect(sbLocalGain);
     sbLocalGain.connect(ctx.destination);
-    // broadcastBus → limiter → dest (WebRTC output)
+    // broadcastBus → limiter → clipper → dest (WebRTC output)
     broadcastBus.connect(limiter);
-    limiter.connect(dest);
+    limiter.connect(clipper);
+    clipper.connect(dest);
     // broadcastBus → listenGain → ctx.destination
     broadcastBus.connect(listenGain);
     listenGain.connect(ctx.destination);
@@ -115,6 +134,7 @@ export function useAudioMixer(): UseAudioMixerReturn {
     sbLocalGainRef.current = sbLocalGain;
     listenGainRef.current = listenGain;
     limiterRef.current = limiter;
+    clipperRef.current = clipper;
 
     setMixedStream(dest.stream);
 
@@ -222,7 +242,10 @@ export function useAudioMixer(): UseAudioMixerReturn {
     if (limiterRef.current) {
       limiterRef.current.threshold.value = db;
     }
-  }, []);
+    if (clipperRef.current) {
+      clipperRef.current.curve = buildClipCurve(db);
+    }
+  }, [buildClipCurve]);
 
   // Cleanup on unmount
   useEffect(() => {
