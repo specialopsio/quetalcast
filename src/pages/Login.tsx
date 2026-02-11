@@ -26,7 +26,7 @@ const Login = () => {
           <div className="inline-flex items-center gap-2 mb-4">
             <Radio className="h-8 w-8 text-primary" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Audio Bridge</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">QueTal Cast</h1>
           <p className="text-sm text-muted-foreground mt-1">WebRTC peer-to-peer audio</p>
         </div>
 

@@ -1,5 +1,5 @@
 {
-  "name": "webrtc-audio-bridge-server",
+  "name": "quetal-cast-server",
   "version": "1.0.0",
   "type": "module",
   "scripts": {

@@ -24,7 +24,7 @@ export function StatusBar({ status, roomId }: StatusBarProps) {
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2 text-sm font-mono font-semibold text-foreground tracking-tight">
           <Radio className="h-4 w-4 text-primary" />
-          <span>AUDIO BRIDGE</span>
+          <span>QUETAL CAST</span>
         </div>
         {roomId && (
           <span className="text-xs font-mono text-muted-foreground">
