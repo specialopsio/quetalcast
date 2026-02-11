@@ -181,7 +181,7 @@ export function EffectsBoard({ effects, onToggle, onUpdate }: EffectsBoardProps)
 
   return (
     <>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
         {EFFECT_ORDER.map((effectName) => {
           const effect = effects[effectName];
           const Icon = EFFECT_ICONS[effectName];

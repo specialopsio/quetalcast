@@ -31,7 +31,7 @@ const EMPTY_PAD: PadState = {
   isPlaying: false,
 };
 
-const PAD_COUNT = 10;
+const PAD_COUNT = 8;
 
 interface SoundBoardProps {
   connectElement: (audio: HTMLAudioElement) => GainNode | null;
@@ -166,7 +166,7 @@ export function SoundBoard({ connectElement }: SoundBoardProps) {
 
   return (
     <>
-      <div className="grid grid-cols-5 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {pads.map((pad, i) => (
           <div key={i} className="relative aspect-square">
             {pad.file ? (
