@@ -8,7 +8,7 @@ import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
-import { Copy, Mic, MicOff, Radio, Headphones, Clock, Music, Sparkles, Zap, Plug2 } from 'lucide-react';
+import { Copy, Mic, MicOff, Radio, Headphones, Clock, Music, Sparkles, Zap, Plug2, Circle, Square } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import {
   Select,
@@ -26,6 +26,7 @@ import { Footer } from '@/components/Footer';
 import { IntegrationsSheet } from '@/components/IntegrationsSheet';
 import { useIntegrationStream } from '@/hooks/useIntegrationStream';
 import { getIntegration, type IntegrationConfig } from '@/lib/integrations';
+import { useRecorder } from '@/hooks/useRecorder';
 
 const WS_URL = import.meta.env.VITE_WS_URL || (
   window.location.protocol === 'https:'
@@ -55,6 +56,7 @@ const Broadcaster = () => {
   const [selectedIntegration, setSelectedIntegration] = useState<IntegrationConfig | null>(null);
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
   const integrationStream = useIntegrationStream();
+  const recorder = useRecorder();
 
   const addLog = useCallback((msg: string, level: LogEntry['level'] = 'info') => {
     setLogs((prev) => [...prev.slice(-100), createLogEntry(msg, level)]);
@@ -225,6 +227,12 @@ const Broadcaster = () => {
   }, [integrationStream.error, addLog]);
 
   const handleEndBroadcast = () => {
+    // Stop recording if active
+    if (recorder.recording) {
+      recorder.stopRecording();
+      addLog('Recording stopped — saving MP3');
+    }
+
     micEffects.removeFromChain();
     localStream?.getTracks().forEach((t) => t.stop());
     setLocalStream(null);
@@ -291,6 +299,26 @@ const Broadcaster = () => {
       low: 'Low bandwidth (32 kbps mono)',
     };
     addLog(labels[q]);
+  };
+
+  const handleToggleRecording = async () => {
+    if (recorder.recording) {
+      recorder.stopRecording();
+      addLog('Recording stopped — saving MP3');
+    } else if (mixer.mixedStream) {
+      try {
+        await recorder.startRecording(mixer.mixedStream);
+        addLog('Recording started (320 kbps MP3)');
+      } catch (e) {
+        addLog('Failed to start recording', 'error');
+      }
+    }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const handleLimiterChange = (value: string) => {
@@ -564,6 +592,41 @@ const Broadcaster = () => {
                   <SelectItem value="low" className="text-xs font-mono">Low</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Recording */}
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+              <div className="flex flex-col">
+                <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <Circle className={`h-3 w-3 ${recorder.recording ? 'text-red-500 fill-red-500 animate-pulse' : ''}`} />
+                  Record
+                </span>
+                <span className="text-[10px] text-muted-foreground">
+                  {recorder.recording
+                    ? `Recording — ${formatTime(recorder.elapsed)} · ${formatFileSize(recorder.encodedBytes)}`
+                    : 'Save broadcast as 320 kbps MP3'}
+                </span>
+              </div>
+              <button
+                onClick={handleToggleRecording}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  recorder.recording
+                    ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30'
+                    : 'bg-secondary text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {recorder.recording ? (
+                  <>
+                    <Square className="h-3 w-3 fill-current" />
+                    Stop
+                  </>
+                ) : (
+                  <>
+                    <Circle className="h-3 w-3 fill-current" />
+                    Record
+                  </>
+                )}
+              </button>
             </div>
           </div>
         )}
