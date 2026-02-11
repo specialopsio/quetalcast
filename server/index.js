@@ -16,8 +16,11 @@ const REQUIRE_TLS = process.env.REQUIRE_TLS === 'true';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-secret-change-in-production';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 
-// TURN server credentials (optional — falls back to STUN-only when unset)
-const TURN_URL = process.env.TURN_URL || '';          // e.g. turn:global.relay.metered.ca:443?transport=tcp
+// TURN — option A: Metered.ca dynamic credentials (recommended)
+const METERED_APP_NAME = process.env.METERED_APP_NAME || '';   // e.g. quetalcast.metered.live
+const METERED_API_KEY = process.env.METERED_API_KEY || '';
+// TURN — option B: Static credentials (any TURN provider)
+const TURN_URL = process.env.TURN_URL || '';
 const TURN_USERNAME = process.env.TURN_USERNAME || '';
 const TURN_CREDENTIAL = process.env.TURN_CREDENTIAL || '';
 
@@ -107,21 +110,48 @@ app.get('/api/session', (req, res) => {
 });
 
 // ICE server configuration — returns STUN + TURN servers for WebRTC
-app.get('/api/ice-config', (req, res) => {
+// Supports Metered.ca dynamic credentials or static TURN credentials.
+// Caches Metered response for 5 minutes to avoid hammering their API.
+let meteredCache = { iceServers: null, expiresAt: 0 };
+
+app.get('/api/ice-config', async (req, res) => {
+  // Option A: Metered.ca — fetch temporary TURN credentials from their API
+  if (METERED_APP_NAME && METERED_API_KEY) {
+    const now = Date.now();
+    if (meteredCache.iceServers && now < meteredCache.expiresAt) {
+      return res.json({ iceServers: meteredCache.iceServers });
+    }
+
+    try {
+      const url = `https://${METERED_APP_NAME}/api/v1/turn/credentials?apiKey=${METERED_API_KEY}`;
+      const resp = await fetch(url);
+      if (resp.ok) {
+        const servers = await resp.json();
+        meteredCache = { iceServers: servers, expiresAt: now + 5 * 60 * 1000 };
+        logger.info('ICE config: fetched TURN credentials from Metered');
+        return res.json({ iceServers: servers });
+      }
+      logger.warn({ status: resp.status }, 'Metered API returned error');
+    } catch (err) {
+      logger.warn({ error: err.message }, 'Failed to fetch Metered TURN credentials');
+    }
+    // Fall through to static or STUN-only on error
+  }
+
+  // Option B: Static TURN credentials from env vars
   const iceServers = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
   ];
 
   if (TURN_URL && TURN_USERNAME && TURN_CREDENTIAL) {
-    // Support comma-separated TURN URLs (e.g. multiple protocols/ports)
     const turnUrls = TURN_URL.split(',').map(u => u.trim()).filter(Boolean);
     iceServers.push({
       urls: turnUrls,
       username: TURN_USERNAME,
       credential: TURN_CREDENTIAL,
     });
-    logger.debug('ICE config: STUN + TURN');
+    logger.debug('ICE config: STUN + static TURN');
   } else {
     logger.debug('ICE config: STUN only (no TURN configured)');
   }
