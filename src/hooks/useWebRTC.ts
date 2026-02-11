@@ -186,13 +186,23 @@ export function useWebRTC(
   // ICE config (fetched from server, includes TURN credentials when configured)
   const rtcConfigRef = useRef<RTCConfiguration>(DEFAULT_RTC_CONFIG);
   const iceConfigFetchedRef = useRef(false);
+  const iceConfigPromiseRef = useRef<Promise<RTCConfiguration> | null>(null);
 
-  useEffect(() => {
-    fetchIceConfig().then((cfg) => {
-      rtcConfigRef.current = cfg;
-      iceConfigFetchedRef.current = true;
-    });
+  /** Ensure ICE config is fetched exactly once; returns the cached promise */
+  const ensureIceConfig = useCallback(async (): Promise<RTCConfiguration> => {
+    if (iceConfigFetchedRef.current) return rtcConfigRef.current;
+    if (!iceConfigPromiseRef.current) {
+      iceConfigPromiseRef.current = fetchIceConfig().then((cfg) => {
+        rtcConfigRef.current = cfg;
+        iceConfigFetchedRef.current = true;
+        return cfg;
+      });
+    }
+    return iceConfigPromiseRef.current;
   }, []);
+
+  // Kick off fetch eagerly (but PCs will also await it before creation)
+  useEffect(() => { ensureIceConfig(); }, [ensureIceConfig]);
 
   // Audio quality
   const audioQualityModeRef = useRef<AudioQuality>('auto');     // user's chosen mode
@@ -279,13 +289,14 @@ export function useWebRTC(
 
   // --- Broadcaster: create a PC for a specific receiver ---
   const createPCForReceiver = useCallback(
-    (receiverId: string, stream: MediaStream) => {
+    async (receiverId: string, stream: MediaStream) => {
+      const config = await ensureIceConfig();
       console.log(`[RTC:B] Creating PC for receiver ${receiverId}`, {
-        iceServers: rtcConfigRef.current.iceServers?.length,
+        iceServers: config.iceServers?.length,
         tracks: stream.getTracks().map(t => `${t.kind}:${t.readyState}`),
       });
 
-      const pc = new RTCPeerConnection(rtcConfigRef.current);
+      const pc = new RTCPeerConnection(config);
       pcsRef.current.set(receiverId, pc);
 
       // Add all tracks from the broadcast stream
@@ -329,35 +340,34 @@ export function useWebRTC(
       };
 
       // Create offer with Opus quality params baked in
-      (async () => {
-        try {
-          const offer = await pc.createOffer();
-          const quality = effectiveQualityRef.current;
-          const mungedSdp = mungeOpusSdp(offer.sdp!, quality);
-          const mungedOffer = { ...offer, sdp: mungedSdp };
-          await pc.setLocalDescription(mungedOffer);
-          console.log(`[RTC:B] Offer created & sent to receiver ${receiverId}`);
-          signaling.send({ type: 'offer', sdp: mungedOffer, receiverId });
+      try {
+        const offer = await pc.createOffer();
+        const quality = effectiveQualityRef.current;
+        const mungedSdp = mungeOpusSdp(offer.sdp!, quality);
+        const mungedOffer = { ...offer, sdp: mungedSdp };
+        await pc.setLocalDescription(mungedOffer);
+        console.log(`[RTC:B] Offer created & sent to receiver ${receiverId}`);
+        signaling.send({ type: 'offer', sdp: mungedOffer, receiverId });
 
-          applyBitrateToSenders(pc, quality);
-        } catch (e) {
-          console.error('[RTC:B] Failed to create offer for receiver:', receiverId, e);
-        }
-      })();
+        applyBitrateToSenders(pc, quality);
+      } catch (e) {
+        console.error('[RTC:B] Failed to create offer for receiver:', receiverId, e);
+      }
 
       return pc;
     },
-    [signaling],
+    [signaling, ensureIceConfig],
   );
 
   // --- Receiver: create a single PC ---
-  const createReceiverPC = useCallback(() => {
+  const createReceiverPC = useCallback(async () => {
+    const config = await ensureIceConfig();
     console.log('[RTC:R] Creating receiver PC', {
-      iceServers: rtcConfigRef.current.iceServers?.length,
+      iceServers: config.iceServers?.length,
       iceConfigFetched: iceConfigFetchedRef.current,
     });
 
-    const pc = new RTCPeerConnection(rtcConfigRef.current);
+    const pc = new RTCPeerConnection(config);
     pcRef.current = pc;
 
     pc.onconnectionstatechange = () => {
@@ -435,7 +445,8 @@ export function useWebRTC(
         case 'peer-joined': {
           console.log(`[SIG:${role[0].toUpperCase()}] peer-joined: receiverId=${msg.receiverId}, broadcastStream=${!!broadcastStreamRef.current}`);
           if (role === 'broadcaster' && msg.receiverId && broadcastStreamRef.current) {
-            createPCForReceiver(msg.receiverId as string, broadcastStreamRef.current);
+            // Await ICE config + PC creation (async)
+            await createPCForReceiver(msg.receiverId as string, broadcastStreamRef.current);
           }
           setPeerConnected(true);
           break;
@@ -575,10 +586,10 @@ export function useWebRTC(
   );
 
   const joinAsReceiver = useCallback(
-    (joinRoomId: string) => {
+    async (joinRoomId: string) => {
       console.log(`[RTC:R] Joining room ${joinRoomId} as receiver, iceConfigFetched: ${iceConfigFetchedRef.current}`);
       setStatus('connecting');
-      createReceiverPC();
+      await createReceiverPC();
       signaling.send({ type: 'join-room', roomId: joinRoomId, role: 'receiver' });
     },
     [createReceiverPC, signaling],
