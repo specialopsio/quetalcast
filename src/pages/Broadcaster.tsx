@@ -8,7 +8,7 @@ import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
-import { Copy, Mic, MicOff, Radio, Headphones, Clock } from 'lucide-react';
+import { Copy, Mic, MicOff, Radio, Headphones, Clock, Music, Sparkles } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import {
   Select,
@@ -430,10 +430,17 @@ const Broadcaster = () => {
         {/* Soundboard / Effects */}
         <div className="panel">
           <Tabs defaultValue="sounds">
-            <TabsList className="w-full mb-3">
-              <TabsTrigger value="sounds" className="flex-1">Sounds</TabsTrigger>
-              <TabsTrigger value="effects" className="flex-1">Effects</TabsTrigger>
-            </TabsList>
+            <div className="flex items-center justify-between mb-3">
+              <div className="panel-header !mb-0">Soundboard</div>
+              <TabsList>
+                <TabsTrigger value="sounds" className="px-2.5">
+                  <Music className="h-3.5 w-3.5" />
+                </TabsTrigger>
+                <TabsTrigger value="effects" className="px-2.5">
+                  <Sparkles className="h-3.5 w-3.5" />
+                </TabsTrigger>
+              </TabsList>
+            </div>
             <TabsContent value="sounds">
               <SoundBoard connectElement={mixer.connectElement} />
             </TabsContent>
