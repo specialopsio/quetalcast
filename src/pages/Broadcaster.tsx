@@ -695,9 +695,8 @@ const Broadcaster = () => {
           </button>
         </div>
 
-        {/* Mixer controls — visible when on air */}
-        {isOnAir && (
-          <div className="panel !p-0">
+        {/* Mixer controls — visible pre-broadcast for dial-in and level check */}
+        <div className="panel !p-0">
             <Accordion type="single" collapsible defaultValue="mixer">
               <AccordionItem value="mixer" className="border-b-0">
                 <AccordionTrigger className="px-4 py-3 hover:no-underline">
@@ -723,10 +722,13 @@ const Broadcaster = () => {
                 </span>
               </div>
 
-              {/* Mute mic */}
+              {/* Mute mic — only when on air */}
               <button
                 onClick={handleToggleMute}
+                disabled={!isOnAir}
                 className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  !isOnAir ? 'opacity-50 cursor-not-allowed' : ''
+                } ${
                   micMuted
                     ? 'bg-destructive/20 text-destructive'
                     : 'bg-secondary text-muted-foreground hover:text-foreground'
@@ -737,10 +739,13 @@ const Broadcaster = () => {
                 Mute
               </button>
 
-              {/* Listen */}
+              {/* Listen — only when on air */}
               <button
                 onClick={handleToggleListen}
+                disabled={!isOnAir}
                 className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  !isOnAir ? 'opacity-50 cursor-not-allowed' : ''
+                } ${
                   listening
                     ? 'bg-primary/20 text-primary'
                     : 'bg-secondary text-muted-foreground hover:text-foreground'
@@ -751,10 +756,13 @@ const Broadcaster = () => {
                 Listen
               </button>
 
-              {/* Cue */}
+              {/* Cue — only when on air */}
               <button
                 onClick={handleToggleCue}
+                disabled={!isOnAir}
                 className={`shrink-0 px-3 py-1.5 rounded-md text-xs font-mono font-bold uppercase tracking-wider transition-all ${
+                  !isOnAir ? 'opacity-50 cursor-not-allowed' : ''
+                } ${
                   cueMode
                     ? 'bg-accent/20 text-accent'
                     : 'bg-secondary text-muted-foreground hover:text-foreground'
@@ -782,11 +790,14 @@ const Broadcaster = () => {
 
             </div>
 
-            {/* System audio */}
+            {/* System audio — only when on air */}
             <div className="flex items-center gap-4 mt-3 pt-3 border-t border-border">
               <button
                 onClick={handleToggleSystemAudio}
+                disabled={!isOnAir}
                 className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  !isOnAir ? 'opacity-50 cursor-not-allowed' : ''
+                } ${
                   systemAudioActive
                     ? 'bg-primary/20 text-primary'
                     : 'bg-secondary text-muted-foreground hover:text-foreground'
@@ -874,7 +885,10 @@ const Broadcaster = () => {
               </div>
               <button
                 onClick={handleToggleRecording}
+                disabled={!isOnAir}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  !isOnAir ? 'opacity-50 cursor-not-allowed' : ''
+                } ${
                   recorder.recording
                     ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30'
                     : 'bg-secondary text-muted-foreground hover:text-foreground'
@@ -898,7 +912,6 @@ const Broadcaster = () => {
               </AccordionItem>
             </Accordion>
           </div>
-        )}
 
         {/* Track List — above soundboard, with Now Playing search; show when on air or has previous data */}
         {(isOnAir || trackList.length > 0) && (
