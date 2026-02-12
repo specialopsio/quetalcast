@@ -749,7 +749,7 @@ const Broadcaster = () => {
 
         {/* Mixer controls — visible when on air */}
         {isOnAir && (
-          <div className="panel !p-0 overflow-hidden">
+          <div className="panel !p-0">
             <Accordion type="single" collapsible defaultValue="mixer">
               <AccordionItem value="mixer" className="border-b-0">
                 <AccordionTrigger className="px-4 py-3 hover:no-underline">
