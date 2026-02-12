@@ -282,7 +282,7 @@ export function TrackList({ tracks, topContent, alwaysShow, roomId }: TrackListP
   return (
     <>
       <Collapsible open={open} onOpenChange={setOpen} className="panel">
-        <CollapsibleTrigger className="w-full flex items-center justify-between text-left hover:bg-secondary/30 rounded-md transition-colors -m-2 p-2">
+        <CollapsibleTrigger className="w-full flex items-center justify-between text-left hover:bg-secondary/30 rounded-md transition-colors cursor-pointer -m-2 p-2">
           <div className="panel-header flex items-center gap-1.5 !mb-0">
             <ListMusic className="h-3.5 w-3.5" />
             Track List
