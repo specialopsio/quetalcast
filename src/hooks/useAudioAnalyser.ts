@@ -50,6 +50,7 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
   const rafRef = useRef<number>(0);
   const monoMirrorRef = useRef(false);
   const monoDetectFramesRef = useRef(0);
+  const monoReleaseFramesRef = useRef(0);
 
   // Per-channel peak state
   const leftPeakRef = useRef(MIN_DB);
@@ -82,14 +83,31 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
 
     // Detect mono sources by observing a consistently silent right channel
     // while left is active. This avoids relying on browser-reported channelCount.
+    const leftActive = left.rmsDb > -55;
+    const rightSilent = right.rmsDb <= MIN_DB + 0.5;
+    const rightActive = right.rmsDb > -52;
+
     if (!monoMirrorRef.current) {
-      const leftActive = left.rmsDb > -55;
-      const rightSilent = right.rmsDb <= MIN_DB + 0.5;
       if (leftActive && rightSilent) {
         monoDetectFramesRef.current++;
-        if (monoDetectFramesRef.current >= 20) monoMirrorRef.current = true;
+        if (monoDetectFramesRef.current >= 20) {
+          monoMirrorRef.current = true;
+          monoReleaseFramesRef.current = 0;
+        }
       } else {
         monoDetectFramesRef.current = 0;
+      }
+    } else {
+      // If right channel consistently becomes active, exit mirror mode.
+      if (rightActive) {
+        monoReleaseFramesRef.current++;
+        if (monoReleaseFramesRef.current >= 8) {
+          monoMirrorRef.current = false;
+          monoDetectFramesRef.current = 0;
+          monoReleaseFramesRef.current = 0;
+        }
+      } else {
+        monoReleaseFramesRef.current = 0;
       }
     }
 
@@ -123,6 +141,7 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
     if (!stream || stream.getTracks().length === 0) {
       monoMirrorRef.current = false;
       monoDetectFramesRef.current = 0;
+      monoReleaseFramesRef.current = 0;
       setAnalysis(EMPTY_ANALYSIS);
       return;
     }
