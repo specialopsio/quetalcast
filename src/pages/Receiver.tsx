@@ -298,8 +298,8 @@ const Receiver = () => {
 
       <Footer />
 
-      {/* Chat FAB — visible when listening or in external stream room */}
-      <ChatPanel signaling={signaling} active={joined && (audioStarted || externalStream)} />
+      {/* Chat FAB — visible as soon as the receiver has joined a room */}
+      <ChatPanel signaling={signaling} active={joined} />
     </div>
   );
 };
