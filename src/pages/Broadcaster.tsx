@@ -979,6 +979,7 @@ const Broadcaster = () => {
                   toast.info('Go on air first to add tracks');
                 }
               }}
+              disabled={!isOnAir}
             />
           }
         />

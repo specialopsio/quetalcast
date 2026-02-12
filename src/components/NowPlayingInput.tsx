@@ -43,9 +43,11 @@ interface NowPlayingInputProps {
   onChange: (meta: NowPlayingMeta) => void;
   /** Called when the user commits a track (Enter or Deezer selection) */
   onCommit: (meta: TrackMeta) => void;
+  /** When true, input is disabled and click shows "Go on air first to add tracks" */
+  disabled?: boolean;
 }
 
-export function NowPlayingInput({ value, onChange, onCommit }: NowPlayingInputProps) {
+export function NowPlayingInput({ value, onChange, onCommit, disabled }: NowPlayingInputProps) {
   const [query, setQuery] = useState(value);
   const [results, setResults] = useState<DeezerResult[]>([]);
   const [open, setOpen] = useState(false);
@@ -211,14 +213,23 @@ export function NowPlayingInput({ value, onChange, onCommit }: NowPlayingInputPr
     }
   };
 
+  const handleDisabledClick = () => {
+    if (disabled) {
+      toast.info('Go on air first to add tracks');
+    }
+  };
+
   return (
-    <div className="flex items-center gap-3">
+    <div
+      className={`flex items-center gap-3 ${disabled ? 'cursor-not-allowed' : ''}`}
+      onClick={disabled ? handleDisabledClick : undefined}
+    >
       <span className="text-xs font-semibold text-foreground flex items-center gap-1.5 shrink-0">
         <Disc3 className="h-3 w-3" />
         Now Playing
       </span>
 
-      <div ref={containerRef} className="relative flex-1">
+      <div ref={containerRef} className={`relative flex-1 ${disabled ? 'pointer-events-none opacity-60' : ''}`}>
         <div className="relative flex items-center">
           {fetching ? (
             <Loader2 className="absolute left-2 h-3 w-3 text-primary animate-spin pointer-events-none" />
@@ -235,6 +246,7 @@ export function NowPlayingInput({ value, onChange, onCommit }: NowPlayingInputPr
             maxLength={200}
             disabled={fetching}
             className="w-full bg-input border border-border rounded-md pl-7 pr-7 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+            readOnly={disabled}
           />
           {query && !fetching && (
             <button
