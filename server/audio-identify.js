@@ -8,26 +8,40 @@ const ACOUSTID_API_KEY = process.env.ACOUSTID_API_KEY || '';
 const ACOUSTID_URL = 'https://api.acoustid.org/v2/lookup';
 
 /**
- * Run fpcalc on an audio file and return { fingerprint, duration }.
- * fpcalc uses FFmpeg internally to decode the audio (supports webm, ogg, wav, mp3, etc.).
+ * Convert an encoded audio file (webm, ogg, etc.) to WAV using ffmpeg.
+ * Returns the path to the output WAV file. Caller is responsible for cleanup.
  *
- * @param {Buffer} audioBuffer — encoded audio data (webm, ogg, wav, etc.)
- * @param {string} ext — file extension for the temp file (e.g. 'webm', 'ogg', 'wav')
+ * @param {string} inputPath — path to the input audio file
+ * @param {object} logger
+ * @returns {Promise<string>} — path to the output WAV file
+ */
+function convertToWav(inputPath, logger) {
+  const wavPath = inputPath.replace(/\.[^.]+$/, '.wav');
+  return new Promise((resolve, reject) => {
+    // -y: overwrite, -i: input, -ar 44100: standard sample rate,
+    // -ac 1: mono, -f wav: force WAV output
+    execFile('ffmpeg', [
+      '-y', '-i', inputPath,
+      '-ar', '44100', '-ac', '1', '-f', 'wav', wavPath,
+    ], { timeout: 30000 }, (err, _stdout, stderr) => {
+      if (err) {
+        logger?.warn({ stderr: stderr?.slice(0, 500), exitCode: err.code }, 'ffmpeg conversion failed');
+        return reject(new Error(`ffmpeg error: ${err.message}`));
+      }
+      resolve(wavPath);
+    });
+  });
+}
+
+/**
+ * Run fpcalc on a WAV file and return { fingerprint, duration }.
+ *
+ * @param {string} wavPath — path to a WAV file
  * @param {object} logger
  */
-function generateFingerprint(audioBuffer, ext, logger) {
-  return new Promise(async (resolve, reject) => {
-    const tmpPath = path.join(tmpdir(), `qc-fp-${crypto.randomBytes(4).toString('hex')}.${ext}`);
-    try {
-      await writeFile(tmpPath, audioBuffer);
-    } catch (err) {
-      return reject(new Error(`Failed to write temp audio file: ${err.message}`));
-    }
-
-    execFile('fpcalc', ['-json', tmpPath], { timeout: 30000 }, async (err, stdout, stderr) => {
-      // Clean up temp file
-      unlink(tmpPath).catch(() => {});
-
+function generateFingerprint(wavPath, logger) {
+  return new Promise((resolve, reject) => {
+    execFile('fpcalc', ['-json', wavPath], { timeout: 30000 }, (err, stdout, stderr) => {
       if (err) {
         if (err.code === 'ENOENT') {
           return reject(new Error('fpcalc not found — install Chromaprint (https://acoustid.org/chromaprint)'));
@@ -39,6 +53,7 @@ function generateFingerprint(audioBuffer, ext, logger) {
       try {
         const result = JSON.parse(stdout);
         if (!result.fingerprint || !result.duration) {
+          logger?.warn({ fpcalcOutput: stdout.slice(0, 500) }, 'fpcalc returned empty result');
           return reject(new Error('fpcalc returned empty fingerprint or duration'));
         }
         resolve({ fingerprint: result.fingerprint, duration: Math.round(result.duration) });
@@ -117,7 +132,7 @@ async function lookupAcoustID(fingerprint, duration, logger) {
 }
 
 /**
- * Full pipeline: encoded audio → fpcalc fingerprint → AcoustID lookup → { artist, title }
+ * Full pipeline: encoded audio → ffmpeg → WAV → fpcalc fingerprint → AcoustID lookup
  *
  * @param {Buffer} audioBuffer — encoded audio data (webm, ogg, wav, etc.)
  * @param {object} logger
@@ -126,12 +141,28 @@ async function lookupAcoustID(fingerprint, duration, logger) {
 export async function identifyAudio(audioBuffer, logger, format = 'webm') {
   // Sanitize the format to a safe file extension
   const ext = /^[a-z0-9]{1,10}$/.test(format) ? format : 'webm';
+  const id = crypto.randomBytes(4).toString('hex');
+  const inputPath = path.join(tmpdir(), `qc-fp-${id}.${ext}`);
+  let wavPath = null;
 
-  // Generate fingerprint — fpcalc decodes the audio via FFmpeg
-  const { fingerprint, duration } = await generateFingerprint(audioBuffer, ext, logger);
-  logger?.info({ duration, fpLength: fingerprint.length, audioBytes: audioBuffer.length, format: ext }, 'Fingerprint generated');
+  try {
+    // Write the encoded audio to a temp file
+    await writeFile(inputPath, audioBuffer);
+    logger?.info({ audioBytes: audioBuffer.length, format: ext }, 'Audio written to temp file');
 
-  // Look up on AcoustID
-  const match = await lookupAcoustID(fingerprint, duration, logger);
-  return match;
+    // Convert to WAV using ffmpeg (fpcalc on Alpine can't decode webm/opus directly)
+    wavPath = await convertToWav(inputPath, logger);
+
+    // Generate fingerprint from the WAV
+    const { fingerprint, duration } = await generateFingerprint(wavPath, logger);
+    logger?.info({ duration, fpLength: fingerprint.length }, 'Fingerprint generated');
+
+    // Look up on AcoustID
+    const match = await lookupAcoustID(fingerprint, duration, logger);
+    return match;
+  } finally {
+    // Clean up temp files
+    unlink(inputPath).catch(() => {});
+    if (wavPath) unlink(wavPath).catch(() => {});
+  }
 }
