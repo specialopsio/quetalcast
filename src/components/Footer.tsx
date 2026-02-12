@@ -94,7 +94,8 @@ export function Footer() {
               <section>
                 <h3 className="text-foreground font-semibold mb-1">Mixer Controls</h3>
                 <p>
-                  While on air, you'll see controls to manage your broadcast:
+                  While on air, you'll see a collapsible <strong className="text-foreground">Mixer Controls</strong> panel
+                  that you can expand or collapse by clicking the header. Inside you'll find:
                 </p>
                 <ul className="list-disc list-inside mt-1 space-y-1 pl-1">
                   <li>
@@ -123,6 +124,20 @@ export function Footer() {
                     or unpredictable audio.
                   </li>
                 </ul>
+              </section>
+
+              <section>
+                <h3 className="text-foreground font-semibold mb-1">System Audio</h3>
+                <p>
+                  Inside the mixer controls, click <strong className="text-foreground">System Audio</strong> to
+                  route desktop or application audio into your broadcast. Your browser will
+                  ask you to choose a screen or window to share — make sure to check
+                  <strong className="text-foreground"> "Share audio"</strong> in the dialog.
+                  The video portion is discarded; only the audio is captured. Once active, a
+                  volume slider lets you control the system audio level independently from
+                  your mic. Click <strong className="text-foreground">Stop System</strong> to
+                  disconnect, or use your browser's "Stop sharing" button.
+                </p>
               </section>
 
               <section>
@@ -249,6 +264,21 @@ export function Footer() {
               </section>
 
               <section>
+                <h3 className="text-foreground font-semibold mb-1">Auto-Identify</h3>
+                <p>
+                  Next to the Now Playing input, there's an <strong className="text-foreground">ear icon</strong> toggle.
+                  When enabled, the app periodically captures a snippet of your broadcast
+                  audio and sends it to the server for fingerprinting via AcoustID
+                  (Chromaprint). If a song is recognized, a toast notification appears with the
+                  option to <strong className="text-foreground">Add to track list</strong> — it
+                  automatically fetches full metadata from Deezer (artwork, album, year,
+                  duration, contributors, etc.). The icon pulses when active. Requires an
+                  AcoustID API key and <code className="text-foreground">fpcalc</code> installed
+                  on the server.
+                </p>
+              </section>
+
+              <section>
                 <h3 className="text-foreground font-semibold mb-1">Track List</h3>
                 <p>
                   Every time you set a new Now Playing value, it's added to a
@@ -256,6 +286,9 @@ export function Footer() {
                   current track is highlighted at the top with a spinning disc icon.
                   Receivers who join mid-broadcast will see the full history of
                   tracks played so far. Up to 100 tracks are stored per session.
+                  Click any track to view a detail modal with full metadata including
+                  artwork, album, duration, BPM, label, contributors, and more.
+                  You can also download the full track list as a CSV file.
                 </p>
               </section>
 
@@ -397,9 +430,12 @@ export function Footer() {
                 <h3 className="text-foreground font-semibold mb-1">Track List</h3>
                 <p>
                   A track list appears below the stats panel showing every track
-                  played during the broadcast. The current track is highlighted at
-                  the top. If you join mid-broadcast, you'll see the full history
-                  of tracks that have been played so far.
+                  played during the broadcast, with album artwork, duration, and
+                  release year. The current track is highlighted at the top. If you
+                  join mid-broadcast, you'll see the full history of tracks played
+                  so far. Click any track to view a detail modal with full metadata
+                  including artwork, album, BPM, label, contributors, and more.
+                  You can also download the track list as a CSV file.
                 </p>
               </section>
 

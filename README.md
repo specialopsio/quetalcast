@@ -11,11 +11,13 @@ Real-time audio broadcasting application built with WebRTC, React, and Node.js. 
 - **Stereo VU meter** — Calibrated dBFS metering with peak hold
 - **Output limiter** — Selectable ceiling (0 dB, -3 dB, -6 dB, -12 dB)
 - **Broadcast timer** — Elapsed time display while on air
-- **Mixer controls** — Mic volume, mute, listen mode, and cue mode
+- **Mixer controls** — Collapsible panel with mic volume, mute, listen mode, cue mode, and system audio routing
+- **System audio** — Route desktop or application audio into the broadcast via screen share audio capture, with independent volume control
 - **Live chat** — Bidirectional chat via floating action button (full-screen on mobile, floating panel on desktop). Users provide a display name before chatting. Rate-limited to 1 message per second, max 280 characters. Unread badge on FAB
 - **Listener count** — Real-time count of connected listeners displayed in the Stats panel during broadcast
 - **Now playing** — Broadcaster sets stream metadata with Deezer-powered autocomplete (artist + song search with album art). Visible to all listeners in real time. Metadata is also forwarded to external integration streams (Icecast/Shoutcast)
 - **Track list** — Chronological history of every track played during the broadcast. Visible to both broadcaster and receivers, with the current track highlighted. New receivers get the full history on join
+- **Auto-identify** — Automatic song identification using AcoustID audio fingerprinting (Chromaprint). Toggle the ear icon during broadcast to detect playing songs and add them to the track list with full Deezer metadata. Requires `fpcalc` on the server and an AcoustID API key
 - **Local recording** — Record your broadcast as a 320 kbps stereo MP3, auto-downloaded when you stop. Uses AudioWorklet + Web Worker for energy-efficient encoding
 - **Keyboard shortcuts** — Space (mute), R (record), L (listen), C (cue), 1–0 (soundboard pads), ? (help). Active while on air, disabled when typing in inputs
 - **Integrations** — Stream to external platforms (Icecast, Shoutcast, Radio.co) via server-side relay. Test connection, remember credentials in localStorage. Room is still created for chat and metadata. Now Playing metadata is automatically pushed to the external server's admin API
@@ -44,9 +46,10 @@ Real-time audio broadcasting application built with WebRTC, React, and Node.js. 
 **Broadcaster audio graph (Web Audio API):**
 
 ```
-Microphone ─► Mic Effects ─► Gain ─┐
-                                   ├─► Broadcast Bus (stereo) ─► Limiter ─► WebRTC
-Soundboard Pads ─► Gain ──────────┘                            └─► VU Meter
+Microphone ─► Mic Effects ─► Gain ──┐
+                                    ├─► Broadcast Bus (stereo) ─► Limiter ─► WebRTC
+Soundboard Pads ─► Gain ───────────┤                             └─► VU Meter
+System Audio ─► Gain ──────────────┘
 ```
 
 ## Quick Start
@@ -131,6 +134,7 @@ fly deploy
 | `TURN_URL` | — | Static TURN server URL (alternative to Metered) |
 | `TURN_USERNAME` | — | Static TURN username |
 | `TURN_CREDENTIAL` | — | Static TURN credential |
+| `ACOUSTID_API_KEY` | — | AcoustID API key for auto song identification ([get one free](https://acoustid.org/new-application)) |
 | `LOG_DIR` | `server/logs` | Log file directory |
 | `LOG_LEVEL` | `info` | Log level (error, warn, info, debug) |
 
@@ -164,6 +168,7 @@ fly deploy
 │   │   ├── useAudioMixer.ts    # Web Audio API mixing graph
 │   │   ├── useAudioAnalyser.ts # Audio level analysis
 │   │   ├── useIntegrationStream.ts # MP3 encoding + WebSocket relay for integrations
+│   │   ├── useAutoIdentify.ts  # AcoustID-based automatic song identification
 │   │   ├── useKeyboardShortcuts.ts # Keyboard shortcut bindings for broadcaster
 │   │   ├── useMicEffects.ts    # Mic effect chain (enhance, compressor, pitch shift worklets)
 │   │   └── useRecorder.ts      # AudioWorklet + Web Worker MP3 recording
@@ -180,6 +185,7 @@ fly deploy
 │       └── Admin.tsx           # Room management dashboard
 ├── server/                     # Node.js signaling server
 │   ├── index.js                # Express + WebSocket + ICE config + chat/metadata relay + Deezer proxy
+│   ├── audio-identify.js       # Chromaprint fingerprinting + AcoustID lookup
 │   ├── integration-relay.js    # TCP source client + metadata updater for Icecast/Shoutcast
 │   ├── room-manager.js         # Multi-receiver room management with metadata + track list
 │   ├── auth.js                 # Session management with expiry

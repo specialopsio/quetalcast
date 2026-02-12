@@ -42,6 +42,12 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 
 const WS_URL = import.meta.env.VITE_WS_URL || (
   window.location.protocol === 'https:'
@@ -724,8 +730,13 @@ const Broadcaster = () => {
 
         {/* Mixer controls — visible when on air */}
         {isOnAir && (
-          <div className="panel">
-            <div className="panel-header">Mixer Controls</div>
+          <div className="panel !p-0 overflow-hidden">
+            <Accordion type="single" collapsible defaultValue="mixer">
+              <AccordionItem value="mixer" className="border-b-0">
+                <AccordionTrigger className="px-4 py-3 hover:no-underline">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mixer Controls</span>
+                </AccordionTrigger>
+                <AccordionContent className="px-4 pb-4">
             <div className="flex items-center gap-4">
               {/* Mic volume */}
               <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -993,6 +1004,9 @@ const Broadcaster = () => {
                 <Ear className={`h-4 w-4 ${autoIdentifyEnabled ? 'animate-pulse' : ''}`} />
               </button>
             </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           </div>
         )}
 
