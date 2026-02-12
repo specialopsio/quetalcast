@@ -1,9 +1,8 @@
 import { useState } from 'react';
-import { Disc3, ListMusic, Download, Clock, Music, Tag, Hash, Gauge, Users, Building2, Layers, AlertTriangle } from 'lucide-react';
+import { Disc3, ListMusic, Download, Clock, Gauge, AlertTriangle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
@@ -113,16 +112,13 @@ function downloadCsv(tracks: Track[]) {
   URL.revokeObjectURL(url);
 }
 
-/* ── Detail row inside the modal ── */
-function DetailRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
+/* ── Metadata cell inside the detail grid ── */
+function MetaCell({ label, value }: { label: string; value: string }) {
   if (!value) return null;
   return (
-    <div className="flex items-start gap-3 py-2">
-      <Icon className="h-3.5 w-3.5 text-muted-foreground/60 mt-0.5 shrink-0" />
-      <div className="min-w-0">
-        <div className="text-[10px] uppercase tracking-wider text-muted-foreground/50 font-semibold">{label}</div>
-        <div className="text-sm text-foreground mt-0.5 break-words">{value}</div>
-      </div>
+    <div className="min-w-0">
+      <div className="text-[9px] uppercase tracking-widest text-muted-foreground/40 font-semibold mb-0.5">{label}</div>
+      <div className="text-[13px] text-foreground leading-snug break-words">{value}</div>
     </div>
   );
 }
@@ -145,117 +141,119 @@ function TrackDetailModal({ track, open, onOpenChange }: { track: Track | null; 
     contribsByRole[role].push(c.name);
   }
 
-  const hasDetails = track.album || dur || track.releaseDate || track.isrc || track.bpm ||
-    track.label || genres || track.trackPosition || (track.contributors && track.contributors.length > 0);
+  // Build metadata pairs for the grid
+  const metaPairs: { label: string; value: string }[] = [];
+  if (track.album) metaPairs.push({ label: 'Album', value: track.album });
+  if (fullDate) metaPairs.push({ label: 'Released', value: fullDate });
+  if (track.label) metaPairs.push({ label: 'Label', value: track.label });
+  if (genres) metaPairs.push({ label: 'Genre', value: genres });
+  if (track.isrc) metaPairs.push({ label: 'ISRC', value: track.isrc });
+  if (track.trackPosition || track.diskNumber) {
+    metaPairs.push({
+      label: 'Position',
+      value: [
+        track.trackPosition ? `Track ${track.trackPosition}` : '',
+        track.diskNumber ? `Disc ${track.diskNumber}` : '',
+      ].filter(Boolean).join(' · '),
+    });
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md p-0 overflow-hidden">
-        {/* Hero — artwork + primary info */}
-        <div className="relative">
-          {artSrc ? (
-            <div className="relative">
-              {/* Blurred background */}
-              <div
-                className="absolute inset-0 bg-cover bg-center blur-2xl scale-110 opacity-30"
-                style={{ backgroundImage: `url(${artSrc})` }}
-              />
-              <div className="relative flex flex-col items-center pt-8 pb-6 px-6">
-                <img
-                  src={artSrc}
-                  alt=""
-                  className="w-40 h-40 rounded-lg shadow-2xl bg-secondary"
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center pt-8 pb-6 px-6">
-              <div className="w-40 h-40 rounded-lg bg-secondary flex items-center justify-center">
-                <Disc3 className="h-16 w-16 text-muted-foreground/30" />
-              </div>
-            </div>
+      <DialogContent className="max-w-sm p-0 overflow-hidden gap-0">
+        {/* ── Hero: blurred backdrop + artwork + text ── */}
+        <div className="relative overflow-hidden">
+          {/* Blurred art background */}
+          {artSrc && (
+            <div
+              className="absolute inset-0 bg-cover bg-center blur-3xl scale-125 opacity-25"
+              style={{ backgroundImage: `url(${artSrc})` }}
+            />
           )}
+          {/* Gradient fade at the bottom for a smooth blend */}
+          <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-background to-transparent" />
 
-          {/* Title area */}
-          <div className="px-6 pb-4 text-center">
-            <DialogHeader>
-              <DialogTitle className="text-lg font-bold text-foreground leading-tight">
+          <div className="relative flex flex-col items-center px-8 pt-10 pb-5">
+            {/* Artwork */}
+            {artSrc ? (
+              <img
+                src={artSrc}
+                alt=""
+                className="w-44 h-44 rounded-xl shadow-2xl ring-1 ring-white/10 bg-secondary"
+              />
+            ) : (
+              <div className="w-44 h-44 rounded-xl bg-secondary/60 flex items-center justify-center ring-1 ring-white/10">
+                <Disc3 className="h-16 w-16 text-muted-foreground/20" />
+              </div>
+            )}
+
+            {/* Title + Artist — centered */}
+            <div className="mt-5 text-center w-full">
+              <DialogTitle className="text-base font-bold text-foreground leading-tight tracking-tight">
                 {track.trackTitle || track.title}
               </DialogTitle>
               {track.artist && (
-                <DialogDescription className="text-sm text-primary font-medium mt-1">
+                <DialogDescription className="text-sm text-primary/90 font-medium mt-1">
                   {track.artist}
                 </DialogDescription>
               )}
-            </DialogHeader>
-            {track.album && (
-              <p className="text-xs text-muted-foreground mt-1.5">
-                {track.album}{year ? ` · ${year}` : ''}
-              </p>
-            )}
-            {/* Quick badges */}
-            <div className="flex items-center justify-center gap-2 mt-3 flex-wrap">
+              {track.album && (
+                <p className="text-[11px] text-muted-foreground/70 mt-1">
+                  {track.album}{year ? ` · ${year}` : ''}
+                </p>
+              )}
+            </div>
+
+            {/* Badges row */}
+            <div className="flex items-center justify-center gap-1.5 mt-3 flex-wrap">
               {dur && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">
+                <span className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground/80 bg-white/5 backdrop-blur-sm border border-white/10 px-2 py-0.5 rounded-full">
                   <Clock className="h-2.5 w-2.5" /> {dur}
                 </span>
               )}
               {track.bpm ? (
-                <span className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">
+                <span className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground/80 bg-white/5 backdrop-blur-sm border border-white/10 px-2 py-0.5 rounded-full">
                   <Gauge className="h-2.5 w-2.5" /> {track.bpm} BPM
                 </span>
               ) : null}
               {track.explicitLyrics && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-orange-400 bg-orange-400/10 px-2 py-0.5 rounded-full">
-                  <AlertTriangle className="h-2.5 w-2.5" /> Explicit
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-orange-400 bg-orange-400/10 border border-orange-400/20 px-2 py-0.5 rounded-full">
+                  <AlertTriangle className="h-2.5 w-2.5" /> E
                 </span>
               )}
-              <span className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">
-                <Clock className="h-2.5 w-2.5" /> Played {formatTime(track.time)}
+              <span className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground/80 bg-white/5 backdrop-blur-sm border border-white/10 px-2 py-0.5 rounded-full">
+                <Clock className="h-2.5 w-2.5" /> {formatTime(track.time)}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Details section */}
-        {hasDetails && (
-          <div className="px-6 pb-6 border-t border-border">
-            <div className="divide-y divide-border/50">
-              {/* Contributors */}
-              {Object.keys(contribsByRole).length > 0 && (
-                <div className="py-3">
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <Users className="h-3.5 w-3.5 text-muted-foreground/60" />
-                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground/50 font-semibold">Credits</span>
-                  </div>
-                  <div className="space-y-1.5">
-                    {Object.entries(contribsByRole).map(([role, names]) => (
-                      <div key={role} className="flex items-baseline gap-2">
-                        <span className="text-[10px] text-muted-foreground/60 uppercase tracking-wider shrink-0 w-20 text-right">{role}</span>
-                        <span className="text-xs text-foreground">{names.join(', ')}</span>
-                      </div>
-                    ))}
-                  </div>
+        {/* ── Metadata grid ── */}
+        {(metaPairs.length > 0 || Object.keys(contribsByRole).length > 0) && (
+          <div className="px-6 pt-4 pb-6 space-y-4">
+            {/* Credits */}
+            {Object.keys(contribsByRole).length > 0 && (
+              <div>
+                <div className="text-[9px] uppercase tracking-widest text-muted-foreground/40 font-semibold mb-2">Credits</div>
+                <div className="space-y-1">
+                  {Object.entries(contribsByRole).map(([role, names]) => (
+                    <div key={role} className="flex items-baseline gap-2">
+                      <span className="text-[10px] text-muted-foreground/50 shrink-0 min-w-[4rem]">{role}</span>
+                      <span className="text-[13px] text-foreground leading-snug">{names.join(', ')}</span>
+                    </div>
+                  ))}
                 </div>
-              )}
+              </div>
+            )}
 
-              <DetailRow icon={Music} label="Album" value={track.album || ''} />
-              <DetailRow icon={Tag} label="Release Date" value={fullDate} />
-              <DetailRow icon={Building2} label="Label" value={track.label || ''} />
-              <DetailRow icon={Layers} label="Genres" value={genres} />
-              <DetailRow icon={Hash} label="ISRC" value={track.isrc || ''} />
-
-              {(track.trackPosition || track.diskNumber) ? (
-                <DetailRow
-                  icon={ListMusic}
-                  label="Position"
-                  value={[
-                    track.trackPosition ? `Track ${track.trackPosition}` : '',
-                    track.diskNumber ? `Disc ${track.diskNumber}` : '',
-                  ].filter(Boolean).join(' · ')}
-                />
-              ) : null}
-            </div>
+            {/* 2-column grid for metadata */}
+            {metaPairs.length > 0 && (
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                {metaPairs.map((pair) => (
+                  <MetaCell key={pair.label} label={pair.label} value={pair.value} />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </DialogContent>
