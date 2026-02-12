@@ -15,6 +15,9 @@ RUN pnpm run build
 FROM node:20-alpine
 WORKDIR /app
 
+# Install fpcalc (Chromaprint) for AcoustID audio fingerprinting
+RUN apk add --no-cache chromaprint
+
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
