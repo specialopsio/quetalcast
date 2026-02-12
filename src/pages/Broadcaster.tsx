@@ -962,21 +962,25 @@ const Broadcaster = () => {
             </Accordion>
           </div>
 
-        {/* Track List — always visible (like mixer), Now Playing when on air */}
+        {/* Track List — always visible (like mixer), Now Playing search always shown */}
         <TrackList
           tracks={trackList}
           alwaysShow
           roomId={webrtc.roomId ?? undefined}
-          topContent={isOnAir ? (
+          topContent={
             <NowPlayingInput
               value={nowPlaying}
               onChange={handleNowPlayingChange}
               onCommit={(meta: TrackMeta) => {
-                signaling.send({ type: 'add-track', ...meta });
-                addLog(`Added to track list: ${meta.text || meta.title || 'Unknown'}`, 'info');
+                if (isOnAir) {
+                  signaling.send({ type: 'add-track', ...meta });
+                  addLog(`Added to track list: ${meta.text || meta.title || 'Unknown'}`, 'info');
+                } else {
+                  toast.info('Go on air first to add tracks');
+                }
               }}
             />
-          ) : undefined}
+          }
         />
 
         {/* Soundboard / Effects */}

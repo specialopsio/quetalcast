@@ -1,12 +1,17 @@
 import { useState } from 'react';
-import { ChevronDown, Disc3, ListMusic, Download, Clock, Gauge, AlertTriangle } from 'lucide-react';
+import { Disc3, ListMusic, Download, Clock, Gauge, AlertTriangle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 
 export interface Track {
   title: string;           // display string "Artist — Song"
@@ -274,35 +279,35 @@ function TrackDetailModal({ track, open, onOpenChange }: { track: Track | null; 
 /* ── Main TrackList Component ── */
 export function TrackList({ tracks, topContent, alwaysShow, roomId }: TrackListProps) {
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
-  const [open, setOpen] = useState(true);
 
   const showPanel = alwaysShow || tracks.length > 0 || topContent;
   if (!showPanel) return null;
 
   return (
     <>
-      <Collapsible open={open} onOpenChange={setOpen} className="panel">
-        <CollapsibleTrigger className="w-full flex items-center justify-between text-left hover:bg-secondary/30 rounded-md transition-colors cursor-pointer -m-2 p-2">
-          <div className="panel-header flex items-center gap-1.5 !mb-0">
-            <ListMusic className="h-3.5 w-3.5" />
-            Track List
-            <span className="text-muted-foreground/60 font-normal">({tracks.length})</span>
-            {tracks.length > 0 && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  downloadCsv(tracks, roomId);
-                }}
-                className="p-0.5 ml-1 text-muted-foreground hover:text-foreground transition-colors rounded"
-                title="Download track list as CSV"
-              >
-                <Download className="h-3 w-3" />
-              </button>
-            )}
-          </div>
-          <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
-        </CollapsibleTrigger>
-        <CollapsibleContent>
+      <div className="panel !p-0">
+        <Accordion type="single" collapsible defaultValue="tracklist">
+          <AccordionItem value="tracklist" className="border-b-0">
+            <AccordionTrigger className="px-4 py-3 hover:no-underline">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <ListMusic className="h-3.5 w-3.5" />
+                Track List
+                <span className="font-normal text-muted-foreground/60">({tracks.length})</span>
+                {tracks.length > 0 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      downloadCsv(tracks, roomId);
+                    }}
+                    className="p-0.5 ml-1 text-muted-foreground hover:text-foreground transition-colors rounded cursor-pointer"
+                    title="Download track list as CSV"
+                  >
+                    <Download className="h-3 w-3" />
+                  </button>
+                )}
+              </span>
+            </AccordionTrigger>
+            <AccordionContent className="px-4 pb-4 pt-0">
           {topContent && (
             <div className="pt-3 pb-2 border-b border-border">
               {topContent}
@@ -394,8 +399,10 @@ export function TrackList({ tracks, topContent, alwaysShow, roomId }: TrackListP
         </div>
             </>
           )}
-        </CollapsibleContent>
-      </Collapsible>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      </div>
 
       {/* Track Detail Modal */}
       <TrackDetailModal
