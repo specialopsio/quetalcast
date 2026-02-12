@@ -275,7 +275,8 @@ app.post('/api/identify-audio', requireAuth, identifyLimiter, express.raw({ type
   }
 
   try {
-    const match = await identifyAudio(req.body, logger);
+    const sampleRate = parseInt(req.headers['x-sample-rate'], 10) || 22050;
+    const match = await identifyAudio(req.body, logger, sampleRate);
     res.json({ match });
   } catch (e) {
     logger.warn({ error: e.message }, 'Audio identify failed');

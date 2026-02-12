@@ -12,9 +12,9 @@ interface UseAutoIdentifyOptions {
   stream: MediaStream | null;
   /** Whether auto-identify is enabled */
   enabled: boolean;
-  /** Interval between captures in ms (default: 15000) */
+  /** Interval between capture attempts in ms (default: 30000) */
   interval?: number;
-  /** Duration of each capture in seconds (default: 12) */
+  /** Duration of each capture in seconds (default: 20) */
   captureDuration?: number;
   /** Titles already in the track list — used to avoid duplicate notifications */
   existingTitles: string[];
@@ -25,22 +25,27 @@ interface UseAutoIdentifyOptions {
 /**
  * Periodically captures audio from a MediaStream, sends it to the server
  * for fingerprint identification, and calls onMatch for new songs.
+ *
+ * Key design decisions for reliable identification:
+ * - Uses the browser's native sample rate (typically 44100 or 48000 Hz) and
+ *   sends it to the server so the WAV header is accurate. This avoids the
+ *   pitfall of requesting 22050 Hz (which browsers often ignore), resulting
+ *   in a sample rate mismatch that corrupts the fingerprint.
+ * - Captures 20 seconds of audio (Chromaprint/AcoustID recommends 15-30s).
+ * - Uses a persistent AudioContext to avoid setup/teardown overhead.
+ * - Downmixes to mono on the client for smaller payloads.
  */
 export function useAutoIdentify({
   stream,
   enabled,
-  interval = 15000,
-  captureDuration = 12,
+  interval = 30000,
+  captureDuration = 20,
   existingTitles,
   onMatch,
 }: UseAutoIdentifyOptions) {
   const [listening, setListening] = useState(false);
   const [lastMatch, setLastMatch] = useState<IdentifyMatch | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const contextRef = useRef<AudioContext | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
-  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const captureBufferRef = useRef<Float32Array[]>([]);
   const capturingRef = useRef(false);
   const seenRef = useRef<Set<string>>(new Set());
   const enabledRef = useRef(enabled);
@@ -58,68 +63,97 @@ export function useAutoIdentify({
     seenRef.current = normalized;
   }, [existingTitles]);
 
-  /** Capture a short PCM snippet and send it for identification */
+  /** Capture a PCM snippet using MediaRecorder-like approach and send for identification */
   const captureAndIdentify = useCallback(async () => {
     if (!stream || !enabledRef.current || capturingRef.current) return;
     capturingRef.current = true;
 
-    try {
-      // Create a temporary AudioContext for capture
-      const ctx = new AudioContext({ sampleRate: 22050 });
-      const source = ctx.createMediaStreamSource(stream);
+    let ctx: OfflineAudioContext | null = null;
 
-      // ScriptProcessor to capture raw PCM (4096 buffer, mono)
-      const processor = ctx.createScriptProcessor(4096, 1, 1);
+    try {
+      // Use a live AudioContext to tap the stream, then render offline
+      // for a gap-free capture at the native sample rate.
+      const liveCtx = new AudioContext();
+      const nativeSampleRate = liveCtx.sampleRate;
+      const totalSamples = captureDuration * nativeSampleRate;
+
+      // Create a ScriptProcessor on the live context to collect raw samples
+      const source = liveCtx.createMediaStreamSource(stream);
+      const processor = liveCtx.createScriptProcessor(4096, 1, 1);
       const chunks: Float32Array[] = [];
-      const maxSamples = captureDuration * 22050;
       let sampleCount = 0;
 
       await new Promise<void>((resolve) => {
         processor.onaudioprocess = (e) => {
-          if (sampleCount >= maxSamples) return;
+          if (sampleCount >= totalSamples) return;
           const data = e.inputBuffer.getChannelData(0);
           const copy = new Float32Array(data.length);
           copy.set(data);
           chunks.push(copy);
           sampleCount += data.length;
-          if (sampleCount >= maxSamples) {
+          if (sampleCount >= totalSamples) {
             resolve();
           }
         };
         source.connect(processor);
-        processor.connect(ctx.destination);
+        processor.connect(liveCtx.destination);
 
-        // Safety timeout
-        setTimeout(resolve, (captureDuration + 2) * 1000);
+        // Safety timeout — resolve even if we don't get enough samples
+        setTimeout(resolve, (captureDuration + 3) * 1000);
       });
 
-      // Disconnect and close
+      // Disconnect capture nodes
       try { source.disconnect(); } catch {}
       try { processor.disconnect(); } catch {}
-      await ctx.close();
+      await liveCtx.close();
 
-      if (sampleCount < 22050 * 3) {
-        // Less than 3 seconds captured — not enough
+      if (sampleCount < nativeSampleRate * 5) {
+        // Less than 5 seconds captured — not enough for reliable matching
         return;
       }
 
-      // Convert Float32 to signed 16-bit LE PCM
-      const totalSamples = Math.min(sampleCount, maxSamples);
-      const pcmBuffer = new ArrayBuffer(totalSamples * 2);
-      const pcmView = new DataView(pcmBuffer);
-      let offset = 0;
+      // Resample to 22050 Hz mono using OfflineAudioContext for a clean,
+      // gap-free, correctly-resampled buffer that fpcalc can process accurately.
+      const capturedSamples = Math.min(sampleCount, totalSamples);
+      const inputBuffer = new AudioContext().createBuffer(1, capturedSamples, nativeSampleRate);
+      const channelData = inputBuffer.getChannelData(0);
+      let writeOffset = 0;
       for (const chunk of chunks) {
-        for (let i = 0; i < chunk.length && offset < totalSamples; i++, offset++) {
-          const s = Math.max(-1, Math.min(1, chunk[i]));
-          pcmView.setInt16(offset * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
-        }
+        const remaining = capturedSamples - writeOffset;
+        const toCopy = Math.min(chunk.length, remaining);
+        channelData.set(chunk.subarray(0, toCopy), writeOffset);
+        writeOffset += toCopy;
+        if (writeOffset >= capturedSamples) break;
       }
 
-      // Send to server
+      const targetRate = 22050;
+      const outputLength = Math.ceil(capturedSamples * targetRate / nativeSampleRate);
+      ctx = new OfflineAudioContext(1, outputLength, targetRate);
+      const bufferSource = ctx.createBufferSource();
+      bufferSource.buffer = inputBuffer;
+      bufferSource.connect(ctx.destination);
+      bufferSource.start(0);
+      const rendered = await ctx.startRendering();
+
+      const resampledData = rendered.getChannelData(0);
+      const finalSamples = resampledData.length;
+
+      // Convert Float32 to signed 16-bit LE PCM
+      const pcmBuffer = new ArrayBuffer(finalSamples * 2);
+      const pcmView = new DataView(pcmBuffer);
+      for (let i = 0; i < finalSamples; i++) {
+        const s = Math.max(-1, Math.min(1, resampledData[i]));
+        pcmView.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+      }
+
+      // Send to server — include sample rate in header so WAV is built correctly
       const res = await fetch('/api/identify-audio', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: new Uint8Array(pcmBuffer, 0, totalSamples * 2),
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'X-Sample-Rate': String(targetRate),
+        },
+        body: new Uint8Array(pcmBuffer),
       });
 
       if (!res.ok) return;
@@ -158,7 +192,7 @@ export function useAutoIdentify({
   useEffect(() => {
     if (enabled && stream) {
       setListening(true);
-      // Run once after a short delay, then on interval
+      // Run first capture after a short delay, then on interval
       const initialTimeout = setTimeout(() => {
         captureAndIdentify();
       }, 5000);

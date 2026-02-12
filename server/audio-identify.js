@@ -8,10 +8,11 @@ const ACOUSTID_API_KEY = process.env.ACOUSTID_API_KEY || '';
 const ACOUSTID_URL = 'https://api.acoustid.org/v2/lookup';
 
 /**
- * Write raw PCM (signed 16-bit LE, mono, 22050 Hz) to a temporary WAV file.
+ * Write raw PCM (signed 16-bit LE, mono) to a temporary WAV file.
+ * @param {Buffer} pcmBuffer
+ * @param {number} sampleRate — sample rate of the PCM data (default 22050)
  */
-function pcmToWavBuffer(pcmBuffer) {
-  const sampleRate = 22050;
+function pcmToWavBuffer(pcmBuffer, sampleRate = 22050) {
   const numChannels = 1;
   const bitsPerSample = 16;
   const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
@@ -121,7 +122,7 @@ async function lookupAcoustID(fingerprint, duration, logger) {
 
   // Find the best result with recording data
   for (const result of data.results) {
-    if (result.score < 0.5) continue; // skip low-confidence matches
+    if (result.score < 0.3) continue; // skip low-confidence matches
     const recordings = result.recordings;
     if (!recordings?.length) continue;
 
@@ -146,10 +147,13 @@ async function lookupAcoustID(fingerprint, duration, logger) {
 
 /**
  * Full pipeline: PCM buffer → fingerprint → AcoustID lookup → { artist, title }
+ * @param {Buffer} pcmBuffer — raw 16-bit signed LE mono PCM
+ * @param {object} logger
+ * @param {number} sampleRate — sample rate of the PCM data (default 22050)
  */
-export async function identifyAudio(pcmBuffer, logger) {
-  // Convert PCM to WAV
-  const wavBuffer = pcmToWavBuffer(pcmBuffer);
+export async function identifyAudio(pcmBuffer, logger, sampleRate = 22050) {
+  // Convert PCM to WAV with the correct sample rate
+  const wavBuffer = pcmToWavBuffer(pcmBuffer, sampleRate);
 
   // Generate fingerprint
   const { fingerprint, duration } = await generateFingerprint(wavBuffer, logger);
