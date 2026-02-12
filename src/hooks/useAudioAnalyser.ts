@@ -54,6 +54,7 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
   const leftDecayRef = useRef(0);
   const rightPeakRef = useRef(MIN_DB);
   const rightDecayRef = useRef(0);
+  const monoSourceRef = useRef(false);
 
   const tick = useCallback(() => {
     const leftAnalyser = leftAnalyserRef.current;
@@ -78,8 +79,11 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
       }
     }
 
-    // Peak hold with decay — right
-    if (right.peakDb > rightPeakRef.current) {
+    // Peak hold with decay — right (or mirror left for mono sources)
+    if (monoSourceRef.current) {
+      rightPeakRef.current = leftPeakRef.current;
+      rightDecayRef.current = leftDecayRef.current;
+    } else if (right.peakDb > rightPeakRef.current) {
       rightPeakRef.current = right.peakDb;
       rightDecayRef.current = 0;
     } else {
@@ -91,7 +95,11 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
 
     setAnalysis({
       left: { level: left.rmsDb, peak: leftPeakRef.current, clipping: left.clipping },
-      right: { level: right.rmsDb, peak: rightPeakRef.current, clipping: right.clipping },
+      right: {
+        level: monoSourceRef.current ? left.rmsDb : right.rmsDb,
+        peak: rightPeakRef.current,
+        clipping: monoSourceRef.current ? left.clipping : right.clipping,
+      },
     });
 
     rafRef.current = requestAnimationFrame(tick);
@@ -99,6 +107,7 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
 
   useEffect(() => {
     if (!stream || stream.getTracks().length === 0) {
+      monoSourceRef.current = false;
       setAnalysis(EMPTY_ANALYSIS);
       return;
     }
@@ -110,17 +119,9 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
 
     const source = ctx.createMediaStreamSource(stream);
 
-    // Mono sources (mobile mic, some interfaces) only have channel 0. Use ChannelMerger
-    // to get proper L/R: stereo when available, duplicate ch0 to both when mono.
-    const merger = ctx.createChannelMerger(2);
-    source.connect(merger, 0, 0);
-    try {
-      // Try stereo — connect ch1 to merger input 1. Throws on iOS if source is mono.
-      source.connect(merger, 1, 1);
-    } catch {
-      // Fallback: duplicate ch0 to right so both meters show activity
-      source.connect(merger, 0, 1);
-    }
+    const track = stream.getAudioTracks()[0];
+    const channelCount = track?.getSettings?.().channelCount;
+    monoSourceRef.current = channelCount === 1;
 
     const splitter = ctx.createChannelSplitter(2);
 
@@ -132,7 +133,7 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
     rightAnalyser.fftSize = 2048;
     rightAnalyser.smoothingTimeConstant = 0.3;
 
-    merger.connect(splitter);
+    source.connect(splitter);
     splitter.connect(leftAnalyser, 0);
     splitter.connect(rightAnalyser, 1);
 
@@ -145,7 +146,6 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
     return () => {
       cancelAnimationFrame(rafRef.current);
       source.disconnect();
-      merger.disconnect();
       splitter.disconnect();
       leftAnalyser.disconnect();
       rightAnalyser.disconnect();

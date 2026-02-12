@@ -134,7 +134,7 @@ const Broadcaster = () => {
       try {
         // Need permission first to get labels
         const tempStream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 2 } },
         });
         tempStream.getTracks().forEach((t) => t.stop());
 
@@ -172,6 +172,7 @@ const Broadcaster = () => {
           noiseSuppression: false,
           autoGainControl: false,
           sampleRate: { ideal: 48000 },
+          channelCount: { ideal: 2 },
         },
       })
       .then((stream) => {
@@ -292,6 +293,7 @@ const Broadcaster = () => {
           noiseSuppression: false,
           autoGainControl: false,
           sampleRate: { ideal: 48000 },
+          channelCount: { ideal: 2 },
         },
       };
 
@@ -366,6 +368,7 @@ const Broadcaster = () => {
           noiseSuppression: false,
           autoGainControl: false,
           sampleRate: { ideal: 48000 },
+          channelCount: { ideal: 2 },
         },
       };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -995,7 +998,7 @@ const Broadcaster = () => {
                       min={0}
                       max={100}
                       step={1}
-                      className="flex-1 max-w-[120px] sm:max-w-none"
+                      className="flex-1 min-w-0"
                     />
                     <span className="text-xs font-mono text-muted-foreground tabular-nums w-10 text-right shrink-0">
                       {systemAudioVolume}%
