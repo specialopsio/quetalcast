@@ -113,8 +113,8 @@ const Broadcaster = () => {
   const webrtc = useWebRTC(signaling, 'broadcaster');
   const mixer = useAudioMixer();
   const micEffects = useMicEffects();
-  /** Level meter: use mixer when on air or when system audio is connected (prep), else preview stream */
-  const levelMeterStream = isOnAir || systemAudioActive ? mixer.mixedStream : previewStream;
+  /** Level meter: prefer the mixer stream so mic/system gains are reflected pre-broadcast too */
+  const levelMeterStream = mixer.mixedStream || previewStream;
   const audioAnalysis = useAudioAnalyser(levelMeterStream);
 
   // Auth check — verify both local token and server session
@@ -194,6 +194,27 @@ const Broadcaster = () => {
       setPreviewStream(null);
     };
   }, [isOnAir, selectedDevice]);
+
+  // Keep preview mic connected to the mixer while off air so mic gain/mute
+  // affect the level meter consistently (not only when system audio is enabled).
+  useEffect(() => {
+    if (!isOnAir && previewStream) {
+      mixer.connectMic(previewStream);
+      mixer.setMicVolume(micVolume / 100);
+      mixer.setMicMuted(micMuted);
+    } else if (!isOnAir && !previewStream) {
+      mixer.disconnectMic();
+    }
+  }, [
+    isOnAir,
+    previewStream,
+    micVolume,
+    micMuted,
+    mixer.connectMic,
+    mixer.setMicVolume,
+    mixer.setMicMuted,
+    mixer.disconnectMic,
+  ]);
 
   const statusLabels: Record<ConnectionStatus, string> = {
     idle: 'Ready',
@@ -973,7 +994,7 @@ const Broadcaster = () => {
             </div>
 
             {/* System Audio */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-3 pt-3 border-t border-border">
+            <div className="flex flex-col gap-3 mt-3 pt-3 border-t border-border">
               <div className="flex flex-col min-w-0">
                 <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                   <Monitor className="h-3 w-3" />
@@ -1003,30 +1024,32 @@ const Broadcaster = () => {
                   </div>
                 )}
               </div>
-              <button
-                onClick={handleToggleSystemAudio}
-                disabled={!isOnAir && !previewStream}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all shrink-0 self-start sm:self-center ${
-                  (!isOnAir && !previewStream) ? 'opacity-50 cursor-not-allowed' : ''
-                } ${
-                  systemAudioActive
-                    ? 'bg-primary/20 text-primary'
-                    : 'bg-secondary text-muted-foreground hover:text-foreground'
-                }`}
-                title={systemAudioActive ? 'Stop system audio' : 'Share system audio'}
-              >
-                {systemAudioActive ? (
-                  <>
-                    <MonitorOff className="h-3 w-3" />
-                    Stop System
-                  </>
-                ) : (
-                  <>
-                    <Monitor className="h-3 w-3" />
-                    Connect Audio
-                  </>
-                )}
-              </button>
+              <div className="flex justify-end">
+                <button
+                  onClick={handleToggleSystemAudio}
+                  disabled={!isOnAir && !previewStream}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all shrink-0 ${
+                    (!isOnAir && !previewStream) ? 'opacity-50 cursor-not-allowed' : ''
+                  } ${
+                    systemAudioActive
+                      ? 'bg-primary/20 text-primary'
+                      : 'bg-secondary text-muted-foreground hover:text-foreground'
+                  }`}
+                  title={systemAudioActive ? 'Stop system audio' : 'Share system audio'}
+                >
+                  {systemAudioActive ? (
+                    <>
+                      <MonitorOff className="h-3 w-3" />
+                      Stop System
+                    </>
+                  ) : (
+                    <>
+                      <Monitor className="h-3 w-3" />
+                      Connect Audio
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
 
             {/* Audio Quality */}

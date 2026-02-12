@@ -48,6 +48,8 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
   const leftAnalyserRef = useRef<AnalyserNode | null>(null);
   const rightAnalyserRef = useRef<AnalyserNode | null>(null);
   const rafRef = useRef<number>(0);
+  const monoMirrorRef = useRef(false);
+  const monoDetectFramesRef = useRef(0);
 
   // Per-channel peak state
   const leftPeakRef = useRef(MIN_DB);
@@ -78,8 +80,24 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
       }
     }
 
-    // Peak hold with decay — right
-    if (right.peakDb > rightPeakRef.current) {
+    // Detect mono sources by observing a consistently silent right channel
+    // while left is active. This avoids relying on browser-reported channelCount.
+    if (!monoMirrorRef.current) {
+      const leftActive = left.rmsDb > -55;
+      const rightSilent = right.rmsDb <= MIN_DB + 0.5;
+      if (leftActive && rightSilent) {
+        monoDetectFramesRef.current++;
+        if (monoDetectFramesRef.current >= 20) monoMirrorRef.current = true;
+      } else {
+        monoDetectFramesRef.current = 0;
+      }
+    }
+
+    // Peak hold with decay — right (or mirror left for detected mono sources)
+    if (monoMirrorRef.current) {
+      rightPeakRef.current = leftPeakRef.current;
+      rightDecayRef.current = leftDecayRef.current;
+    } else if (right.peakDb > rightPeakRef.current) {
       rightPeakRef.current = right.peakDb;
       rightDecayRef.current = 0;
     } else {
@@ -91,7 +109,11 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
 
     setAnalysis({
       left: { level: left.rmsDb, peak: leftPeakRef.current, clipping: left.clipping },
-      right: { level: right.rmsDb, peak: rightPeakRef.current, clipping: right.clipping },
+      right: {
+        level: monoMirrorRef.current ? left.rmsDb : right.rmsDb,
+        peak: rightPeakRef.current,
+        clipping: monoMirrorRef.current ? left.clipping : right.clipping,
+      },
     });
 
     rafRef.current = requestAnimationFrame(tick);
@@ -99,6 +121,8 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
 
   useEffect(() => {
     if (!stream || stream.getTracks().length === 0) {
+      monoMirrorRef.current = false;
+      monoDetectFramesRef.current = 0;
       setAnalysis(EMPTY_ANALYSIS);
       return;
     }
@@ -110,14 +134,6 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
 
     const source = ctx.createMediaStreamSource(stream);
 
-    // Force stereo before splitting — ChannelSplitter uses 'discrete'
-    // interpretation so it won't upmix mono. This GainNode upmixes mono
-    // sources to both L and R using 'speakers' interpretation.
-    const stereoUpMix = ctx.createGain();
-    stereoUpMix.channelCount = 2;
-    stereoUpMix.channelCountMode = 'explicit';
-    stereoUpMix.channelInterpretation = 'speakers';
-
     const splitter = ctx.createChannelSplitter(2);
 
     const leftAnalyser = ctx.createAnalyser();
@@ -128,8 +144,7 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
     rightAnalyser.fftSize = 2048;
     rightAnalyser.smoothingTimeConstant = 0.3;
 
-    source.connect(stereoUpMix);
-    stereoUpMix.connect(splitter);
+    source.connect(splitter);
     splitter.connect(leftAnalyser, 0);
     splitter.connect(rightAnalyser, 1);
 
@@ -142,7 +157,6 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
     return () => {
       cancelAnimationFrame(rafRef.current);
       source.disconnect();
-      stereoUpMix.disconnect();
       splitter.disconnect();
       leftAnalyser.disconnect();
       rightAnalyser.disconnect();
