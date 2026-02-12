@@ -52,15 +52,17 @@ export default function DocsBroadcaster() {
             Lower settings catch more peaks; handy for loud sound clips.
           </li>
           <li>
-            <strong>System audio</strong> — Route desktop or app audio into your broadcast (on air
-            only). Browser asks for screen share with audio; video is discarded.
+            <strong>System audio</strong> — Route desktop or app audio into your broadcast. Connect
+            before going on air to set levels and prep the mix; the level meter shows the combined
+            mic + system audio. Browser asks for screen share with audio; video is discarded.
           </li>
           <li>
             <strong>Audio quality</strong> — High (510 kbps), Auto (adaptive), or Low (32 kbps
             mono).
           </li>
           <li>
-            <strong>Record</strong> — Save broadcast as 320 kbps MP3 (on air only).
+            <strong>Record</strong> — Save as 320 kbps MP3. Start before going on air to capture
+            from the moment you hit record, or during broadcast for the full mix.
           </li>
         </ul>
       </section>
@@ -165,11 +167,13 @@ export default function DocsBroadcaster() {
       <section>
         <h2 className="text-lg font-semibold text-foreground mb-3">Recording</h2>
         <p>
-          Press <strong>Record</strong> in the mixer controls to capture your broadcast as a 320
-          kbps stereo MP3. A pulsing red dot shows when recording, with elapsed time and file size.
-          When you stop, the MP3 downloads automatically. If you end the broadcast while recording,
-          recording continues until you stop it or start a new broadcast. The post-broadcast dialog
-          can download a ZIP that includes the MP3 when recording was active.
+          Press <strong>Record</strong> in the mixer controls to capture as a 320 kbps stereo MP3. A
+          pulsing red dot shows when recording, with elapsed time and file size. When you stop,
+          the MP3 downloads automatically. Start recording before going on air to capture from the
+          moment you hit record (mic only); during broadcast you capture the full mix. If you end
+          the broadcast while recording, recording continues until you stop or start a new broadcast.
+          The post-broadcast dialog can download a ZIP that includes the MP3 when recording was
+          active.
         </p>
       </section>
 
