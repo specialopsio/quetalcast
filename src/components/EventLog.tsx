@@ -11,6 +11,8 @@ interface EventLogProps {
   entries: LogEntry[];
   maxEntries?: number;
   roomId?: string;
+  /** Optional listener count — shown in header when provided (broadcaster) */
+  listenerCount?: number;
 }
 
 function escapeCsvField(field: string): string {
@@ -45,7 +47,7 @@ const levelColors: Record<string, string> = {
   chat: 'text-blue-400',
 };
 
-export function EventLog({ entries, maxEntries = 30, roomId }: EventLogProps) {
+export function EventLog({ entries, maxEntries = 30, roomId, listenerCount }: EventLogProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const visible = entries.slice(-maxEntries);
 
@@ -60,6 +62,11 @@ export function EventLog({ entries, maxEntries = 30, roomId }: EventLogProps) {
       <div className="panel-header flex items-center gap-1.5">
         <ScrollText className="h-3.5 w-3.5" />
         Event Log
+        {listenerCount !== undefined && (
+          <span className="text-muted-foreground font-normal ml-1">
+            ({listenerCount} listener{listenerCount !== 1 ? 's' : ''})
+          </span>
+        )}
         {entries.length > 0 && (
           <button
             onClick={() => downloadEventLogCsv(entries, roomId)}

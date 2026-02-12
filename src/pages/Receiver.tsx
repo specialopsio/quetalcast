@@ -278,6 +278,15 @@ const Receiver = () => {
           </div>
         )}
 
+        {/* Track List — always show when joined, above stats (mirrors broadcaster layout) */}
+        {joined && (
+          <TrackList
+            tracks={trackList}
+            alwaysShow
+            roomId={roomInput || paramRoomId || undefined}
+          />
+        )}
+
         {/* Health + Log — only when actively connected */}
         {joined && webrtc.status !== 'error' && webrtc.status !== 'disconnected' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -290,15 +299,6 @@ const Receiver = () => {
             />
             <EventLog entries={logs} />
           </div>
-        )}
-
-        {/* Track List — always show when joined, with empty state */}
-        {joined && (
-          <TrackList
-            tracks={trackList}
-            alwaysShow
-            roomId={roomInput || paramRoomId || undefined}
-          />
         )}
       </div>
 

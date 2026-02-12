@@ -1207,9 +1207,8 @@ const Broadcaster = () => {
               iceConnectionState={webrtc.iceConnectionState}
               signalingState={webrtc.signalingState}
               peerConnected={webrtc.peerConnected}
-              listenerCount={listenerCount}
             />
-            <EventLog entries={logs} roomId={webrtc.roomId ?? undefined} />
+            <EventLog entries={logs} roomId={webrtc.roomId ?? undefined} listenerCount={listenerCount} />
           </div>
         )}
 

@@ -7,8 +7,6 @@ interface HealthPanelProps {
   iceConnectionState: string;
   signalingState: string;
   peerConnected: boolean;
-  /** Optional listener count — shown only when provided (broadcaster) */
-  listenerCount?: number;
 }
 
 function StatItem({ label, value, unit, warn }: { label: string; value: string | number; unit?: string; warn?: boolean }) {
@@ -60,7 +58,7 @@ function StateIndicator({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function HealthPanel({ stats, connectionState, iceConnectionState, signalingState, peerConnected, listenerCount }: HealthPanelProps) {
+export function HealthPanel({ stats, connectionState, iceConnectionState, signalingState, peerConnected }: HealthPanelProps) {
   return (
     <div className="panel space-y-4">
       <div className="panel-header flex items-center gap-1.5 !mb-0">
@@ -68,8 +66,8 @@ export function HealthPanel({ stats, connectionState, iceConnectionState, signal
         Stats
       </div>
 
-      {/* Stats grid */}
-      <div className={`grid gap-3 ${listenerCount !== undefined ? 'grid-cols-5' : 'grid-cols-4'}`}>
+      {/* Stats grid — 2 col on mobile, 4 col on desktop */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatItem label="Speed" value={stats ? stats.bitrate.toFixed(1) : '—'} unit="kbps" />
         <StatItem
           label="Dropped"
@@ -78,9 +76,6 @@ export function HealthPanel({ stats, connectionState, iceConnectionState, signal
         />
         <StatItem label="Jitter" value={stats ? stats.jitter.toFixed(1) : '—'} unit="ms" />
         <StatItem label="Delay" value={stats ? stats.rtt.toFixed(0) : '—'} unit="ms" />
-        {listenerCount !== undefined && (
-          <StatItem label="Listeners" value={listenerCount} />
-        )}
       </div>
 
       {/* Connection states */}
