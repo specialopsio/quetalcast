@@ -278,8 +278,9 @@ const Broadcaster = () => {
 
   const doGoOnAir = useCallback(async () => {
     try {
-      // Stop pre-broadcast recording so we don't tear down its source when going on air
-      if (recorder.recording && !isOnAir) {
+      // Only stop recording when it's from preview stream (source will be torn down).
+      // When recording from mixer (after broadcast), keep it running into the new broadcast.
+      if (recorder.recording && !isOnAir && !recordingAfterBroadcastRef.current) {
         recorder.stopRecording();
         addLog('Recording stopped — saving MP3 before going on air');
       }
@@ -342,34 +343,10 @@ const Broadcaster = () => {
     setLogs([]);
     setTrackList([]);
     setStartBroadcastDialogOpen(false);
-    // If recording after broadcast ended, stop recording, wait for completion, then disconnect
-    if (recorder.recording || recordingAfterBroadcastRef.current) {
-      const blob = await recorder.stopRecordingAndGetBlob();
-      recordingAfterBroadcastRef.current = false;
-      if (blob) {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        a.download = `broadcast-${timestamp}.mp3`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }
-      micEffects.removeFromChain();
-      localStream?.getTracks().forEach((t) => t.stop());
-      setLocalStream(null);
-      mixer.disconnectMic();
-      if (systemAudioActive) {
-        mixer.disconnectSystemAudio();
-        systemAudioStreamRef.current = null;
-        setSystemAudioActive(false);
-        setSystemAudioVolume(100);
-      }
-    }
+    // Keep recording running — it continues into the new broadcast. User stops via
+    // Record button or Download ZIP in the modal when they end the next broadcast.
     await doGoOnAir();
-  }, [doGoOnAir, recorder, micEffects, mixer, localStream, systemAudioActive]);
+  }, [doGoOnAir]);
 
   /** Continue previous broadcast — rejoin same room, keep logs & track list */
   const handleContinuePreviousBroadcast = useCallback(async () => {
@@ -380,10 +357,7 @@ const Broadcaster = () => {
     }
     setStartBroadcastDialogOpen(false);
     try {
-      if (recorder.recording) {
-        recorder.stopRecording();
-        addLog('Recording stopped — saving MP3 before resuming');
-      }
+      // Keep recording running — same mixer, just reconnecting to room
 
       const constraints: MediaStreamConstraints = {
         audio: {

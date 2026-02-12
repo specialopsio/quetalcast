@@ -171,9 +171,9 @@ export default function DocsBroadcaster() {
           pulsing red dot shows when recording, with elapsed time and file size. When you stop,
           the MP3 downloads automatically. Start recording before going on air to capture from the
           moment you hit record (mic only); during broadcast you capture the full mix. If you end
-          the broadcast while recording, recording continues until you stop or start a new broadcast.
-          The post-broadcast dialog can download a ZIP that includes the MP3 when recording was
-          active.
+          the broadcast while recording, recording continues until you stop it or click Download ZIP
+          in the "Start New Broadcast" modal. Recording also continues when you click Start New
+          Broadcast — use the Record button or Download ZIP to stop and save.
         </p>
       </section>
 
