@@ -15,6 +15,25 @@ export default function DocsIntegrations() {
           Playing metadata is automatically forwarded to the external server's admin API so
           listeners on those platforms can see what's playing too.
         </p>
+
+        <h3 className="text-base font-semibold text-foreground mt-6 mb-2">internet-radio.com (Centova Cast)</h3>
+        <p>
+          internet-radio.com uses Centova Cast v3. Find your settings under <strong>Settings → Stream</strong> and{' '}
+          <strong>Settings → Mount Points</strong>.
+        </p>
+        <ul className="list-disc list-inside mt-2 space-y-1 pl-1">
+          <li>
+            <strong>Mount point</strong> — The default is <code>/stream</code>, not <code>/live</code>. Enter the exact
+            mount from your control panel; listeners must connect to the same path.
+          </li>
+          <li>
+            <strong>AutoDJ</strong> — If AutoDJ is running on the mount point, stop it before going live, or ensure
+            source override is enabled so your live stream takes priority.
+          </li>
+          <li>
+            <strong>Source password</strong> — Use the administrator/source password from Settings → Stream.
+          </li>
+        </ul>
       </section>
 
       <section>
