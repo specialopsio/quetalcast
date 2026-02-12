@@ -113,8 +113,8 @@ const Broadcaster = () => {
   const webrtc = useWebRTC(signaling, 'broadcaster');
   const mixer = useAudioMixer();
   const micEffects = useMicEffects();
-  /** Level meter: use mixer when on air, preview stream when not (so user can dial in before going live) */
-  const levelMeterStream = isOnAir ? mixer.mixedStream : previewStream;
+  /** Level meter: use mixer when on air or when system audio is connected (prep), else preview stream */
+  const levelMeterStream = isOnAir || systemAudioActive ? mixer.mixedStream : previewStream;
   const audioAnalysis = useAudioAnalyser(levelMeterStream);
 
   // Auth check — verify both local token and server session
@@ -271,6 +271,8 @@ const Broadcaster = () => {
   }, [webrtc.roomId, setSearchParams]);
 
   const broadcastStartedRef = useRef(false);
+  const isOnAirRef = useRef(isOnAir);
+  isOnAirRef.current = isOnAir;
   const recordingAfterBroadcastRef = useRef(false);
   const prevRecordingRef = useRef(false);
 
@@ -634,7 +636,14 @@ const Broadcaster = () => {
       systemAudioStreamRef.current = null;
       setSystemAudioActive(false);
       setSystemAudioVolume(100);
-      addLog('System audio stopped');
+      // If we connected mic for prep (not on air), disconnect it
+      if (!isOnAir) {
+        micEffects.removeFromChain();
+        mixer.disconnectMic();
+        addLog('System audio stopped — mic disconnected from mixer');
+      } else {
+        addLog('System audio stopped');
+      }
     } else {
       // Show the info modal first
       setSystemAudioInfoOpen(true);
@@ -644,6 +653,18 @@ const Broadcaster = () => {
   const handleSystemAudioConfirm = async () => {
     setSystemAudioInfoOpen(false);
     try {
+      // When not on air, connect mic and effects so we can prep the full mix
+      if (!isOnAir && previewStream) {
+        mixer.connectMic(previewStream);
+        const nodes = mixer.getNodes();
+        if (nodes) {
+          await micEffects.insertIntoChain(nodes.ctx, nodes.micGain, nodes.micVolumeGain);
+        }
+        mixer.setMicVolume(micVolume / 100);
+        if (micMuted) mixer.setMicMuted(true);
+        addLog('Mic connected for level check');
+      }
+
       // Request system audio via getDisplayMedia.
       // Video is required by browsers, but we request the absolute minimum
       // (1x1 @ 1fps) to avoid GPU/CPU overhead from screen capture encoding.
@@ -687,6 +708,10 @@ const Broadcaster = () => {
         systemAudioStreamRef.current = null;
         setSystemAudioActive(false);
         setSystemAudioVolume(100);
+        if (!isOnAirRef.current) {
+          micEffects.removeFromChain();
+          mixer.disconnectMic();
+        }
         addLog('System audio stopped');
       });
     } catch (e: unknown) {
@@ -987,7 +1012,7 @@ const Broadcaster = () => {
                 </span>
                 <span className="text-[10px] text-muted-foreground">
                   {systemAudioActive
-                    ? 'Desktop / app audio mixed into your broadcast'
+                    ? (isOnAir ? 'Desktop / app audio mixed into your broadcast' : 'Connected — set levels before going live')
                     : 'Route desktop / app audio into your broadcast'}
                 </span>
                 {systemAudioActive && (
@@ -1011,9 +1036,9 @@ const Broadcaster = () => {
               </div>
               <button
                 onClick={handleToggleSystemAudio}
-                disabled={!isOnAir}
+                disabled={!isOnAir && !previewStream}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all shrink-0 ${
-                  !isOnAir ? 'opacity-50 cursor-not-allowed' : ''
+                  (!isOnAir && !previewStream) ? 'opacity-50 cursor-not-allowed' : ''
                 } ${
                   systemAudioActive
                     ? 'bg-primary/20 text-primary'
