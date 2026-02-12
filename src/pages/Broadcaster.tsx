@@ -134,7 +134,7 @@ const Broadcaster = () => {
       try {
         // Need permission first to get labels
         const tempStream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 2 } },
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
         });
         tempStream.getTracks().forEach((t) => t.stop());
 
@@ -172,7 +172,6 @@ const Broadcaster = () => {
           noiseSuppression: false,
           autoGainControl: false,
           sampleRate: { ideal: 48000 },
-          channelCount: { ideal: 2 },
         },
       })
       .then((stream) => {
@@ -293,7 +292,6 @@ const Broadcaster = () => {
           noiseSuppression: false,
           autoGainControl: false,
           sampleRate: { ideal: 48000 },
-          channelCount: { ideal: 2 },
         },
       };
 
@@ -368,7 +366,6 @@ const Broadcaster = () => {
           noiseSuppression: false,
           autoGainControl: false,
           sampleRate: { ideal: 48000 },
-          channelCount: { ideal: 2 },
         },
       };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
