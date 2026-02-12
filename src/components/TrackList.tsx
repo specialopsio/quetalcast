@@ -319,10 +319,10 @@ export function TrackList({ tracks, topContent, alwaysShow, roomId }: TrackListP
             </div>
           ) : (
             <>
-        {/* Column headers */}
+        {/* Column headers — Time first, then cover */}
         <div className="flex items-center gap-2.5 px-2 py-1 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider border-b border-border">
-          <span className="w-8 shrink-0" />
           <span className="w-16 shrink-0">Time</span>
+          <span className="w-8 shrink-0" />
           <span className="flex-1 min-w-0">Title</span>
           <span className="hidden sm:block w-32 shrink-0 truncate">Album</span>
           <span className="w-10 shrink-0 text-right">Dur.</span>
@@ -343,6 +343,11 @@ export function TrackList({ tracks, topContent, alwaysShow, roomId }: TrackListP
                   isCurrent ? 'bg-primary/5 hover:bg-primary/10' : 'hover:bg-secondary/50'
                 }`}
               >
+                {/* Time played — first */}
+                <span className="w-16 shrink-0 text-muted-foreground/60 tabular-nums font-mono">
+                  {formatTime(track.time)}
+                </span>
+
                 {/* Artwork */}
                 {(track.coverMedium || track.cover) ? (
                   <img
@@ -361,11 +366,6 @@ export function TrackList({ tracks, topContent, alwaysShow, roomId }: TrackListP
                     />
                   </div>
                 )}
-
-                {/* Time played */}
-                <span className="w-16 shrink-0 text-muted-foreground/60 tabular-nums font-mono">
-                  {formatTime(track.time)}
-                </span>
 
                 {/* Title + Artist */}
                 <div className="flex-1 min-w-0">
