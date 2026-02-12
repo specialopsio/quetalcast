@@ -13,11 +13,11 @@ Real-time audio broadcasting application built with WebRTC, React, and Node.js. 
 - **Broadcast timer** — Elapsed time display while on air
 - **Mixer controls** — Collapsible panel with mic volume, mute, listen mode, cue mode, and system audio routing
 - **System audio** — Route desktop or application audio into the broadcast via screen share audio capture, with independent volume control
-- **Live chat** — Bidirectional chat via floating action button (full-screen on mobile, floating panel on desktop). Users provide a display name before chatting. Rate-limited to 1 message per second, max 280 characters. Unread badge on FAB
+- **Live chat** — Bidirectional chat via floating action button (full-screen on mobile, floating panel on desktop). Users provide a display name before chatting. Chat history is sent to new receivers on join. Join/leave system messages appear in the chat. Unread badge on FAB when chat is closed; browser tab title flashes when new messages arrive until viewed. Rate-limited to 1 message per second, max 280 characters
 - **Listener count** — Real-time count of connected listeners displayed in the Stats panel during broadcast
 - **Now playing** — Broadcaster sets stream metadata with Deezer-powered autocomplete (artist + song search with album art). Visible to all listeners in real time. Metadata is also forwarded to external integration streams (Icecast/Shoutcast)
 - **Track list** — Chronological history of every track played during the broadcast. Visible to both broadcaster and receivers, with the current track highlighted. New receivers get the full history on join
-- **Auto-identify** — Automatic song identification using AcoustID audio fingerprinting (Chromaprint). Toggle the ear icon during broadcast to detect playing songs and add them to the track list with full Deezer metadata. Requires `fpcalc` on the server and an AcoustID API key
+<!-- Auto-identify (temporarily disabled): Automatic song identification using AcoustID/Chromaprint. Ear icon toggle during broadcast. Code remains in useAutoIdentify.ts and audio-identify.js for future re-enable. -->
 - **Local recording** — Record your broadcast as a 320 kbps stereo MP3, auto-downloaded when you stop. Uses AudioWorklet + Web Worker for energy-efficient encoding
 - **Keyboard shortcuts** — Space (mute), R (record), L (listen), C (cue), 1–0 (soundboard pads), ? (help). Active while on air, disabled when typing in inputs
 - **Integrations** — Stream to external platforms (Icecast, Shoutcast, Radio.co) via server-side relay. Test connection, remember credentials in localStorage. Room is still created for chat and metadata. Now Playing metadata is automatically pushed to the external server's admin API
@@ -134,7 +134,7 @@ fly deploy
 | `TURN_URL` | — | Static TURN server URL (alternative to Metered) |
 | `TURN_USERNAME` | — | Static TURN username |
 | `TURN_CREDENTIAL` | — | Static TURN credential |
-| `ACOUSTID_API_KEY` | — | AcoustID API key for auto song identification ([get one free](https://acoustid.org/new-application)) |
+| `ACOUSTID_API_KEY` | — | AcoustID API key for auto song identification ([get one free](https://acoustid.org/new-application)). *Optional — auto-identify is temporarily disabled.* |
 | `LOG_DIR` | `server/logs` | Log file directory |
 | `LOG_LEVEL` | `info` | Log level (error, warn, info, debug) |
 
@@ -168,7 +168,7 @@ fly deploy
 │   │   ├── useAudioMixer.ts    # Web Audio API mixing graph
 │   │   ├── useAudioAnalyser.ts # Audio level analysis
 │   │   ├── useIntegrationStream.ts # MP3 encoding + WebSocket relay for integrations
-│   │   ├── useAutoIdentify.ts  # AcoustID-based automatic song identification
+│   │   ├── useAutoIdentify.ts  # AcoustID-based auto song identification (temporarily disabled in UI)
 │   │   ├── useKeyboardShortcuts.ts # Keyboard shortcut bindings for broadcaster
 │   │   ├── useMicEffects.ts    # Mic effect chain (enhance, compressor, pitch shift worklets)
 │   │   └── useRecorder.ts      # AudioWorklet + Web Worker MP3 recording

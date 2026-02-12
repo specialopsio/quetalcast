@@ -245,7 +245,10 @@ export function Footer() {
                   (session-only — not saved). Messages are limited to 280 characters
                   and rate-limited to 1 per second. Incoming chat messages also appear
                   in the event log with a blue icon. An unread badge shows on the
-                  chat button when you have new messages.
+                  chat button when you have new messages while the panel is closed. When
+                  new messages arrive and the chat is closed or the tab is in the
+                  background, the browser tab title flashes until you view the chat.
+                  System messages appear when listeners join or leave the room.
                 </p>
               </section>
 
@@ -263,6 +266,7 @@ export function Footer() {
                 </p>
               </section>
 
+              {/* Auto-identify section — temporarily disabled in UI; code remains in useAutoIdentify.ts
               <section>
                 <h3 className="text-foreground font-semibold mb-1">Auto-Identify</h3>
                 <p>
@@ -277,6 +281,7 @@ export function Footer() {
                   on the server.
                 </p>
               </section>
+              */}
 
               <section>
                 <h3 className="text-foreground font-semibold mb-1">Track List</h3>
@@ -410,10 +415,14 @@ export function Footer() {
                 <p>
                   Once listening, a chat button appears in the bottom-right corner of
                   the screen. Tap it to open the chat panel (full-screen on mobile,
-                  floating card on desktop). The first time you open chat, you'll be
+                  floating card on desktop). When you join, you'll see the full chat
+                  history from the broadcast. The first time you open chat, you'll be
                   asked for a display name. Send messages to the broadcaster and see
                   their replies. Messages are limited to 280 characters, 1 per second.
-                  An unread badge shows on the button when you have new messages.
+                  System messages appear when other listeners join or leave. An unread
+                  badge shows on the button when you have new messages while the panel
+                  is closed. The browser tab title flashes when new messages arrive
+                  until you view the chat.
                 </p>
               </section>
 
