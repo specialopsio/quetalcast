@@ -1148,7 +1148,7 @@ const Broadcaster = () => {
                   {boardExpanded ? (boardActive === 'effects' ? 'Effects' : 'Sounds') : 'Sounds / Effects'}
                 </span>
                 {boardExpanded && (
-                  <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-1 shrink-0 mr-3" onClick={(e) => e.stopPropagation()}>
                     <button
                       onClick={() => setBoardAccordion('sounds')}
                       className={`p-1.5 rounded transition-colors ${
