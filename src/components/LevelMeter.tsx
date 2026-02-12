@@ -78,10 +78,10 @@ export function LevelMeter({ left, right, label = 'Level', segments = 48 }: Leve
         </span>
         <div className="flex items-center gap-3">
           <span className="text-[10px] font-mono text-muted-foreground tabular-nums min-w-[3.5rem]">
-            {maxLevel > MIN_DB ? `${maxLevel.toFixed(1)} dB` : '—'}
+            {maxLevel > MIN_DB ? `${maxLevel.toFixed(1)} dB` : '0.00 dB'}
           </span>
           <span className="text-[10px] font-mono text-muted-foreground/60 tabular-nums min-w-[3.5rem]">
-            pk {maxPeak > MIN_DB ? maxPeak.toFixed(1) : '—'}
+            pk {maxPeak > MIN_DB ? maxPeak.toFixed(1) : '0.00'}
           </span>
           {clipping && (
             <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-destructive animate-pulse">
