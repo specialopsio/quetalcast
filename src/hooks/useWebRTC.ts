@@ -17,6 +17,8 @@ export interface UseWebRTCReturn {
   peerConnected: boolean;
   startBroadcast: (stream: MediaStream) => void;
   joinAsReceiver: (roomId: string) => void;
+  /** Rejoin an existing room as broadcaster (for "continue previous broadcast") */
+  joinRoomAsBroadcaster: (roomId: string) => void;
   stop: () => void;
   createRoom: () => void;
   roomId: string | null;
@@ -611,6 +613,14 @@ export function useWebRTC(
     signaling.send({ type: 'create-room' });
   }, [signaling]);
 
+  const joinRoomAsBroadcaster = useCallback(
+    (roomIdToJoin: string) => {
+      setRoomId(roomIdToJoin);
+      signaling.send({ type: 'join-room', roomId: roomIdToJoin, role: 'broadcaster' });
+    },
+    [signaling],
+  );
+
   const startBroadcast = useCallback(
     (stream: MediaStream) => {
       if (!roomId) {
@@ -710,6 +720,7 @@ export function useWebRTC(
     peerConnected,
     startBroadcast,
     joinAsReceiver,
+    joinRoomAsBroadcaster,
     stop,
     createRoom,
     roomId,

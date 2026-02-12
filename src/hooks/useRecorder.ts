@@ -8,6 +8,8 @@ export interface UseRecorderReturn {
   encodedBytes: number;
   startRecording: (stream: MediaStream) => Promise<void>;
   stopRecording: () => void;
+  /** Stop recording and return the MP3 blob when ready (no auto-download). Resolves null if not recording. */
+  stopRecordingAndGetBlob: () => Promise<Blob | null>;
 }
 
 /**
@@ -32,6 +34,7 @@ export function useRecorder(): UseRecorderReturn {
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const workerRef = useRef<Worker | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const resolveBlobRef = useRef<((blob: Blob) => void) | null>(null);
 
   const cleanup = useCallback(() => {
     // Stop timer
@@ -73,6 +76,26 @@ export function useRecorder(): UseRecorderReturn {
     }
 
     setRecording(false);
+  }, [recording]);
+
+  const stopRecordingAndGetBlob = useCallback((): Promise<Blob | null> => {
+    if (!recording) return Promise.resolve(null);
+
+    return new Promise<Blob | null>((resolve) => {
+      resolveBlobRef.current = (blob: Blob) => {
+        resolveBlobRef.current = null;
+        resolve(blob);
+      };
+
+      if (workletNodeRef.current) {
+        workletNodeRef.current.port.postMessage({ command: 'stop' });
+      }
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      setRecording(false);
+    });
   }, [recording]);
 
   const startRecording = useCallback(async (stream: MediaStream) => {
@@ -144,19 +167,23 @@ export function useRecorder(): UseRecorderReturn {
         setEncodedBytes(e.data.encodedBytes);
       }
       if (e.data.type === 'complete') {
-        const { blob, duration } = e.data;
+        const { blob } = e.data;
 
-        // Trigger download
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        const now = new Date();
-        const timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        a.download = `broadcast-${timestamp}.mp3`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        if (resolveBlobRef.current) {
+          resolveBlobRef.current(blob);
+        } else {
+          // Trigger download
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          const now = new Date();
+          const timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+          a.download = `broadcast-${timestamp}.mp3`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }
 
         // Terminate worker
         worker.terminate();
@@ -188,5 +215,5 @@ export function useRecorder(): UseRecorderReturn {
     setRecording(true);
   }, [recording, cleanup]);
 
-  return { recording, elapsed, encodedBytes, startRecording, stopRecording };
+  return { recording, elapsed, encodedBytes, startRecording, stopRecording, stopRecordingAndGetBlob };
 }

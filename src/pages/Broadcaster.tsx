@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { isAuthenticated, verifySession } from '@/lib/auth';
 import { useSignaling } from '@/hooks/useSignaling';
 import { useWebRTC, type ConnectionStatus, type AudioQuality } from '@/hooks/useWebRTC';
@@ -57,6 +57,7 @@ const WS_URL = import.meta.env.VITE_WS_URL || (
 
 const Broadcaster = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDevice, setSelectedDevice] = useState('');
@@ -246,7 +247,27 @@ const Broadcaster = () => {
     }
   }, [webrtc.status, addLog]);
 
+  // Update URL with room ID when broadcast starts; clear when new broadcast creates new room
+  useEffect(() => {
+    if (webrtc.roomId) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('room', webrtc.roomId!);
+        return next;
+      }, { replace: true });
+    } else {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('room');
+        if (next.toString() === '') return {};
+        return next;
+      }, { replace: true });
+    }
+  }, [webrtc.roomId, setSearchParams]);
+
   const broadcastStartedRef = useRef(false);
+  const recordingAfterBroadcastRef = useRef(false);
+  const prevRecordingRef = useRef(false);
 
   const doGoOnAir = useCallback(async () => {
     try {
@@ -304,8 +325,73 @@ const Broadcaster = () => {
     setLogs([]);
     setTrackList([]);
     setStartBroadcastDialogOpen(false);
+    // If recording after broadcast ended, stop recording, wait for completion, then disconnect
+    if (recorder.recording || recordingAfterBroadcastRef.current) {
+      const blob = await recorder.stopRecordingAndGetBlob();
+      recordingAfterBroadcastRef.current = false;
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        a.download = `broadcast-${timestamp}.mp3`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+      micEffects.removeFromChain();
+      localStream?.getTracks().forEach((t) => t.stop());
+      setLocalStream(null);
+      mixer.disconnectMic();
+      if (systemAudioActive) {
+        mixer.disconnectSystemAudio();
+        systemAudioStreamRef.current = null;
+        setSystemAudioActive(false);
+        setSystemAudioVolume(100);
+      }
+    }
     await doGoOnAir();
-  }, [doGoOnAir]);
+  }, [doGoOnAir, recorder, micEffects, mixer, localStream, systemAudioActive]);
+
+  /** Continue previous broadcast — rejoin same room, keep logs & track list */
+  const handleContinuePreviousBroadcast = useCallback(async () => {
+    const prevRoomId = webrtc.roomId;
+    if (!prevRoomId) {
+      await doGoOnAir();
+      return;
+    }
+    setStartBroadcastDialogOpen(false);
+    try {
+      const constraints: MediaStreamConstraints = {
+        audio: {
+          deviceId: selectedDevice ? { exact: selectedDevice } : undefined,
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          sampleRate: { ideal: 48000 },
+        },
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      setLocalStream(stream);
+      mixer.connectMic(stream);
+      const nodes = mixer.getNodes();
+      if (nodes) {
+        await micEffects.insertIntoChain(nodes.ctx, nodes.micGain, nodes.broadcastBus);
+      }
+      addLog('Mic connected');
+      addLog('Resuming previous broadcast…');
+      webrtc.joinRoomAsBroadcaster(prevRoomId);
+      broadcastStartedRef.current = false;
+      if (selectedIntegration) {
+        const integrationInfo = getIntegration(selectedIntegration.integrationId);
+        addLog(`Connecting to ${integrationInfo?.name || 'integration'}…`);
+      }
+      setIsOnAir(true);
+    } catch (e) {
+      addLog('Couldn\'t resume broadcast — check mic permissions', 'error');
+    }
+  }, [mixer, micEffects, webrtc, selectedDevice, selectedIntegration, addLog]);
 
   // Start broadcast once room is ready and we have a mixed stream (native mode)
   useEffect(() => {
@@ -344,29 +430,47 @@ const Broadcaster = () => {
     }
   }, [integrationStream.error, addLog]);
 
+  // When recording stops after broadcast ended, disconnect mixer/mic
+  useEffect(() => {
+    const wasRecording = prevRecordingRef.current;
+    prevRecordingRef.current = recorder.recording;
+    if (wasRecording && !recorder.recording && recordingAfterBroadcastRef.current) {
+      recordingAfterBroadcastRef.current = false;
+      micEffects.removeFromChain();
+      localStream?.getTracks().forEach((t) => t.stop());
+      setLocalStream(null);
+      mixer.disconnectMic();
+      if (systemAudioActive) {
+        mixer.disconnectSystemAudio();
+        systemAudioStreamRef.current = null;
+        setSystemAudioActive(false);
+        setSystemAudioVolume(100);
+      }
+    }
+  }, [recorder.recording, micEffects, mixer, localStream, systemAudioActive]);
+
   const handleEndBroadcast = () => {
-    // Stop recording if active
-    if (recorder.recording) {
-      recorder.stopRecording();
-      addLog('Recording stopped — saving MP3');
+    const wasRecording = recorder.recording;
+
+    // If recording, keep mixer/mic connected so recording continues until user stops
+    if (!wasRecording) {
+      micEffects.removeFromChain();
+      localStream?.getTracks().forEach((t) => t.stop());
+      setLocalStream(null);
+      mixer.disconnectMic();
+
+      if (systemAudioActive) {
+        mixer.disconnectSystemAudio();
+        systemAudioStreamRef.current = null;
+        setSystemAudioActive(false);
+        setSystemAudioVolume(100);
+      }
+    } else {
+      recordingAfterBroadcastRef.current = true;
+      addLog('Recording continues — stop when ready or start a new broadcast');
     }
 
-    micEffects.removeFromChain();
-    localStream?.getTracks().forEach((t) => t.stop());
-    setLocalStream(null);
-    mixer.disconnectMic();
-
-    // Stop system audio if active
-    if (systemAudioActive) {
-      mixer.disconnectSystemAudio();
-      systemAudioStreamRef.current = null;
-      setSystemAudioActive(false);
-      setSystemAudioVolume(100);
-    }
-
-    // Always stop WebRTC (room exists in both modes for signaling)
     webrtc.stop();
-
     if (selectedIntegration) {
       integrationStream.stopStream();
     }
@@ -1132,13 +1236,28 @@ const Broadcaster = () => {
             <div className="flex flex-col gap-2">
               <button
                 onClick={async () => {
-                  await downloadBroadcastZip(logs, trackList, webrtc.roomId ?? undefined);
+                  let mp3Blob: Blob | null = null;
+                  if (recorder.recording) {
+                    mp3Blob = await recorder.stopRecordingAndGetBlob();
+                    recordingAfterBroadcastRef.current = false;
+                    micEffects.removeFromChain();
+                    localStream?.getTracks().forEach((t) => t.stop());
+                    setLocalStream(null);
+                    mixer.disconnectMic();
+                    if (systemAudioActive) {
+                      mixer.disconnectSystemAudio();
+                      systemAudioStreamRef.current = null;
+                      setSystemAudioActive(false);
+                      setSystemAudioVolume(100);
+                    }
+                  }
+                  await downloadBroadcastZip(logs, trackList, webrtc.roomId ?? undefined, mp3Blob);
                   toast('Download started');
                 }}
                 className="flex items-center justify-center gap-2 w-full py-2.5 rounded-md bg-primary text-primary-foreground font-semibold hover:opacity-90 transition-opacity"
               >
                 <Download className="h-4 w-4" />
-                Download Logs & Track List (ZIP)
+                {recorder.recording ? 'Stop Recording & Download ZIP' : 'Download Logs & Track List (ZIP)'}
               </button>
               <button
                 onClick={() => {
@@ -1156,24 +1275,31 @@ const Broadcaster = () => {
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-border">
+          <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-border">
+            <div className="flex gap-2">
+              <button
+                onClick={handleContinuePreviousBroadcast}
+                className="flex-1 px-4 py-2 rounded-md text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-opacity"
+              >
+                Continue Previous Broadcast
+              </button>
+              <button
+                onClick={handleStartBroadcastContinue}
+                className="flex-1 px-4 py-2 rounded-md text-sm font-semibold bg-secondary text-foreground hover:bg-secondary/80 transition-colors"
+              >
+                Start New Broadcast
+              </button>
+            </div>
             <button
               onClick={() => setStartBroadcastDialogOpen(false)}
-              className="px-4 py-2 rounded-md text-sm font-medium bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+              className="px-4 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
             >
               Cancel
-            </button>
-            <button
-              onClick={handleStartBroadcastContinue}
-              className="px-6 py-2 rounded-md text-sm font-semibold bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
-            >
-              Continue — Start New Broadcast
             </button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Save preset dialog */}
       <Dialog open={savePresetOpen} onOpenChange={setSavePresetOpen}>
         <DialogContent className="sm:max-w-xs">
           <DialogHeader>

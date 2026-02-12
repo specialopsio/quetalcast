@@ -70,11 +70,12 @@ function buildTrackListCsv(tracks: Track[], roomId?: string): string {
   return [header, ...lines].join('\n');
 }
 
-/** Download a zip containing event log and track list CSVs */
+/** Download a zip containing event log and track list CSVs, optionally with MP3 recording */
 export async function downloadBroadcastZip(
   logs: LogEntry[],
   tracks: Track[],
-  roomId?: string
+  roomId?: string,
+  mp3Blob?: Blob | null
 ): Promise<void> {
   const zip = new JSZip();
   const date = new Date().toISOString().slice(0, 10);
@@ -82,6 +83,9 @@ export async function downloadBroadcastZip(
 
   zip.file('event-log.csv', buildEventLogCsv(logs, roomId));
   zip.file('track-list.csv', buildTrackListCsv(tracks, roomId));
+  if (mp3Blob && mp3Blob.size > 0) {
+    zip.file('recording.mp3', mp3Blob);
+  }
 
   const blob = await zip.generateAsync({ type: 'blob' });
   const url = URL.createObjectURL(blob);
