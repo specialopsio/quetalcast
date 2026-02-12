@@ -91,6 +91,7 @@ const Broadcaster = () => {
   // System audio state
   const [systemAudioActive, setSystemAudioActive] = useState(false);
   const [systemAudioVolume, setSystemAudioVolume] = useState(100);
+  const [systemAudioInfoOpen, setSystemAudioInfoOpen] = useState(false);
   const systemAudioStreamRef = useRef<MediaStream | null>(null);
 
   // Auto-identify state
@@ -498,7 +499,7 @@ const Broadcaster = () => {
     addLog(`Limiter set to ${db} dB`);
   };
 
-  const handleToggleSystemAudio = async () => {
+  const handleToggleSystemAudio = () => {
     if (systemAudioActive) {
       // Stop system audio capture
       mixer.disconnectSystemAudio();
@@ -507,48 +508,54 @@ const Broadcaster = () => {
       setSystemAudioVolume(100);
       addLog('System audio stopped');
     } else {
-      try {
-        // Request system audio via getDisplayMedia
-        // We ask for video: true because some browsers require it,
-        // but we only use the audio track
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-          audio: true,
-          video: true, // required by some browsers; we discard the video track
-        });
+      // Show the info modal first
+      setSystemAudioInfoOpen(true);
+    }
+  };
 
-        // Stop the video track immediately — we only need audio
-        stream.getVideoTracks().forEach(t => t.stop());
+  const handleSystemAudioConfirm = async () => {
+    setSystemAudioInfoOpen(false);
+    try {
+      // Request system audio via getDisplayMedia
+      // We ask for video: true because some browsers require it,
+      // but we only use the audio track
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        audio: true,
+        video: true, // required by some browsers; we discard the video track
+      });
 
-        const audioTracks = stream.getAudioTracks();
-        if (audioTracks.length === 0) {
-          toast('No system audio was captured. Make sure to check "Share audio" in the dialog.', { duration: 5000 });
-          stream.getTracks().forEach(t => t.stop());
-          return;
-        }
+      // Stop the video track immediately — we only need audio
+      stream.getVideoTracks().forEach(t => t.stop());
 
-        // Create a new stream with only the audio track
-        const audioOnlyStream = new MediaStream(audioTracks);
-
-        mixer.connectSystemAudio(audioOnlyStream);
-        systemAudioStreamRef.current = audioOnlyStream;
-        setSystemAudioActive(true);
-        addLog('System audio connected');
-
-        // Listen for the track ending (user clicks "Stop sharing" in browser chrome)
-        audioTracks[0].addEventListener('ended', () => {
-          systemAudioStreamRef.current = null;
-          setSystemAudioActive(false);
-          setSystemAudioVolume(100);
-          addLog('System audio stopped');
-        });
-      } catch (e: unknown) {
-        if (e instanceof Error && e.name === 'NotAllowedError') {
-          // User cancelled the picker — not an error
-          return;
-        }
-        addLog('Failed to capture system audio', 'error');
-        toast('Could not capture system audio. Your browser may not support this feature.', { duration: 4000 });
+      const audioTracks = stream.getAudioTracks();
+      if (audioTracks.length === 0) {
+        toast('No system audio was captured. Make sure to toggle "Share audio" in the dialog.', { duration: 5000 });
+        stream.getTracks().forEach(t => t.stop());
+        return;
       }
+
+      // Create a new stream with only the audio track
+      const audioOnlyStream = new MediaStream(audioTracks);
+
+      mixer.connectSystemAudio(audioOnlyStream);
+      systemAudioStreamRef.current = audioOnlyStream;
+      setSystemAudioActive(true);
+      addLog('System audio connected');
+
+      // Listen for the track ending (user clicks "Stop sharing" in browser chrome)
+      audioTracks[0].addEventListener('ended', () => {
+        systemAudioStreamRef.current = null;
+        setSystemAudioActive(false);
+        setSystemAudioVolume(100);
+        addLog('System audio stopped');
+      });
+    } catch (e: unknown) {
+      if (e instanceof Error && e.name === 'NotAllowedError') {
+        // User cancelled the picker — not an error
+        return;
+      }
+      addLog('Failed to capture system audio', 'error');
+      toast('Could not capture system audio. Your browser may not support this feature.', { duration: 4000 });
     }
   };
 
@@ -1076,6 +1083,61 @@ const Broadcaster = () => {
         selectedIntegration={selectedIntegration}
         onSelectIntegration={setSelectedIntegration}
       />
+
+      {/* System audio info modal */}
+      <Dialog open={systemAudioInfoOpen} onOpenChange={setSystemAudioInfoOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Monitor className="h-5 w-5 text-primary" />
+              System Audio
+            </DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground leading-relaxed">
+              To capture audio from your computer, your browser will ask you to share your screen. This is how browsers provide access to system audio.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 mt-1">
+            <div className="rounded-lg bg-primary/5 border border-primary/10 p-3 space-y-2.5">
+              <p className="text-sm font-medium text-foreground">When the sharing dialog appears:</p>
+              <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
+                <li>
+                  Select <strong className="text-foreground">"Entire Screen"</strong> (or any screen/tab)
+                </li>
+                <li>
+                  Toggle <strong className="text-foreground">"Share system audio"</strong> on — this is the important part
+                </li>
+                <li>
+                  Click <strong className="text-foreground">Share</strong>
+                </li>
+              </ol>
+            </div>
+
+            <div className="flex items-start gap-2 text-xs text-muted-foreground/80">
+              <span className="shrink-0 mt-0.5">🔒</span>
+              <p>
+                <strong className="text-muted-foreground">Your screen is not being shared or recorded.</strong>{' '}
+                We immediately discard the video — only the audio is captured and mixed into your broadcast.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 mt-2">
+            <button
+              onClick={() => setSystemAudioInfoOpen(false)}
+              className="px-4 py-2 rounded-md text-sm font-medium bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSystemAudioConfirm}
+              className="px-4 py-2 rounded-md text-sm font-semibold bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
+            >
+              Got it, continue
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Save preset dialog */}
       <Dialog open={savePresetOpen} onOpenChange={setSavePresetOpen}>
