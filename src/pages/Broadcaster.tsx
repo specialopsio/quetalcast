@@ -1143,7 +1143,12 @@ const Broadcaster = () => {
                     ) : (
                       <Music className="h-3.5 w-3.5 shrink-0" />
                     )
-                  ) : null}
+                  ) : (
+                    <>
+                      <Music className="h-3.5 w-3.5 shrink-0" />
+                      <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                    </>
+                  )}
                   {boardExpanded ? (boardActive === 'effects' ? 'Effects' : 'Sounds') : 'Sounds / Effects'}
                 </span>
                 {boardExpanded && (
