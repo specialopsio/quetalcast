@@ -11,7 +11,11 @@ export interface UseAudioMixerReturn {
   disconnectSystemAudio: () => void;
   setSystemAudioVolume: (v: number) => void;
   setMicVolume: (v: number) => void;
+  setPadsVolume: (v: number) => void;
   setMicMuted: (muted: boolean) => void;
+  setMicPan: (pan: number) => void;
+  setSystemAudioPan: (pan: number) => void;
+  setPadsPan: (pan: number) => void;
   setListening: (on: boolean) => void;
   setCueMode: (on: boolean) => void;
   setLimiterThreshold: (db: LimiterThreshold) => void;
@@ -40,6 +44,7 @@ export function useAudioMixer(): UseAudioMixerReturn {
   const micSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const sysAudioSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const sysAudioGainRef = useRef<GainNode | null>(null);
+  const sysAudioPanRef = useRef<StereoPannerNode | null>(null);
   const sysAudioStreamRef = useRef<MediaStream | null>(null);
   const connectedElements = useRef<WeakSet<HTMLAudioElement>>(new WeakSet());
   const [mixedStream, setMixedStream] = useState<MediaStream | null>(null);
@@ -47,8 +52,11 @@ export function useAudioMixer(): UseAudioMixerReturn {
   // Gain node refs
   const micGainRef = useRef<GainNode | null>(null);
   const micVolumeGainRef = useRef<GainNode | null>(null);
+  const micPanRef = useRef<StereoPannerNode | null>(null);
   const broadcastBusRef = useRef<GainNode | null>(null);
   const soundboardBusRef = useRef<GainNode | null>(null);
+  const padsVolumeGainRef = useRef<GainNode | null>(null);
+  const padsPanRef = useRef<StereoPannerNode | null>(null);
   const sbToBroadcastGainRef = useRef<GainNode | null>(null);
   const sbLocalGainRef = useRef<GainNode | null>(null);
   const listenGainRef = useRef<GainNode | null>(null);
@@ -94,8 +102,11 @@ export function useAudioMixer(): UseAudioMixerReturn {
     const soundboardBus = ctx.createGain(); // unity, all soundboard elements connect here
     const micGain = ctx.createGain(); // mute only (0 or 1)
     const micVolumeGain = ctx.createGain(); // mic volume — after effects so it's the final control
+    const micPan = ctx.createStereoPanner();
     const sbToBroadcastGain = ctx.createGain(); // 0 in cue mode
     const sbLocalGain = ctx.createGain(); // soundboard → local speakers
+    const padsVolumeGain = ctx.createGain();
+    const padsPan = ctx.createStereoPanner();
     const listenGain = ctx.createGain(); // broadcast → local speakers
     const broadcastOutGain = ctx.createGain(); // gates audio to WebRTC (0 in cue mode)
 
@@ -107,8 +118,11 @@ export function useAudioMixer(): UseAudioMixerReturn {
     // Default gains
     micGain.gain.value = 1;
     micVolumeGain.gain.value = 1;
+    micPan.pan.value = 0;
     broadcastBus.gain.value = 1;
     soundboardBus.gain.value = 1;
+    padsVolumeGain.gain.value = 1;
+    padsPan.pan.value = 0;
     sbToBroadcastGain.gain.value = 1;
     sbLocalGain.gain.value = 1;
     listenGain.gain.value = 0; // listen off by default
@@ -128,14 +142,18 @@ export function useAudioMixer(): UseAudioMixerReturn {
     clipper.oversample = '4x'; // reduce aliasing from clipping
 
     // Wire the graph
-    // micVolumeGain → broadcastBus (mic path always goes through volume)
-    micVolumeGain.connect(broadcastBus);
+    // micVolumeGain → micPan → broadcastBus (mic path always goes through volume + pan)
+    micVolumeGain.connect(micPan);
+    micPan.connect(broadcastBus);
     // micGain → micVolumeGain (connected when mic is added)
-    // soundboardBus → sbToBroadcastGain → broadcastBus
-    soundboardBus.connect(sbToBroadcastGain);
+    // soundboardBus → padsVolumeGain → padsPan → (broadcast + local)
+    soundboardBus.connect(padsVolumeGain);
+    padsVolumeGain.connect(padsPan);
+    // padsPan → sbToBroadcastGain → broadcastBus
+    padsPan.connect(sbToBroadcastGain);
     sbToBroadcastGain.connect(broadcastBus);
-    // soundboardBus → sbLocalGain → ctx.destination
-    soundboardBus.connect(sbLocalGain);
+    // padsPan → sbLocalGain → ctx.destination
+    padsPan.connect(sbLocalGain);
     sbLocalGain.connect(ctx.destination);
     // broadcastBus → broadcastOutGain → limiter → clipper → dest (WebRTC output)
     broadcastBus.connect(broadcastOutGain);
@@ -153,6 +171,9 @@ export function useAudioMixer(): UseAudioMixerReturn {
     soundboardBusRef.current = soundboardBus;
     micGainRef.current = micGain;
     micVolumeGainRef.current = micVolumeGain;
+    micPanRef.current = micPan;
+    padsVolumeGainRef.current = padsVolumeGain;
+    padsPanRef.current = padsPan;
     sbToBroadcastGainRef.current = sbToBroadcastGain;
     sbLocalGainRef.current = sbLocalGain;
     listenGainRef.current = listenGain;
@@ -199,7 +220,7 @@ export function useAudioMixer(): UseAudioMixerReturn {
 
   const connectSystemAudio = useCallback(
     (stream: MediaStream) => {
-      const { ctx, broadcastBus } = ensureContext();
+      const { ctx } = ensureContext();
 
       // Disconnect previous system audio if any
       if (sysAudioSourceRef.current) {
@@ -208,12 +229,16 @@ export function useAudioMixer(): UseAudioMixerReturn {
 
       const source = ctx.createMediaStreamSource(stream);
       const gain = ctx.createGain();
+      const pan = ctx.createStereoPanner();
       gain.gain.value = 1;
+      pan.pan.value = 0;
       source.connect(gain);
-      gain.connect(broadcastBus);
+      gain.connect(pan);
+      pan.connect(broadcastBusRef.current!);
 
       sysAudioSourceRef.current = source;
       sysAudioGainRef.current = gain;
+      sysAudioPanRef.current = pan;
       sysAudioStreamRef.current = stream;
 
       // If the system audio track ends (user stops sharing), clean up
@@ -235,6 +260,9 @@ export function useAudioMixer(): UseAudioMixerReturn {
     if (sysAudioGainRef.current) {
       sysAudioGainRef.current = null;
     }
+    if (sysAudioPanRef.current) {
+      sysAudioPanRef.current = null;
+    }
     if (sysAudioStreamRef.current) {
       sysAudioStreamRef.current.getTracks().forEach(t => t.stop());
       sysAudioStreamRef.current = null;
@@ -246,6 +274,12 @@ export function useAudioMixer(): UseAudioMixerReturn {
   const setSystemAudioVolume = useCallback((v: number) => {
     if (sysAudioGainRef.current) {
       sysAudioGainRef.current.gain.value = v;
+    }
+  }, []);
+
+  const setSystemAudioPan = useCallback((pan: number) => {
+    if (sysAudioPanRef.current) {
+      sysAudioPanRef.current.pan.value = Math.max(-1, Math.min(1, pan));
     }
   }, []);
 
@@ -275,6 +309,24 @@ export function useAudioMixer(): UseAudioMixerReturn {
     micVolumeRef.current = v;
     if (micVolumeGainRef.current) {
       micVolumeGainRef.current.gain.value = v;
+    }
+  }, []);
+
+  const setMicPan = useCallback((pan: number) => {
+    if (micPanRef.current) {
+      micPanRef.current.pan.value = Math.max(-1, Math.min(1, pan));
+    }
+  }, []);
+
+  const setPadsVolume = useCallback((v: number) => {
+    if (padsVolumeGainRef.current) {
+      padsVolumeGainRef.current.gain.value = v;
+    }
+  }, []);
+
+  const setPadsPan = useCallback((pan: number) => {
+    if (padsPanRef.current) {
+      padsPanRef.current.pan.value = Math.max(-1, Math.min(1, pan));
     }
   }, []);
 
@@ -359,7 +411,11 @@ export function useAudioMixer(): UseAudioMixerReturn {
     disconnectSystemAudio,
     setSystemAudioVolume,
     setMicVolume,
+    setPadsVolume,
     setMicMuted,
+    setMicPan,
+    setSystemAudioPan,
+    setPadsPan,
     setListening,
     setCueMode,
     setLimiterThreshold,

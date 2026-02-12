@@ -65,6 +65,8 @@ const Broadcaster = () => {
   const [copied, setCopied] = useState(false);
   const [micVolume, setMicVolume] = useState(100);
   const [micMuted, setMicMuted] = useState(false);
+  const [micSolo, setMicSolo] = useState(false);
+  const [micPan, setMicPan] = useState(0);
   const [listening, setListening] = useState(false);
   const [cueMode, setCueMode] = useState(false);
   const [limiterDb, setLimiterDb] = useState<0 | -3 | -6 | -12>(0);
@@ -90,6 +92,13 @@ const Broadcaster = () => {
   // System audio state
   const [systemAudioActive, setSystemAudioActive] = useState(false);
   const [systemAudioVolume, setSystemAudioVolume] = useState(100);
+  const [systemAudioMuted, setSystemAudioMuted] = useState(false);
+  const [systemAudioSolo, setSystemAudioSolo] = useState(false);
+  const [systemAudioPan, setSystemAudioPan] = useState(0);
+  const [padsVolume, setPadsVolume] = useState(100);
+  const [padsMuted, setPadsMuted] = useState(false);
+  const [padsSolo, setPadsSolo] = useState(false);
+  const [padsPan, setPadsPan] = useState(0);
   const [systemAudioInfoOpen, setSystemAudioInfoOpen] = useState(false);
   const systemAudioStreamRef = useRef<MediaStream | null>(null);
 
@@ -200,20 +209,52 @@ const Broadcaster = () => {
   useEffect(() => {
     if (!isOnAir && previewStream) {
       mixer.connectMic(previewStream);
-      mixer.setMicVolume(micVolume / 100);
-      mixer.setMicMuted(micMuted);
     } else if (!isOnAir && !previewStream) {
       mixer.disconnectMic();
     }
   }, [
     isOnAir,
     previewStream,
-    micVolume,
-    micMuted,
     mixer.connectMic,
-    mixer.setMicVolume,
-    mixer.setMicMuted,
     mixer.disconnectMic,
+  ]);
+
+  // Channel-strip mixer math: if any solo is active, only soloed channels pass.
+  // Top mic mute still hard-mutes the mic channel.
+  useEffect(() => {
+    const anySolo = micSolo || systemAudioSolo || padsSolo;
+    const micAllowed = !anySolo || micSolo;
+    const systemAllowed = !anySolo || systemAudioSolo;
+    const padsAllowed = !anySolo || padsSolo;
+
+    const micGain = (micMuted || !micAllowed) ? 0 : micVolume / 100;
+    const systemGain = (!systemAudioActive || systemAudioMuted || !systemAllowed) ? 0 : systemAudioVolume / 100;
+    const padsGain = (padsMuted || !padsAllowed) ? 0 : padsVolume / 100;
+
+    mixer.setMicVolume(micGain);
+    mixer.setMicPan(micPan / 100);
+    mixer.setMicMuted(micMuted);
+
+    mixer.setSystemAudioVolume(systemGain);
+    mixer.setSystemAudioPan(systemAudioPan / 100);
+
+    mixer.setPadsVolume(padsGain);
+    mixer.setPadsPan(padsPan / 100);
+  }, [
+    micSolo,
+    systemAudioSolo,
+    padsSolo,
+    micMuted,
+    micVolume,
+    micPan,
+    systemAudioActive,
+    systemAudioMuted,
+    systemAudioVolume,
+    systemAudioPan,
+    padsMuted,
+    padsVolume,
+    padsPan,
+    mixer,
   ]);
 
   const statusLabels: Record<ConnectionStatus, string> = {
@@ -502,9 +543,6 @@ const Broadcaster = () => {
 
   const handleMicVolumeChange = (v: number) => {
     setMicVolume(v);
-    if (!micMuted) {
-      mixer.setMicVolume(v / 100);
-    }
   };
 
   const handleToggleMute = () => {
@@ -721,7 +759,6 @@ const Broadcaster = () => {
 
   const handleSystemAudioVolumeChange = (v: number) => {
     setSystemAudioVolume(v);
-    mixer.setSystemAudioVolume(v / 100);
   };
 
   // Keyboard shortcuts
@@ -738,6 +775,8 @@ const Broadcaster = () => {
     if (!isOnAir) {
       setMicVolume(100);
       setMicMuted(false);
+      setMicSolo(false);
+      setMicPan(0);
       setListening(false);
       setCueMode(false);
       setLimiterDb(0);
@@ -745,6 +784,13 @@ const Broadcaster = () => {
       setListenerCount(0);
       setNowPlaying('');
       setNowPlayingCover(undefined);
+      setSystemAudioMuted(false);
+      setSystemAudioSolo(false);
+      setSystemAudioPan(0);
+      setPadsVolume(100);
+      setPadsMuted(false);
+      setPadsSolo(false);
+      setPadsPan(0);
     }
   }, [isOnAir]);
 
@@ -882,27 +928,9 @@ const Broadcaster = () => {
                   </span>
                 </AccordionTrigger>
                 <AccordionContent className="px-4 pb-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-              {/* Mic volume — full width on mobile */}
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground shrink-0 w-8">
-                  Mic
-                </span>
-                <Slider
-                  value={[micVolume]}
-                  onValueChange={([v]) => handleMicVolumeChange(v)}
-                  min={0}
-                  max={100}
-                  step={1}
-                  className="flex-1 min-w-0"
-                />
-                <span className="text-xs font-mono text-muted-foreground tabular-nums w-10 text-right shrink-0">
-                  {micMuted ? '—' : `${micVolume}%`}
-                </span>
-              </div>
-
-              {/* Mute, Listen, CUE, Limit — wrap on mobile */}
-              <div className="flex flex-wrap gap-2 sm:shrink-0">
+            <div className="flex justify-end">
+              {/* Mute, Listen, CUE, Limit */}
+              <div className="flex flex-wrap gap-2">
                 <button
                   onClick={handleToggleMute}
                   disabled={!isOnAir}
@@ -1005,24 +1033,6 @@ const Broadcaster = () => {
                     ? (isOnAir ? 'Desktop / app audio mixed into your broadcast' : 'Connected — set levels before going live')
                     : 'Route desktop / app audio into your broadcast'}
                 </span>
-                {systemAudioActive && (
-                  <div className="flex items-center gap-3 flex-1 min-w-0 mt-2">
-                    <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground shrink-0">
-                      Vol
-                    </span>
-                    <Slider
-                      value={[systemAudioVolume]}
-                      onValueChange={([v]) => handleSystemAudioVolumeChange(v)}
-                      min={0}
-                      max={100}
-                      step={1}
-                      className="flex-1 min-w-0"
-                    />
-                    <span className="text-xs font-mono text-muted-foreground tabular-nums w-10 text-right shrink-0">
-                      {systemAudioVolume}%
-                    </span>
-                  </div>
-                )}
               </div>
               <div className="flex justify-end">
                 <button
@@ -1120,6 +1130,153 @@ const Broadcaster = () => {
                   </>
                 )}
               </button>
+            </div>
+
+            {/* Channel mixer */}
+            <div className="mt-3 pt-3 border-t border-border space-y-3">
+              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mixer</div>
+
+              {/* Mic strip */}
+              <div className="rounded-md border border-border/70 p-2.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-foreground">Mic</span>
+                  <span className="text-xs font-mono text-muted-foreground tabular-nums">{micMuted ? '—' : `${micVolume}%`}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Slider
+                    value={[micVolume]}
+                    onValueChange={([v]) => handleMicVolumeChange(v)}
+                    min={0}
+                    max={100}
+                    step={1}
+                    className="flex-1 min-w-0"
+                  />
+                  <button
+                    onClick={() => setMicMuted((v) => !v)}
+                    className={`px-2 py-1 rounded text-[10px] font-mono ${micMuted ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'}`}
+                    title="Mic mute"
+                  >
+                    M
+                  </button>
+                  <button
+                    onClick={() => setMicSolo((v) => !v)}
+                    className={`px-2 py-1 rounded text-[10px] font-mono ${micSolo ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'}`}
+                    title="Mic solo"
+                  >
+                    S
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-muted-foreground w-8">PAN</span>
+                  <Slider
+                    value={[micPan]}
+                    onValueChange={([v]) => setMicPan(v)}
+                    min={-100}
+                    max={100}
+                    step={1}
+                    className="flex-1 min-w-0"
+                  />
+                  <span className="text-[10px] font-mono text-muted-foreground w-10 text-right">
+                    {micPan === 0 ? 'C' : micPan < 0 ? `L${Math.abs(micPan)}` : `R${micPan}`}
+                  </span>
+                </div>
+              </div>
+
+              {/* System strip */}
+              <div className={`rounded-md border p-2.5 space-y-2 ${systemAudioActive ? 'border-border/70' : 'border-border/40 opacity-50'}`}>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-foreground">System Audio</span>
+                  <span className="text-xs font-mono text-muted-foreground tabular-nums">{systemAudioActive ? `${systemAudioVolume}%` : 'OFF'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Slider
+                    value={[systemAudioVolume]}
+                    onValueChange={([v]) => handleSystemAudioVolumeChange(v)}
+                    min={0}
+                    max={100}
+                    step={1}
+                    disabled={!systemAudioActive}
+                    className="flex-1 min-w-0"
+                  />
+                  <button
+                    onClick={() => setSystemAudioMuted((v) => !v)}
+                    disabled={!systemAudioActive}
+                    className={`px-2 py-1 rounded text-[10px] font-mono ${systemAudioMuted ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'} disabled:opacity-40`}
+                    title="System mute"
+                  >
+                    M
+                  </button>
+                  <button
+                    onClick={() => setSystemAudioSolo((v) => !v)}
+                    disabled={!systemAudioActive}
+                    className={`px-2 py-1 rounded text-[10px] font-mono ${systemAudioSolo ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'} disabled:opacity-40`}
+                    title="System solo"
+                  >
+                    S
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-muted-foreground w-8">PAN</span>
+                  <Slider
+                    value={[systemAudioPan]}
+                    onValueChange={([v]) => setSystemAudioPan(v)}
+                    min={-100}
+                    max={100}
+                    step={1}
+                    disabled={!systemAudioActive}
+                    className="flex-1 min-w-0"
+                  />
+                  <span className="text-[10px] font-mono text-muted-foreground w-10 text-right">
+                    {systemAudioPan === 0 ? 'C' : systemAudioPan < 0 ? `L${Math.abs(systemAudioPan)}` : `R${systemAudioPan}`}
+                  </span>
+                </div>
+              </div>
+
+              {/* Pads strip */}
+              <div className="rounded-md border border-border/70 p-2.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-foreground">Pads</span>
+                  <span className="text-xs font-mono text-muted-foreground tabular-nums">{padsMuted ? '—' : `${padsVolume}%`}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Slider
+                    value={[padsVolume]}
+                    onValueChange={([v]) => setPadsVolume(v)}
+                    min={0}
+                    max={100}
+                    step={1}
+                    className="flex-1 min-w-0"
+                  />
+                  <button
+                    onClick={() => setPadsMuted((v) => !v)}
+                    className={`px-2 py-1 rounded text-[10px] font-mono ${padsMuted ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'}`}
+                    title="Pads mute"
+                  >
+                    M
+                  </button>
+                  <button
+                    onClick={() => setPadsSolo((v) => !v)}
+                    className={`px-2 py-1 rounded text-[10px] font-mono ${padsSolo ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'}`}
+                    title="Pads solo"
+                  >
+                    S
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-muted-foreground w-8">PAN</span>
+                  <Slider
+                    value={[padsPan]}
+                    onValueChange={([v]) => setPadsPan(v)}
+                    min={-100}
+                    max={100}
+                    step={1}
+                    className="flex-1 min-w-0"
+                  />
+                  <span className="text-[10px] font-mono text-muted-foreground w-10 text-right">
+                    {padsPan === 0 ? 'C' : padsPan < 0 ? `L${Math.abs(padsPan)}` : `R${padsPan}`}
+                  </span>
+                </div>
+              </div>
             </div>
 
                 </AccordionContent>
