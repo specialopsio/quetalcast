@@ -15,13 +15,13 @@ export interface UseAudioMixerReturn {
   setListening: (on: boolean) => void;
   setCueMode: (on: boolean) => void;
   setLimiterThreshold: (db: LimiterThreshold) => void;
-  getNodes: () => { ctx: AudioContext; micGain: GainNode; broadcastBus: GainNode } | null;
+  getNodes: () => { ctx: AudioContext; micGain: GainNode; broadcastBus: GainNode; micVolumeGain: GainNode } | null;
 }
 
 /**
  * Audio routing graph:
  *
- *   micSource → micGain → broadcastBus
+ *   micSource → micGain (mute) → [effects] → micVolumeGain (volume) → broadcastBus
  *   sysAudioSource → sysAudioGain → broadcastBus
  *   soundboardBus → sbToBroadcastGain → broadcastBus
  *   soundboardBus → sbLocalGain → ctx.destination
@@ -46,6 +46,7 @@ export function useAudioMixer(): UseAudioMixerReturn {
 
   // Gain node refs
   const micGainRef = useRef<GainNode | null>(null);
+  const micVolumeGainRef = useRef<GainNode | null>(null);
   const broadcastBusRef = useRef<GainNode | null>(null);
   const soundboardBusRef = useRef<GainNode | null>(null);
   const sbToBroadcastGainRef = useRef<GainNode | null>(null);
@@ -91,7 +92,8 @@ export function useAudioMixer(): UseAudioMixerReturn {
     // Create gain nodes
     const broadcastBus = ctx.createGain(); // unity, merges mic + soundboard
     const soundboardBus = ctx.createGain(); // unity, all soundboard elements connect here
-    const micGain = ctx.createGain(); // mic volume / mute
+    const micGain = ctx.createGain(); // mute only (0 or 1)
+    const micVolumeGain = ctx.createGain(); // mic volume — after effects so it's the final control
     const sbToBroadcastGain = ctx.createGain(); // 0 in cue mode
     const sbLocalGain = ctx.createGain(); // soundboard → local speakers
     const listenGain = ctx.createGain(); // broadcast → local speakers
@@ -104,6 +106,7 @@ export function useAudioMixer(): UseAudioMixerReturn {
 
     // Default gains
     micGain.gain.value = 1;
+    micVolumeGain.gain.value = 1;
     broadcastBus.gain.value = 1;
     soundboardBus.gain.value = 1;
     sbToBroadcastGain.gain.value = 1;
@@ -125,7 +128,9 @@ export function useAudioMixer(): UseAudioMixerReturn {
     clipper.oversample = '4x'; // reduce aliasing from clipping
 
     // Wire the graph
-    // micGain → broadcastBus (connected when mic is added)
+    // micVolumeGain → broadcastBus (mic path always goes through volume)
+    micVolumeGain.connect(broadcastBus);
+    // micGain → micVolumeGain (connected when mic is added)
     // soundboardBus → sbToBroadcastGain → broadcastBus
     soundboardBus.connect(sbToBroadcastGain);
     sbToBroadcastGain.connect(broadcastBus);
@@ -147,6 +152,7 @@ export function useAudioMixer(): UseAudioMixerReturn {
     broadcastBusRef.current = broadcastBus;
     soundboardBusRef.current = soundboardBus;
     micGainRef.current = micGain;
+    micVolumeGainRef.current = micVolumeGain;
     sbToBroadcastGainRef.current = sbToBroadcastGain;
     sbLocalGainRef.current = sbLocalGain;
     listenGainRef.current = listenGain;
@@ -156,7 +162,7 @@ export function useAudioMixer(): UseAudioMixerReturn {
 
     setMixedStream(dest.stream);
 
-    return { ctx, dest, broadcastBus, soundboardBus, micGain };
+    return { ctx, dest, broadcastBus, soundboardBus, micGain, micVolumeGain };
   }, []);
 
   const connectMic = useCallback(
@@ -174,7 +180,7 @@ export function useAudioMixer(): UseAudioMixerReturn {
 
       const source = ctx.createMediaStreamSource(stream);
       source.connect(micGain);
-      micGain.connect(broadcastBusRef.current!);
+      micGain.connect(micVolumeGainRef.current!);
       micSourceRef.current = source;
     },
     [ensureContext],
@@ -267,14 +273,14 @@ export function useAudioMixer(): UseAudioMixerReturn {
 
   const setMicVolume = useCallback((v: number) => {
     micVolumeRef.current = v;
-    if (micGainRef.current) {
-      micGainRef.current.gain.value = v;
+    if (micVolumeGainRef.current) {
+      micVolumeGainRef.current.gain.value = v;
     }
   }, []);
 
   const setMicMuted = useCallback((muted: boolean) => {
     if (micGainRef.current) {
-      micGainRef.current.gain.value = muted ? 0 : micVolumeRef.current;
+      micGainRef.current.gain.value = muted ? 0 : 1;
     }
   }, []);
 
@@ -323,11 +329,12 @@ export function useAudioMixer(): UseAudioMixerReturn {
 
   /** Expose internal nodes so the effects chain can wire itself in */
   const getNodes = useCallback(() => {
-    if (!ctxRef.current || !micGainRef.current || !broadcastBusRef.current) return null;
+    if (!ctxRef.current || !micGainRef.current || !micVolumeGainRef.current || !broadcastBusRef.current) return null;
     return {
       ctx: ctxRef.current,
       micGain: micGainRef.current,
       broadcastBus: broadcastBusRef.current,
+      micVolumeGain: micVolumeGainRef.current,
     };
   }, []);
 

@@ -290,11 +290,15 @@ const Broadcaster = () => {
       setLocalStream(stream);
       mixer.connectMic(stream);
 
-      // Insert effects chain between micGain and broadcastBus
+      // Insert effects chain between micGain and micVolumeGain (volume is after effects)
       const nodes = mixer.getNodes();
       if (nodes) {
-        await micEffects.insertIntoChain(nodes.ctx, nodes.micGain, nodes.broadcastBus);
+        await micEffects.insertIntoChain(nodes.ctx, nodes.micGain, nodes.micVolumeGain);
       }
+
+      // Apply current mic volume (slider may have been changed before going on air)
+      mixer.setMicVolume(micVolume / 100);
+      if (micMuted) mixer.setMicMuted(true);
 
       addLog('Mic connected');
 
@@ -312,7 +316,7 @@ const Broadcaster = () => {
     } catch (e) {
       addLog('Couldn\'t start broadcast — check mic permissions', 'error');
     }
-  }, [mixer, micEffects, webrtc, selectedIntegration, addLog]);
+  }, [mixer, micEffects, webrtc, selectedIntegration, addLog, micVolume, micMuted]);
 
   const handleGoOnAir = useCallback(async () => {
     // Only show dialog when there's actual broadcast content from a previous session,
@@ -382,8 +386,10 @@ const Broadcaster = () => {
       mixer.connectMic(stream);
       const nodes = mixer.getNodes();
       if (nodes) {
-        await micEffects.insertIntoChain(nodes.ctx, nodes.micGain, nodes.broadcastBus);
+        await micEffects.insertIntoChain(nodes.ctx, nodes.micGain, nodes.micVolumeGain);
       }
+      mixer.setMicVolume(micVolume / 100);
+      if (micMuted) mixer.setMicMuted(true);
       addLog('Mic connected');
       addLog('Resuming previous broadcast…');
       webrtc.joinRoomAsBroadcaster(prevRoomId);
@@ -396,7 +402,7 @@ const Broadcaster = () => {
     } catch (e) {
       addLog('Couldn\'t resume broadcast — check mic permissions', 'error');
     }
-  }, [mixer, micEffects, webrtc, selectedDevice, selectedIntegration, addLog]);
+  }, [mixer, micEffects, webrtc, selectedDevice, selectedIntegration, addLog, micVolume, micMuted]);
 
   // Start broadcast once room is ready and we have a mixed stream (native mode)
   useEffect(() => {
