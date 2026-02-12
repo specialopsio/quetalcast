@@ -18,14 +18,14 @@ Real-time audio broadcasting application built with WebRTC, React, and Node.js. 
 - **Now playing** — Broadcaster sets stream metadata with Deezer-powered autocomplete (artist + song search with album art). Visible to all listeners in real time. Metadata is also forwarded to external integration streams (Icecast/Shoutcast)
 - **Track list** — Chronological history of every track played. Always visible (collapsible). Now Playing search at top when on air. New receivers get full history on join. CSV download (icon next to title) includes room ID. Event log also has CSV download next to title
 <!-- Auto-identify (temporarily disabled): Automatic song identification using AcoustID/Chromaprint. Ear icon toggle during broadcast. Code remains in useAutoIdentify.ts and audio-identify.js for future re-enable. -->
-- **Local recording** — Record your broadcast as a 320 kbps stereo MP3, auto-downloaded when you stop. Uses AudioWorklet + Web Worker for energy-efficient encoding
+- **Local recording** — Record your broadcast as a 320 kbps stereo MP3, auto-downloaded when you stop. If you end the broadcast while recording, recording continues until you stop or start a new broadcast. The "Download ZIP" option in the post-broadcast dialog includes the MP3 when recording was active. Uses AudioWorklet + Web Worker for energy-efficient encoding
 - **Keyboard shortcuts** — Space (mute), R (record), L (listen), C (cue), 1–0 (soundboard pads), ? (help). Active while on air, disabled when typing in inputs
 - **Integrations** — Stream to external platforms (Icecast, Shoutcast, Radio.co) via server-side relay. Test connection, remember credentials in localStorage. Room is still created for chat and metadata. Now Playing metadata is automatically pushed to the external server's admin API
 - **Multi-receiver** — Up to 4 concurrent listeners per room
 - **TURN relay** — Dynamic credential fetching via Metered.ca (or static config)
 - **Auto-reconnect** — Receivers automatically reconnect on connection drops with exponential backoff (up to 5 attempts). Manual retry available after max attempts
 - **Room persistence** — When a broadcast ends, the room ID in the broadcaster status bar is hidden and a new room is created when starting a new broadcast. The previous room remains visible on the receiver page for 24 hours post-broadcast to show events, track list, and chat. CSV exports (event log and track list) include the room ID for reference
-- **Post-broadcast flow** — Logs, track list, and chat are not purged until a new broadcast is started. When starting a new broadcast with existing data, a dialog offers to download logs and track list as a ZIP, copy the room link (24h access), or continue to start fresh
+- **Post-broadcast flow** — Logs, track list, and chat are not purged until a new broadcast is started. When starting a new broadcast with existing data, a dialog offers to download logs and track list as a ZIP (including MP3 if recording was active), copy the room link (24h access), continue the previous broadcast (rejoin same room, keep logs and track list), or start a new broadcast
 
 ## Architecture
 
@@ -99,7 +99,7 @@ pnpm run dev
 
 1. Open `http://localhost:5173` and log in with your configured password
 2. Expand **Mixer Controls** and select your audio input device — the level meter at top shows input immediately so you can dial in
-3. Click **Go On Air** — a room ID is generated
+3. Click **Go On Air** — a room ID is generated and appended to the URL (`?room=...`)
 4. Share the receiver link (Copy Receiver Link); listeners open it and click **Join**
 
 ## Deployment (Fly.io)

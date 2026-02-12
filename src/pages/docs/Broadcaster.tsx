@@ -69,14 +69,15 @@ export default function DocsBroadcaster() {
         <h2 className="text-lg font-semibold text-foreground mb-3">Going on air</h2>
         <p>
           Press <strong>Go On Air</strong> to start. A timer shows how long you've been live. The
-          room ID appears in the status bar. Use <strong>Copy Receiver Link</strong> in the top
-          right to share. Each new broadcast creates a new room; the room ID is hidden when you go
-          off air.
+          room ID appears in the status bar and in the URL (<code>?room=...</code>). Use{" "}
+          <strong>Copy Receiver Link</strong> in the top right to share. Each new broadcast creates
+          a new room; the room ID is hidden when you go off air.
         </p>
         <p className="mt-2">
           If you have a previous broadcast (track list or logs including "Off air"), a dialog
-          appears first: download logs and track list as a ZIP, copy the room link (24h access), or
-          continue to start fresh.
+          appears first: download logs and track list as a ZIP (including MP3 if recording was
+          active), copy the room link (24h access), continue the previous broadcast (rejoin same
+          room, keep logs and track list), or start a new broadcast.
         </p>
       </section>
 
@@ -162,7 +163,9 @@ export default function DocsBroadcaster() {
         <p>
           Press <strong>Record</strong> in the mixer controls to capture your broadcast as a 320
           kbps stereo MP3. A pulsing red dot shows when recording, with elapsed time and file size.
-          When you stop (or end the broadcast), the MP3 downloads automatically.
+          When you stop, the MP3 downloads automatically. If you end the broadcast while recording,
+          recording continues until you stop it or start a new broadcast. The post-broadcast dialog
+          can download a ZIP that includes the MP3 when recording was active.
         </p>
       </section>
 
@@ -172,7 +175,7 @@ export default function DocsBroadcaster() {
           Press <strong>End Broadcast</strong>. The room ID disappears. Listeners stop receiving
           audio, but the room link remains valid for 24 hours so they can view the track list,
           event log, and chat. Your logs and track list stay until you start a new broadcast. If
-          recording, the MP3 is saved automatically.
+          recording, it continues until you stop or start a new broadcast.
         </p>
       </section>
     </div>
