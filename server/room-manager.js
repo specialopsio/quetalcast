@@ -128,8 +128,7 @@ export class RoomManager {
   addTrack(roomId, meta) {
     const room = this.rooms.get(roomId);
     if (!room || !meta?.text) return;
-    const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    const entry = { title: meta.text, time };
+    const entry = { title: meta.text, time: new Date().toISOString() };
     // Attach optional rich fields if present
     if (meta.cover) entry.cover = meta.cover;
     if (meta.coverMedium) entry.coverMedium = meta.coverMedium;

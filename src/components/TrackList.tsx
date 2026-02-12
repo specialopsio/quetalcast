@@ -31,6 +31,19 @@ function formatDuration(sec?: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+/** Format an ISO timestamp or HH:MM:SS string into the user's local time */
+function formatTime(time: string): string {
+  // If it looks like an ISO date, parse and format locally
+  if (time.includes('T') || time.includes('Z')) {
+    const d = new Date(time);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+  }
+  // Already a formatted time string (backward compat with older entries)
+  return time;
+}
+
 function extractYear(dateStr?: string): string {
   if (!dateStr) return '';
   const match = dateStr.match(/^(\d{4})/);
@@ -60,7 +73,7 @@ function downloadCsv(tracks: Track[]) {
     const genres = (t.genres || []).join('; ');
 
     return [
-      escapeCsvField(t.time),
+      escapeCsvField(formatTime(t.time)),
       escapeCsvField(t.artist || ''),
       escapeCsvField(t.trackTitle || t.title),
       escapeCsvField(t.album || ''),
@@ -153,7 +166,7 @@ export function TrackList({ tracks }: TrackListProps) {
 
               {/* Time played */}
               <span className="w-16 shrink-0 text-muted-foreground/60 tabular-nums font-mono">
-                {track.time}
+                {formatTime(track.time)}
               </span>
 
               {/* Title + Artist */}
