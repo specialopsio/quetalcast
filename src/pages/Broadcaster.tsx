@@ -8,7 +8,7 @@ import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
-import { Copy, Mic, MicOff, Radio, Headphones, Music, Sparkles, Zap, Plug2, Circle, Square, Keyboard, ListMusic, Trash2, Ear } from 'lucide-react';
+import { Copy, Mic, MicOff, Radio, Headphones, Music, Sparkles, Zap, Plug2, Circle, Square, Keyboard, ListMusic, Trash2, Ear, Monitor, MonitorOff } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
 import { Slider } from '@/components/ui/slider';
 import {
@@ -81,6 +81,11 @@ const Broadcaster = () => {
   const integrationStream = useIntegrationStream();
   const recorder = useRecorder();
   const soundboardTriggerRef = useRef<((index: number) => void) | null>(null);
+
+  // System audio state
+  const [systemAudioActive, setSystemAudioActive] = useState(false);
+  const [systemAudioVolume, setSystemAudioVolume] = useState(100);
+  const systemAudioStreamRef = useRef<MediaStream | null>(null);
 
   // Auto-identify state
   const [autoIdentifyEnabled, setAutoIdentifyEnabled] = useState(false);
@@ -336,6 +341,14 @@ const Broadcaster = () => {
     setLocalStream(null);
     mixer.disconnectMic();
 
+    // Stop system audio if active
+    if (systemAudioActive) {
+      mixer.disconnectSystemAudio();
+      systemAudioStreamRef.current = null;
+      setSystemAudioActive(false);
+      setSystemAudioVolume(100);
+    }
+
     // Always stop WebRTC (room exists in both modes for signaling)
     webrtc.stop();
 
@@ -477,6 +490,65 @@ const Broadcaster = () => {
     setLimiterDb(db);
     mixer.setLimiterThreshold(db);
     addLog(`Limiter set to ${db} dB`);
+  };
+
+  const handleToggleSystemAudio = async () => {
+    if (systemAudioActive) {
+      // Stop system audio capture
+      mixer.disconnectSystemAudio();
+      systemAudioStreamRef.current = null;
+      setSystemAudioActive(false);
+      setSystemAudioVolume(100);
+      addLog('System audio stopped');
+    } else {
+      try {
+        // Request system audio via getDisplayMedia
+        // We ask for video: true because some browsers require it,
+        // but we only use the audio track
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          audio: true,
+          video: true, // required by some browsers; we discard the video track
+        });
+
+        // Stop the video track immediately — we only need audio
+        stream.getVideoTracks().forEach(t => t.stop());
+
+        const audioTracks = stream.getAudioTracks();
+        if (audioTracks.length === 0) {
+          toast('No system audio was captured. Make sure to check "Share audio" in the dialog.', { duration: 5000 });
+          stream.getTracks().forEach(t => t.stop());
+          return;
+        }
+
+        // Create a new stream with only the audio track
+        const audioOnlyStream = new MediaStream(audioTracks);
+
+        mixer.connectSystemAudio(audioOnlyStream);
+        systemAudioStreamRef.current = audioOnlyStream;
+        setSystemAudioActive(true);
+        addLog('System audio connected');
+
+        // Listen for the track ending (user clicks "Stop sharing" in browser chrome)
+        audioTracks[0].addEventListener('ended', () => {
+          systemAudioStreamRef.current = null;
+          setSystemAudioActive(false);
+          setSystemAudioVolume(100);
+          addLog('System audio stopped');
+        });
+      } catch (e: unknown) {
+        if (e instanceof Error && e.name === 'NotAllowedError') {
+          // User cancelled the picker — not an error
+          return;
+        }
+        addLog('Failed to capture system audio', 'error');
+        toast('Could not capture system audio. Your browser may not support this feature.', { duration: 4000 });
+      }
+    }
+  };
+
+  const handleSystemAudioVolumeChange = (v: number) => {
+    setSystemAudioVolume(v);
+    mixer.setSystemAudioVolume(v / 100);
   };
 
   // Keyboard shortcuts
@@ -730,6 +802,51 @@ const Broadcaster = () => {
                 </Select>
               </div>
 
+            </div>
+
+            {/* System audio */}
+            <div className="flex items-center gap-4 mt-3 pt-3 border-t border-border">
+              <button
+                onClick={handleToggleSystemAudio}
+                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  systemAudioActive
+                    ? 'bg-primary/20 text-primary'
+                    : 'bg-secondary text-muted-foreground hover:text-foreground'
+                }`}
+                title={systemAudioActive ? 'Stop system audio' : 'Share system audio'}
+              >
+                {systemAudioActive ? (
+                  <MonitorOff className="h-3.5 w-3.5" />
+                ) : (
+                  <Monitor className="h-3.5 w-3.5" />
+                )}
+                {systemAudioActive ? 'Stop System' : 'System Audio'}
+              </button>
+
+              {systemAudioActive && (
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground shrink-0">
+                    Vol
+                  </span>
+                  <Slider
+                    value={[systemAudioVolume]}
+                    onValueChange={([v]) => handleSystemAudioVolumeChange(v)}
+                    min={0}
+                    max={100}
+                    step={1}
+                    className="flex-1"
+                  />
+                  <span className="text-xs font-mono text-muted-foreground tabular-nums w-8 text-right shrink-0">
+                    {systemAudioVolume}%
+                  </span>
+                </div>
+              )}
+
+              {!systemAudioActive && (
+                <span className="text-[10px] text-muted-foreground">
+                  Route desktop / app audio into your broadcast
+                </span>
+              )}
             </div>
 
             {/* Audio Quality */}

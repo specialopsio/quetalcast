@@ -7,6 +7,9 @@ export interface UseAudioMixerReturn {
   connectMic: (stream: MediaStream) => void;
   disconnectMic: () => void;
   connectElement: (audio: HTMLAudioElement) => GainNode | null;
+  connectSystemAudio: (stream: MediaStream) => void;
+  disconnectSystemAudio: () => void;
+  setSystemAudioVolume: (v: number) => void;
   setMicVolume: (v: number) => void;
   setMicMuted: (muted: boolean) => void;
   setListening: (on: boolean) => void;
@@ -19,6 +22,7 @@ export interface UseAudioMixerReturn {
  * Audio routing graph:
  *
  *   micSource → micGain → broadcastBus
+ *   sysAudioSource → sysAudioGain → broadcastBus
  *   soundboardBus → sbToBroadcastGain → broadcastBus
  *   soundboardBus → sbLocalGain → ctx.destination
  *   broadcastBus → broadcastOutGain → limiter → clipper → dest (→ mixedStream → WebRTC)
@@ -34,6 +38,9 @@ export function useAudioMixer(): UseAudioMixerReturn {
   const ctxRef = useRef<AudioContext | null>(null);
   const destRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   const micSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const sysAudioSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const sysAudioGainRef = useRef<GainNode | null>(null);
+  const sysAudioStreamRef = useRef<MediaStream | null>(null);
   const connectedElements = useRef<WeakSet<HTMLAudioElement>>(new WeakSet());
   const [mixedStream, setMixedStream] = useState<MediaStream | null>(null);
 
@@ -184,6 +191,58 @@ export function useAudioMixer(): UseAudioMixerReturn {
     }
   }, []);
 
+  const connectSystemAudio = useCallback(
+    (stream: MediaStream) => {
+      const { ctx, broadcastBus } = ensureContext();
+
+      // Disconnect previous system audio if any
+      if (sysAudioSourceRef.current) {
+        try { sysAudioSourceRef.current.disconnect(); } catch {}
+      }
+
+      const source = ctx.createMediaStreamSource(stream);
+      const gain = ctx.createGain();
+      gain.gain.value = 1;
+      source.connect(gain);
+      gain.connect(broadcastBus);
+
+      sysAudioSourceRef.current = source;
+      sysAudioGainRef.current = gain;
+      sysAudioStreamRef.current = stream;
+
+      // If the system audio track ends (user stops sharing), clean up
+      const audioTrack = stream.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.addEventListener('ended', () => {
+          disconnectSystemAudioInternal();
+        });
+      }
+    },
+    [ensureContext],
+  );
+
+  const disconnectSystemAudioInternal = useCallback(() => {
+    if (sysAudioSourceRef.current) {
+      try { sysAudioSourceRef.current.disconnect(); } catch {}
+      sysAudioSourceRef.current = null;
+    }
+    if (sysAudioGainRef.current) {
+      sysAudioGainRef.current = null;
+    }
+    if (sysAudioStreamRef.current) {
+      sysAudioStreamRef.current.getTracks().forEach(t => t.stop());
+      sysAudioStreamRef.current = null;
+    }
+  }, []);
+
+  const disconnectSystemAudio = disconnectSystemAudioInternal;
+
+  const setSystemAudioVolume = useCallback((v: number) => {
+    if (sysAudioGainRef.current) {
+      sysAudioGainRef.current.gain.value = v;
+    }
+  }, []);
+
   const connectElement = useCallback(
     (audio: HTMLAudioElement): GainNode | null => {
       // Guard against double-connecting the same element
@@ -276,6 +335,8 @@ export function useAudioMixer(): UseAudioMixerReturn {
   useEffect(() => {
     return () => {
       micSourceRef.current?.disconnect();
+      sysAudioSourceRef.current?.disconnect();
+      sysAudioStreamRef.current?.getTracks().forEach(t => t.stop());
       ctxRef.current?.close();
       ctxRef.current = null;
       destRef.current = null;
@@ -287,6 +348,9 @@ export function useAudioMixer(): UseAudioMixerReturn {
     connectMic,
     disconnectMic,
     connectElement,
+    connectSystemAudio,
+    disconnectSystemAudio,
+    setSystemAudioVolume,
     setMicVolume,
     setMicMuted,
     setListening,
