@@ -493,6 +493,23 @@ wss.on('connection', (ws, req) => {
           if (trackList.length > 0) {
             ws.send(JSON.stringify({ type: 'track-list', tracks: trackList }));
           }
+          // Send chat history to the new receiver
+          const chatHistory = rooms.getChatHistory(roomId);
+          if (chatHistory.length > 0) {
+            ws.send(JSON.stringify({ type: 'chat-history', messages: chatHistory }));
+          }
+          // Broadcast a system join message to the room
+          const joinMsg = { type: 'chat', name: '', text: 'A listener has joined', system: true };
+          const joinMsgStr = JSON.stringify(joinMsg);
+          rooms.addChat(roomId, { name: '', text: 'A listener has joined', system: true });
+          if (broadcaster) broadcaster.send(joinMsgStr);
+          const allReceiverIds = rooms.getReceiverIds(roomId);
+          for (const rid of allReceiverIds) {
+            const rws = rooms.getReceiver(roomId, rid);
+            if (rws && rws !== ws) rws.send(joinMsgStr);
+          }
+          // Also send the join message to the new receiver itself
+          ws.send(joinMsgStr);
         } else {
           // Broadcaster joining an existing room
           ws.send(JSON.stringify({ type: 'joined', roomId, role }));
@@ -584,9 +601,18 @@ wss.on('connection', (ws, req) => {
             }
             rooms.leave(clientRoom, 'broadcaster');
           } else if (clientRole === 'receiver') {
-            const broadcaster = rooms.getBroadcaster(clientRoom);
-            if (broadcaster) {
-              broadcaster.send(JSON.stringify({ type: 'peer-left', role: 'receiver', receiverId: clientReceiverId }));
+            // Broadcast leave system message before removing
+            const leaveMsg = JSON.stringify({ type: 'chat', name: '', text: 'A listener has left', system: true });
+            rooms.addChat(clientRoom, { name: '', text: 'A listener has left', system: true });
+            const bcaster = rooms.getBroadcaster(clientRoom);
+            if (bcaster) {
+              bcaster.send(JSON.stringify({ type: 'peer-left', role: 'receiver', receiverId: clientReceiverId }));
+              bcaster.send(leaveMsg);
+            }
+            const otherReceiverIds = rooms.getReceiverIds(clientRoom);
+            for (const rid of otherReceiverIds) {
+              const rws = rooms.getReceiver(clientRoom, rid);
+              if (rws && rws !== ws) rws.send(leaveMsg);
             }
             rooms.leave(clientRoom, 'receiver', clientReceiverId);
             sendListenerCount(clientRoom);
@@ -721,17 +747,16 @@ wss.on('connection', (ws, req) => {
 
         const chatMsg = JSON.stringify({ type: 'chat', name: chatName, text: chatText });
 
-        if (clientRole === 'receiver') {
-          // Relay to broadcaster
-          const broadcaster = rooms.getBroadcaster(clientRoom);
-          if (broadcaster) broadcaster.send(chatMsg);
-        } else if (clientRole === 'broadcaster') {
-          // Broadcast to all receivers
-          const receiverIds = rooms.getReceiverIds(clientRoom);
-          for (const rid of receiverIds) {
-            const rws = rooms.getReceiver(clientRoom, rid);
-            if (rws) rws.send(chatMsg);
-          }
+        // Store in history
+        rooms.addChat(clientRoom, { name: chatName, text: chatText });
+
+        // Broadcast to all participants EXCEPT the sender
+        const broadcaster = rooms.getBroadcaster(clientRoom);
+        if (broadcaster && broadcaster !== ws) broadcaster.send(chatMsg);
+        const receiverIds = rooms.getReceiverIds(clientRoom);
+        for (const rid of receiverIds) {
+          const rws = rooms.getReceiver(clientRoom, rid);
+          if (rws && rws !== ws) rws.send(chatMsg);
         }
         break;
       }
@@ -751,9 +776,18 @@ wss.on('connection', (ws, req) => {
         }
         rooms.leave(clientRoom, 'broadcaster');
       } else if (clientRole === 'receiver') {
-        const broadcaster = rooms.getBroadcaster(clientRoom);
-        if (broadcaster) {
-          broadcaster.send(JSON.stringify({ type: 'peer-left', role: 'receiver', receiverId: clientReceiverId }));
+        // Broadcast leave system message before removing
+        const leaveMsg = JSON.stringify({ type: 'chat', name: '', text: 'A listener has left', system: true });
+        rooms.addChat(clientRoom, { name: '', text: 'A listener has left', system: true });
+        const bcaster = rooms.getBroadcaster(clientRoom);
+        if (bcaster) {
+          bcaster.send(JSON.stringify({ type: 'peer-left', role: 'receiver', receiverId: clientReceiverId }));
+          bcaster.send(leaveMsg);
+        }
+        const otherReceiverIds = rooms.getReceiverIds(clientRoom);
+        for (const rid of otherReceiverIds) {
+          const rws = rooms.getReceiver(clientRoom, rid);
+          if (rws && rws !== ws) rws.send(leaveMsg);
         }
         rooms.leave(clientRoom, 'receiver', clientReceiverId);
         sendListenerCount(clientRoom);

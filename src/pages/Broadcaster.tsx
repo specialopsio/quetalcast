@@ -8,7 +8,7 @@ import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
-import { Copy, Mic, MicOff, Radio, Headphones, Music, Sparkles, Zap, Plug2, Circle, Square, Keyboard, ListMusic, Trash2, Ear, Monitor, MonitorOff } from 'lucide-react';
+import { Copy, Mic, MicOff, Radio, Headphones, Music, Sparkles, Zap, Plug2, Circle, Square, Keyboard, ListMusic, Trash2, Monitor, MonitorOff } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
 import { Slider } from '@/components/ui/slider';
 import {
@@ -23,7 +23,6 @@ import { useMicEffects } from '@/hooks/useMicEffects';
 import { SoundBoard } from '@/components/SoundBoard';
 import { NowPlayingInput, type NowPlayingMeta, type TrackMeta } from '@/components/NowPlayingInput';
 import { TrackList, type Track } from '@/components/TrackList';
-import { useAutoIdentify, type IdentifyMatch } from '@/hooks/useAutoIdentify';
 import { EffectsBoard } from '@/components/EffectsBoard';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Footer } from '@/components/Footer';
@@ -94,9 +93,6 @@ const Broadcaster = () => {
   const [systemAudioInfoOpen, setSystemAudioInfoOpen] = useState(false);
   const systemAudioStreamRef = useRef<MediaStream | null>(null);
 
-  // Auto-identify state
-  const [autoIdentifyEnabled, setAutoIdentifyEnabled] = useState(false);
-
   const addLog = useCallback((msg: string, level: LogEntry['level'] = 'info') => {
     setLogs((prev) => [...prev.slice(-100), createLogEntry(msg, level)]);
   }, []);
@@ -106,62 +102,6 @@ const Broadcaster = () => {
   const mixer = useAudioMixer();
   const micEffects = useMicEffects();
   const audioAnalysis = useAudioAnalyser(mixer.mixedStream);
-
-  // Auto-identify: capture audio periodically and fingerprint it
-  const handleAutoIdentifyMatch = useCallback(async (match: IdentifyMatch) => {
-    const displayText = `${match.artist} — ${match.title}`;
-    addLog(`Identified: ${displayText}`, 'info');
-
-    // Search Deezer to get a track ID for rich metadata
-    try {
-      const res = await fetch(`/api/music-search?q=${encodeURIComponent(`${match.artist} ${match.title}`)}`);
-      const data = await res.json();
-      const deezerResult = data.data?.[0];
-
-      toast(`Song identified: ${displayText}`, {
-        duration: 10000,
-        action: {
-          label: 'Add to track list',
-          onClick: async () => {
-            if (deezerResult?.id) {
-              // Fetch full detail and commit
-              try {
-                const detailRes = await fetch(`/api/music-detail/${deezerResult.id}`);
-                const { data: detail } = await detailRes.json();
-                if (detail) {
-                  signaling.send({ type: 'add-track', text: displayText, ...detail });
-                  toast('Added to track list', { duration: 2000 });
-                  return;
-                }
-              } catch { /* fall through */ }
-            }
-            // Fallback — commit with basic info
-            signaling.send({ type: 'add-track', text: displayText, artist: match.artist, title: match.title });
-            toast('Added to track list', { duration: 2000 });
-          },
-        },
-      });
-    } catch {
-      // Deezer search failed — still offer to add with basic info
-      toast(`Song identified: ${displayText}`, {
-        duration: 10000,
-        action: {
-          label: 'Add to track list',
-          onClick: () => {
-            signaling.send({ type: 'add-track', text: displayText, artist: match.artist, title: match.title });
-            toast('Added to track list', { duration: 2000 });
-          },
-        },
-      });
-    }
-  }, [signaling, addLog]);
-
-  const autoIdentify = useAutoIdentify({
-    stream: mixer.mixedStream,
-    enabled: autoIdentifyEnabled && isOnAir,
-    existingTitles: trackList.map(t => t.title),
-    onMatch: handleAutoIdentifyMatch,
-  });
 
   // Auth check — verify both local token and server session
   useEffect(() => {
@@ -236,7 +176,7 @@ const Broadcaster = () => {
       if (msg.type === 'listener-count' && typeof msg.count === 'number') {
         setListenerCount(msg.count as number);
       }
-      if (msg.type === 'chat' && typeof msg.name === 'string' && typeof msg.text === 'string') {
+      if (msg.type === 'chat' && typeof msg.text === 'string' && !msg.system) {
         addLog(`${msg.name}: ${msg.text}`, 'chat');
       }
       if (msg.type === 'track-list' && Array.isArray(msg.tracks)) {
@@ -598,8 +538,6 @@ const Broadcaster = () => {
       setNowPlaying('');
       setNowPlayingCover(undefined);
       setTrackList([]);
-      setAutoIdentifyEnabled(false);
-      autoIdentify.reset();
     }
   }, [isOnAir]);
 
@@ -996,32 +934,15 @@ const Broadcaster = () => {
               </button>
             </div>
 
-            {/* Now Playing — with Deezer autocomplete + auto-identify toggle */}
-            <div className="flex items-end gap-2 mt-3 pt-3 border-t border-border">
-              <div className="flex-1">
-                <NowPlayingInput
-                  value={nowPlaying}
-                  onChange={handleNowPlayingChange}
-                  onCommit={(meta: TrackMeta) => {
-                    signaling.send({ type: 'add-track', ...meta });
-                  }}
-                />
-              </div>
-              <button
-                onClick={() => {
-                  const next = !autoIdentifyEnabled;
-                  setAutoIdentifyEnabled(next);
-                  addLog(next ? 'Auto-identify ON' : 'Auto-identify OFF');
+            {/* Now Playing — with Deezer autocomplete */}
+            <div className="mt-3 pt-3 border-t border-border">
+              <NowPlayingInput
+                value={nowPlaying}
+                onChange={handleNowPlayingChange}
+                onCommit={(meta: TrackMeta) => {
+                  signaling.send({ type: 'add-track', ...meta });
                 }}
-                className={`shrink-0 p-1.5 rounded-md transition-colors ${
-                  autoIdentifyEnabled
-                    ? 'text-primary bg-primary/10 hover:bg-primary/20'
-                    : 'text-muted-foreground/40 hover:text-muted-foreground hover:bg-secondary'
-                }`}
-                title={autoIdentifyEnabled ? 'Auto-identify ON — listening for songs' : 'Auto-identify OFF — click to enable'}
-              >
-                <Ear className={`h-4 w-4 ${autoIdentifyEnabled ? 'animate-pulse' : ''}`} />
-              </button>
+              />
             </div>
                 </AccordionContent>
               </AccordionItem>

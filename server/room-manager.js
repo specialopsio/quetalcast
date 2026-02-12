@@ -18,6 +18,7 @@ export class RoomManager {
       receivers: new Map(), // receiverId → ws
       metadata: null, // now-playing text
       trackList: [],  // { title, time } — chronological track list
+      chatHistory: [], // { name, text, time, system? } — persisted chat messages
       integrationInfo: null, // { type, credentials } — active integration connection
       createdAt: new Date().toISOString(),
     });
@@ -154,6 +155,31 @@ export class RoomManager {
   getTrackList(roomId) {
     const room = this.rooms.get(roomId);
     return room ? room.trackList : [];
+  }
+
+  /**
+   * Add a chat message to the room history.
+   * @param {string} roomId
+   * @param {object} msg — { name, text, system? }
+   */
+  addChat(roomId, msg) {
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+    room.chatHistory.push({
+      name: msg.name,
+      text: msg.text,
+      time: new Date().toISOString(),
+      ...(msg.system ? { system: true } : {}),
+    });
+    // Cap at 200 messages
+    if (room.chatHistory.length > 200) {
+      room.chatHistory = room.chatHistory.slice(-200);
+    }
+  }
+
+  getChatHistory(roomId) {
+    const room = this.rooms.get(roomId);
+    return room ? room.chatHistory : [];
   }
 
   setIntegrationInfo(roomId, info) {

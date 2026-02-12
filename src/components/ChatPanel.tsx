@@ -7,6 +7,7 @@ export interface ChatMessage {
   text: string;
   time: string;
   own: boolean;
+  system?: boolean;
 }
 
 interface ChatPanelProps {
@@ -25,29 +26,102 @@ export function ChatPanel({ signaling, active }: ChatPanelProps) {
   const [unread, setUnread] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const openRef = useRef(open);
+  const originalTitleRef = useRef(document.title);
+  const flashIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Keep openRef in sync
+  useEffect(() => { openRef.current = open; }, [open]);
+
+  const formatTime = (isoOrNull?: string) => {
+    if (isoOrNull) {
+      // ISO string from server — parse to local time
+      const d = new Date(isoOrNull);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+      }
+    }
+    return new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+  };
+
+  // --- Tab title flashing ---
+  const startFlashing = useCallback(() => {
+    if (flashIntervalRef.current) return; // already flashing
+    const original = originalTitleRef.current;
+    let showNew = true;
+    flashIntervalRef.current = setInterval(() => {
+      document.title = showNew ? '💬 New Message!' : original;
+      showNew = !showNew;
+    }, 1000);
+  }, []);
+
+  const stopFlashing = useCallback(() => {
+    if (flashIntervalRef.current) {
+      clearInterval(flashIntervalRef.current);
+      flashIntervalRef.current = null;
+    }
+    document.title = originalTitleRef.current;
+  }, []);
+
+  // Stop flashing when user focuses the window or opens chat
+  useEffect(() => {
+    const handleFocus = () => {
+      if (openRef.current) {
+        stopFlashing();
+        setUnread(0);
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [stopFlashing]);
+
+  // Stop flashing when chat is opened
+  useEffect(() => {
+    if (open) {
+      setUnread(0);
+      stopFlashing();
+    }
+  }, [open, stopFlashing]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => stopFlashing();
+  }, [stopFlashing]);
 
   const addMessage = useCallback((msg: ChatMessage) => {
     setMessages((prev) => [...prev.slice(-200), msg]);
-    if (!msg.own) {
+    if (!msg.own && !openRef.current) {
       setUnread((prev) => prev + 1);
+      // Flash tab title if window is not focused or chat is closed
+      if (document.hidden || !openRef.current) {
+        startFlashing();
+      }
     }
-  }, []);
+  }, [startFlashing]);
 
-  // Clear unread when panel is opened
-  useEffect(() => {
-    if (open) setUnread(0);
-  }, [open]);
-
-  // Subscribe to incoming chat messages
+  // Subscribe to incoming chat messages and chat history
   useEffect(() => {
     const unsub = signaling.subscribe((msg) => {
-      if (msg.type === 'chat' && typeof msg.name === 'string' && typeof msg.text === 'string') {
+      // Regular chat message (from another user or system)
+      if (msg.type === 'chat' && typeof msg.text === 'string') {
         addMessage({
-          name: msg.name as string,
+          name: (msg.name as string) || '',
           text: msg.text as string,
-          time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
+          time: formatTime(),
           own: false,
+          system: !!msg.system,
         });
+      }
+      // Chat history — sent when receiver joins a room
+      if (msg.type === 'chat-history' && Array.isArray(msg.messages)) {
+        const historyMsgs = (msg.messages as Array<{ name: string; text: string; time?: string; system?: boolean }>).map((m) => ({
+          name: m.name || '',
+          text: m.text,
+          time: formatTime(m.time),
+          own: false,
+          system: !!m.system,
+        }));
+        setMessages((prev) => [...historyMsgs, ...prev]);
       }
     });
     return unsub;
@@ -75,7 +149,7 @@ export function ChatPanel({ signaling, active }: ChatPanelProps) {
     addMessage({
       name: chatName,
       text,
-      time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
+      time: formatTime(),
       own: true,
     });
     setDraft('');
@@ -123,7 +197,7 @@ export function ChatPanel({ signaling, active }: ChatPanelProps) {
         >
           <MessageCircle className="h-6 w-6" />
           {unread > 0 && (
-            <span className="absolute -top-1 -right-1 flex items-center justify-center w-5 h-5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold">
+            <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-5 h-5 px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold animate-pulse">
               {unread > 99 ? '99+' : unread}
             </span>
           )}
@@ -201,15 +275,21 @@ export function ChatPanel({ signaling, active }: ChatPanelProps) {
                   No messages yet
                 </div>
               )}
-              {messages.map((msg, i) => (
-                <div key={i} className="text-xs flex gap-1.5">
-                  <span className="text-muted-foreground/60 shrink-0">{msg.time}</span>
-                  <span className={`font-semibold shrink-0 ${msg.own ? 'text-primary' : 'text-blue-400'}`}>
-                    {msg.name}:
-                  </span>
-                  <span className="text-foreground break-words min-w-0">{msg.text}</span>
-                </div>
-              ))}
+              {messages.map((msg, i) =>
+                msg.system ? (
+                  <div key={i} className="text-[11px] text-muted-foreground/60 text-center py-0.5 italic">
+                    {msg.text}
+                  </div>
+                ) : (
+                  <div key={i} className="text-xs flex gap-1.5">
+                    <span className="text-muted-foreground/60 shrink-0">{msg.time}</span>
+                    <span className={`font-semibold shrink-0 ${msg.own ? 'text-primary' : 'text-blue-400'}`}>
+                      {msg.name}:
+                    </span>
+                    <span className="text-foreground break-words min-w-0">{msg.text}</span>
+                  </div>
+                )
+              )}
             </div>
 
             {/* Input */}
