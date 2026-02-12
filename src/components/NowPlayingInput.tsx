@@ -9,11 +9,16 @@ interface DeezerResult {
   cover: string;
 }
 
+export interface NowPlayingMeta {
+  text: string;
+  cover?: string;
+}
+
 interface NowPlayingInputProps {
   value: string;
-  onChange: (value: string) => void;
+  onChange: (meta: NowPlayingMeta) => void;
   /** Called when the user commits a track (Enter, blur, or Deezer selection) */
-  onCommit: (value: string) => void;
+  onCommit: (meta: NowPlayingMeta) => void;
 }
 
 export function NowPlayingInput({ value, onChange, onCommit }: NowPlayingInputProps) {
@@ -25,6 +30,7 @@ export function NowPlayingInput({ value, onChange, onCommit }: NowPlayingInputPr
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const lastCommittedRef = useRef(value);
+  const coverRef = useRef<string | undefined>(undefined);
 
   // Keep local query in sync with external value changes (e.g. reset on off-air)
   useEffect(() => {
@@ -52,18 +58,20 @@ export function NowPlayingInput({ value, onChange, onCommit }: NowPlayingInputPr
     }
   }, []);
 
-  const commitTrack = useCallback((text: string) => {
+  const commitTrack = useCallback((text: string, cover?: string) => {
     const trimmed = text.trim();
     if (trimmed && trimmed !== lastCommittedRef.current) {
       lastCommittedRef.current = trimmed;
-      onCommit(trimmed);
+      onCommit({ text: trimmed, cover });
     }
   }, [onCommit]);
 
   const handleInput = (val: string) => {
     setQuery(val);
+    // Clear cover when typing freely (cover only set on Deezer selection)
+    coverRef.current = undefined;
     // Live metadata update for receivers (typing preview)
-    onChange(val);
+    onChange({ text: val });
     // Debounce the Deezer search
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => searchDeezer(val), 300);
@@ -71,16 +79,19 @@ export function NowPlayingInput({ value, onChange, onCommit }: NowPlayingInputPr
 
   const handleSelect = (result: DeezerResult) => {
     const text = `${result.artist} — ${result.title}`;
+    const cover = result.cover || undefined;
+    coverRef.current = cover;
     setQuery(text);
-    onChange(text);
-    commitTrack(text);
+    onChange({ text, cover });
+    commitTrack(text, cover);
     setOpen(false);
     setResults([]);
   };
 
   const handleClear = () => {
     setQuery('');
-    onChange('');
+    coverRef.current = undefined;
+    onChange({ text: '' });
     lastCommittedRef.current = '';
     setResults([]);
     setOpen(false);
@@ -91,7 +102,7 @@ export function NowPlayingInput({ value, onChange, onCommit }: NowPlayingInputPr
     // Small delay to allow dropdown clicks to register before closing
     setTimeout(() => {
       if (query.trim()) {
-        commitTrack(query);
+        commitTrack(query, coverRef.current);
       }
     }, 200);
   };
@@ -115,7 +126,7 @@ export function NowPlayingInput({ value, onChange, onCommit }: NowPlayingInputPr
     if (e.key === 'Enter') {
       e.preventDefault();
       if (query.trim()) {
-        commitTrack(query);
+        commitTrack(query, coverRef.current);
       }
       setOpen(false);
       inputRef.current?.blur();

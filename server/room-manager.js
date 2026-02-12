@@ -108,9 +108,9 @@ export class RoomManager {
     return null;
   }
 
-  setMetadata(roomId, text) {
+  setMetadata(roomId, text, cover) {
     const room = this.rooms.get(roomId);
-    if (room) room.metadata = text || null;
+    if (room) room.metadata = text ? { text, cover: cover || null } : null;
   }
 
   getMetadata(roomId) {
@@ -118,11 +118,13 @@ export class RoomManager {
     return room ? room.metadata : null;
   }
 
-  addTrack(roomId, title) {
+  addTrack(roomId, title, cover) {
     const room = this.rooms.get(roomId);
     if (!room || !title) return;
     const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    room.trackList.unshift({ title, time }); // newest first
+    const entry = { title, time };
+    if (cover) entry.cover = cover;
+    room.trackList.unshift(entry); // newest first
     // Cap at 100 tracks
     if (room.trackList.length > 100) room.trackList.length = 100;
   }

@@ -27,6 +27,7 @@ const Receiver = () => {
   const [audioStarted, setAudioStarted] = useState(false);
   const [externalStream, setExternalStream] = useState(false);
   const [nowPlaying, setNowPlaying] = useState('');
+  const [nowPlayingCover, setNowPlayingCover] = useState<string | undefined>();
   const [trackList, setTrackList] = useState<Track[]>([]);
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const noAudioTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -64,6 +65,7 @@ const Receiver = () => {
     const unsub = signaling.subscribe((msg) => {
       if (msg.type === 'metadata' && typeof msg.text === 'string') {
         setNowPlaying(msg.text as string);
+        setNowPlayingCover(typeof msg.cover === 'string' ? (msg.cover as string) : undefined);
       }
       if (msg.type === 'track-list' && Array.isArray(msg.tracks)) {
         setTrackList(msg.tracks as Track[]);
@@ -262,8 +264,16 @@ const Receiver = () => {
 
         {/* Now Playing */}
         {joined && nowPlaying && (audioStarted || externalStream) && (
-          <div className="flex items-center gap-2 px-3 py-2 bg-primary/5 border border-primary/20 rounded-md">
-            <Disc3 className="h-4 w-4 text-primary shrink-0 animate-spin" style={{ animationDuration: '3s' }} />
+          <div className="flex items-center gap-2.5 px-3 py-2 bg-primary/5 border border-primary/20 rounded-md">
+            {nowPlayingCover ? (
+              <img
+                src={nowPlayingCover}
+                alt=""
+                className="w-8 h-8 rounded shrink-0 bg-secondary"
+              />
+            ) : (
+              <Disc3 className="h-4 w-4 text-primary shrink-0 animate-spin" style={{ animationDuration: '3s' }} />
+            )}
             <span className="text-xs font-mono text-foreground truncate">{nowPlaying}</span>
           </div>
         )}

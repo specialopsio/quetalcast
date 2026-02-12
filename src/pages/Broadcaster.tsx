@@ -20,7 +20,7 @@ import {
 import { useAudioMixer } from '@/hooks/useAudioMixer';
 import { useMicEffects } from '@/hooks/useMicEffects';
 import { SoundBoard } from '@/components/SoundBoard';
-import { NowPlayingInput } from '@/components/NowPlayingInput';
+import { NowPlayingInput, type NowPlayingMeta } from '@/components/NowPlayingInput';
 import { TrackList, type Track } from '@/components/TrackList';
 import { EffectsBoard } from '@/components/EffectsBoard';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
@@ -64,6 +64,7 @@ const Broadcaster = () => {
   const [boardTab, setBoardTab] = useState('sounds');
   const [listenerCount, setListenerCount] = useState(0);
   const [nowPlaying, setNowPlaying] = useState('');
+  const [nowPlayingCover, setNowPlayingCover] = useState<string | undefined>();
   const nowPlayingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [trackList, setTrackList] = useState<Track[]>([]);
   const [presets, setPresets] = useState(() => getPresets());
@@ -398,12 +399,15 @@ const Broadcaster = () => {
     addLog(`Preset deleted: ${name}`);
   };
 
-  const handleNowPlayingChange = (value: string) => {
-    setNowPlaying(value);
+  const handleNowPlayingChange = (meta: NowPlayingMeta) => {
+    setNowPlaying(meta.text);
+    setNowPlayingCover(meta.cover);
     // Debounce sending metadata
     if (nowPlayingTimerRef.current) clearTimeout(nowPlayingTimerRef.current);
     nowPlayingTimerRef.current = setTimeout(() => {
-      signaling.send({ type: 'metadata', text: value });
+      const payload: Record<string, string> = { type: 'metadata', text: meta.text };
+      if (meta.cover) payload.cover = meta.cover;
+      signaling.send(payload);
     }, 500);
   };
 
@@ -434,6 +438,7 @@ const Broadcaster = () => {
       setElapsedSeconds(0);
       setListenerCount(0);
       setNowPlaying('');
+      setNowPlayingCover(undefined);
       setTrackList([]);
     }
   }, [isOnAir]);
@@ -785,7 +790,11 @@ const Broadcaster = () => {
             <NowPlayingInput
               value={nowPlaying}
               onChange={handleNowPlayingChange}
-              onCommit={(text) => signaling.send({ type: 'add-track', text })}
+              onCommit={(meta) => {
+                const payload: Record<string, string> = { type: 'add-track', text: meta.text };
+                if (meta.cover) payload.cover = meta.cover;
+                signaling.send(payload);
+              }}
             />
           </div>
         )}

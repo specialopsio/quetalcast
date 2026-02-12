@@ -3,6 +3,7 @@ import { Disc3, ListMusic, Download } from 'lucide-react';
 export interface Track {
   title: string;
   time: string;
+  cover?: string;
 }
 
 interface TrackListProps {
@@ -61,12 +62,21 @@ export function TrackList({ tracks }: TrackListProps) {
               i === 0 ? 'bg-primary/5' : ''
             }`}
           >
-            <Disc3
-              className={`h-3.5 w-3.5 shrink-0 ${
-                i === 0 ? 'text-primary animate-spin' : 'text-muted-foreground/40'
-              }`}
-              style={i === 0 ? { animationDuration: '3s' } : undefined}
-            />
+            {track.cover ? (
+              <img
+                src={track.cover}
+                alt=""
+                className="w-7 h-7 rounded shrink-0 bg-secondary"
+                loading="lazy"
+              />
+            ) : (
+              <Disc3
+                className={`h-3.5 w-3.5 shrink-0 ${
+                  i === 0 ? 'text-primary animate-spin' : 'text-muted-foreground/40'
+                }`}
+                style={i === 0 ? { animationDuration: '3s' } : undefined}
+              />
+            )}
             <span className="text-muted-foreground/60 tabular-nums shrink-0 font-mono">
               {track.time}
             </span>

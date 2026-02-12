@@ -409,7 +409,9 @@ wss.on('connection', (ws, req) => {
           // Send current metadata to the new receiver
           const currentMeta = rooms.getMetadata(roomId);
           if (currentMeta) {
-            ws.send(JSON.stringify({ type: 'metadata', text: currentMeta }));
+            const initMetaPayload = { type: 'metadata', text: currentMeta.text };
+            if (currentMeta.cover) initMetaPayload.cover = currentMeta.cover;
+            ws.send(JSON.stringify(initMetaPayload));
           }
           // Send track list history
           const trackList = rooms.getTrackList(roomId);
@@ -534,10 +536,13 @@ wss.on('connection', (ws, req) => {
         // Does NOT add to track list (that's handled by 'add-track')
         if (!clientRoom || clientRole !== 'broadcaster') break;
         const metaText = typeof msg.text === 'string' ? msg.text.slice(0, 200) : '';
-        rooms.setMetadata(clientRoom, metaText);
+        const metaCover = typeof msg.cover === 'string' ? msg.cover.slice(0, 500) : undefined;
+        rooms.setMetadata(clientRoom, metaText, metaCover);
 
         // Broadcast metadata to all receivers
-        const metaMsg = JSON.stringify({ type: 'metadata', text: metaText });
+        const metaPayload = { type: 'metadata', text: metaText };
+        if (metaCover) metaPayload.cover = metaCover;
+        const metaMsg = JSON.stringify(metaPayload);
         const metaReceiverIds = rooms.getReceiverIds(clientRoom);
         for (const rid of metaReceiverIds) {
           const rws = rooms.getReceiver(clientRoom, rid);
@@ -551,14 +556,15 @@ wss.on('connection', (ws, req) => {
         if (!clientRoom || clientRole !== 'broadcaster') break;
         const trackText = typeof msg.text === 'string' ? msg.text.slice(0, 200) : '';
         if (!trackText) break;
+        const trackCover = typeof msg.cover === 'string' ? msg.cover.slice(0, 500) : undefined;
 
         // Avoid duplicate if the last track is the same title
         const existingTracks = rooms.getTrackList(clientRoom);
         if (existingTracks.length > 0 && existingTracks[0].title === trackText) break;
 
-        rooms.addTrack(clientRoom, trackText);
+        rooms.addTrack(clientRoom, trackText, trackCover);
         // Also update metadata to match the committed track
-        rooms.setMetadata(clientRoom, trackText);
+        rooms.setMetadata(clientRoom, trackText, trackCover);
 
         // Broadcast updated track list to all receivers + broadcaster
         const trackListMsg = JSON.stringify({ type: 'track-list', tracks: rooms.getTrackList(clientRoom) });
@@ -570,7 +576,9 @@ wss.on('connection', (ws, req) => {
         ws.send(trackListMsg);
 
         // Broadcast metadata to all receivers
-        const trackMetaMsg = JSON.stringify({ type: 'metadata', text: trackText });
+        const trackMetaPayload = { type: 'metadata', text: trackText };
+        if (trackCover) trackMetaPayload.cover = trackCover;
+        const trackMetaMsg = JSON.stringify(trackMetaPayload);
         const trackMetaReceiverIds = rooms.getReceiverIds(clientRoom);
         for (const rid of trackMetaReceiverIds) {
           const rws = rooms.getReceiver(clientRoom, rid);
