@@ -118,12 +118,35 @@ export class RoomManager {
     return room ? room.metadata : null;
   }
 
-  addTrack(roomId, title, cover) {
+  /**
+   * Add a track entry with rich metadata.
+   * @param {string} roomId
+   * @param {object} meta — { text, cover, coverMedium, artist, title, album, duration,
+   *   releaseDate, isrc, bpm, trackPosition, diskNumber, explicitLyrics,
+   *   contributors, label, genres }
+   */
+  addTrack(roomId, meta) {
     const room = this.rooms.get(roomId);
-    if (!room || !title) return;
+    if (!room || !meta?.text) return;
     const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    const entry = { title, time };
-    if (cover) entry.cover = cover;
+    const entry = { title: meta.text, time };
+    // Attach optional rich fields if present
+    if (meta.cover) entry.cover = meta.cover;
+    if (meta.coverMedium) entry.coverMedium = meta.coverMedium;
+    if (meta.artist) entry.artist = meta.artist;
+    if (meta.title) entry.trackTitle = meta.title; // "title" is the display string; trackTitle is the song name
+    if (meta.album) entry.album = meta.album;
+    if (meta.duration) entry.duration = meta.duration;
+    if (meta.releaseDate) entry.releaseDate = meta.releaseDate;
+    if (meta.isrc) entry.isrc = meta.isrc;
+    if (meta.bpm) entry.bpm = meta.bpm;
+    if (meta.trackPosition) entry.trackPosition = meta.trackPosition;
+    if (meta.diskNumber) entry.diskNumber = meta.diskNumber;
+    if (meta.explicitLyrics) entry.explicitLyrics = meta.explicitLyrics;
+    if (meta.contributors?.length) entry.contributors = meta.contributors;
+    if (meta.label) entry.label = meta.label;
+    if (meta.genres?.length) entry.genres = meta.genres;
+
     room.trackList.unshift(entry); // newest first
     // Cap at 100 tracks
     if (room.trackList.length > 100) room.trackList.length = 100;

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Disc3, Search, X } from 'lucide-react';
+import { Disc3, Search, X, Loader2 } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
 
 interface DeezerResult {
@@ -8,8 +8,31 @@ interface DeezerResult {
   artist: string;
   album: string;
   cover: string;
+  coverMedium?: string;
+  duration?: number;
 }
 
+/** Rich track metadata passed on commit */
+export interface TrackMeta {
+  text: string;
+  cover?: string;
+  coverMedium?: string;
+  artist?: string;
+  title?: string;
+  album?: string;
+  duration?: number;       // seconds
+  releaseDate?: string;    // YYYY-MM-DD
+  isrc?: string;
+  bpm?: number;
+  trackPosition?: number;
+  diskNumber?: number;
+  explicitLyrics?: boolean;
+  contributors?: { name: string; role: string }[];
+  label?: string;
+  genres?: string[];
+}
+
+/** Lightweight metadata sent during live typing preview */
 export interface NowPlayingMeta {
   text: string;
   cover?: string;
@@ -19,7 +42,7 @@ interface NowPlayingInputProps {
   value: string;
   onChange: (meta: NowPlayingMeta) => void;
   /** Called when the user commits a track (Enter or Deezer selection) */
-  onCommit: (meta: NowPlayingMeta) => void;
+  onCommit: (meta: TrackMeta) => void;
 }
 
 export function NowPlayingInput({ value, onChange, onCommit }: NowPlayingInputProps) {
@@ -27,11 +50,11 @@ export function NowPlayingInput({ value, onChange, onCommit }: NowPlayingInputPr
   const [results, setResults] = useState<DeezerResult[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const lastCommittedRef = useRef(value);
-  const coverRef = useRef<string | undefined>(undefined);
 
   // Keep local query in sync with external value changes (e.g. reset on off-air)
   useEffect(() => {
@@ -59,15 +82,75 @@ export function NowPlayingInput({ value, onChange, onCommit }: NowPlayingInputPr
     }
   }, []);
 
-  const commitTrack = useCallback((text: string, cover?: string) => {
-    const trimmed = text.trim();
-    if (trimmed && trimmed !== lastCommittedRef.current) {
-      lastCommittedRef.current = trimmed;
-      onCommit({ text: trimmed, cover });
+  /** Fetch full track detail from Deezer and commit */
+  const fetchAndCommit = useCallback(async (result: DeezerResult) => {
+    const displayText = `${result.artist} — ${result.title}`;
+    setFetching(true);
+    try {
+      const res = await fetch(`/api/music-detail/${result.id}`);
+      const { data } = await res.json();
+      if (data) {
+        const meta: TrackMeta = {
+          text: displayText,
+          cover: data.cover || result.cover || undefined,
+          coverMedium: data.coverMedium || result.coverMedium || undefined,
+          artist: data.artist || result.artist || undefined,
+          title: data.title || result.title || undefined,
+          album: data.album || result.album || undefined,
+          duration: data.duration || result.duration || undefined,
+          releaseDate: data.releaseDate || undefined,
+          isrc: data.isrc || undefined,
+          bpm: data.bpm || undefined,
+          trackPosition: data.trackPosition || undefined,
+          diskNumber: data.diskNumber || undefined,
+          explicitLyrics: data.explicitLyrics || undefined,
+          contributors: data.contributors?.length ? data.contributors : undefined,
+          label: data.label || undefined,
+          genres: data.genres?.length ? data.genres : undefined,
+        };
+        onCommit(meta);
+      } else {
+        // Fallback if detail fetch failed
+        onCommit({
+          text: displayText,
+          cover: result.cover || undefined,
+          coverMedium: result.coverMedium || undefined,
+          artist: result.artist || undefined,
+          title: result.title || undefined,
+          album: result.album || undefined,
+          duration: result.duration || undefined,
+        });
+      }
+    } catch {
+      // Fallback — commit with search data
+      onCommit({
+        text: displayText,
+        cover: result.cover || undefined,
+        coverMedium: result.coverMedium || undefined,
+        artist: result.artist || undefined,
+        title: result.title || undefined,
+        album: result.album || undefined,
+        duration: result.duration || undefined,
+      });
+    } finally {
+      setFetching(false);
       // Clear input and notify
       lastCommittedRef.current = '';
       setQuery('');
-      coverRef.current = undefined;
+      onChange({ text: '' });
+      setResults([]);
+      setOpen(false);
+      toast('Added to track list', { duration: 2000 });
+    }
+  }, [onCommit, onChange]);
+
+  /** Simple commit for freeform text (Enter key) */
+  const commitFreeform = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (trimmed && trimmed !== lastCommittedRef.current) {
+      lastCommittedRef.current = '';
+      onCommit({ text: trimmed });
+      setQuery('');
       onChange({ text: '' });
       setResults([]);
       setOpen(false);
@@ -77,8 +160,6 @@ export function NowPlayingInput({ value, onChange, onCommit }: NowPlayingInputPr
 
   const handleInput = (val: string) => {
     setQuery(val);
-    // Clear cover when typing freely (cover only set on Deezer selection)
-    coverRef.current = undefined;
     // Live metadata update for receivers (typing preview)
     onChange({ text: val });
     // Debounce the Deezer search
@@ -87,15 +168,16 @@ export function NowPlayingInput({ value, onChange, onCommit }: NowPlayingInputPr
   };
 
   const handleSelect = (result: DeezerResult) => {
+    // Show selected text immediately while fetching details
     const text = `${result.artist} — ${result.title}`;
-    const cover = result.cover || undefined;
-    // commitTrack clears the input, shows toast, and notifies parent
-    commitTrack(text, cover);
+    setQuery(text);
+    setOpen(false);
+    setResults([]);
+    fetchAndCommit(result);
   };
 
   const handleClear = () => {
     setQuery('');
-    coverRef.current = undefined;
     onChange({ text: '' });
     lastCommittedRef.current = '';
     setResults([]);
@@ -122,7 +204,7 @@ export function NowPlayingInput({ value, onChange, onCommit }: NowPlayingInputPr
     if (e.key === 'Enter') {
       e.preventDefault();
       if (query.trim()) {
-        commitTrack(query, coverRef.current);
+        commitFreeform(query);
       }
       setOpen(false);
       inputRef.current?.blur();
@@ -138,7 +220,11 @@ export function NowPlayingInput({ value, onChange, onCommit }: NowPlayingInputPr
 
       <div ref={containerRef} className="relative flex-1">
         <div className="relative flex items-center">
-          <Search className="absolute left-2 h-3 w-3 text-muted-foreground/60 pointer-events-none" />
+          {fetching ? (
+            <Loader2 className="absolute left-2 h-3 w-3 text-primary animate-spin pointer-events-none" />
+          ) : (
+            <Search className="absolute left-2 h-3 w-3 text-muted-foreground/60 pointer-events-none" />
+          )}
           <input
             ref={inputRef}
             value={query}
@@ -147,9 +233,10 @@ export function NowPlayingInput({ value, onChange, onCommit }: NowPlayingInputPr
             onKeyDown={handleKeyDown}
             placeholder="Search artist or song…"
             maxLength={200}
-            className="w-full bg-input border border-border rounded-md pl-7 pr-7 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            disabled={fetching}
+            className="w-full bg-input border border-border rounded-md pl-7 pr-7 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
           />
-          {query && (
+          {query && !fetching && (
             <button
               onClick={handleClear}
               className="absolute right-1.5 p-0.5 text-muted-foreground/60 hover:text-foreground transition-colors"
@@ -182,7 +269,10 @@ export function NowPlayingInput({ value, onChange, onCommit }: NowPlayingInputPr
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-medium text-foreground truncate">{r.title}</div>
-                  <div className="text-[10px] text-muted-foreground truncate">{r.artist}{r.album ? ` · ${r.album}` : ''}</div>
+                  <div className="text-[10px] text-muted-foreground truncate">
+                    {r.artist}{r.album ? ` · ${r.album}` : ''}
+                    {r.duration ? ` · ${Math.floor(r.duration / 60)}:${String(r.duration % 60).padStart(2, '0')}` : ''}
+                  </div>
                 </div>
               </button>
             ))}

@@ -20,7 +20,7 @@ import {
 import { useAudioMixer } from '@/hooks/useAudioMixer';
 import { useMicEffects } from '@/hooks/useMicEffects';
 import { SoundBoard } from '@/components/SoundBoard';
-import { NowPlayingInput, type NowPlayingMeta } from '@/components/NowPlayingInput';
+import { NowPlayingInput, type NowPlayingMeta, type TrackMeta } from '@/components/NowPlayingInput';
 import { TrackList, type Track } from '@/components/TrackList';
 import { EffectsBoard } from '@/components/EffectsBoard';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
@@ -790,10 +790,8 @@ const Broadcaster = () => {
             <NowPlayingInput
               value={nowPlaying}
               onChange={handleNowPlayingChange}
-              onCommit={(meta) => {
-                const payload: Record<string, string> = { type: 'add-track', text: meta.text };
-                if (meta.cover) payload.cover = meta.cover;
-                signaling.send(payload);
+              onCommit={(meta: TrackMeta) => {
+                signaling.send({ type: 'add-track', ...meta });
               }}
             />
           </div>

@@ -194,18 +194,70 @@ app.get('/api/music-search', async (req, res) => {
     const url = `https://api.deezer.com/search?q=${encodeURIComponent(query)}&limit=8`;
     const response = await fetch(url);
     const data = await response.json();
-    // Return only the fields we need to keep payload small
     const results = (data.data || []).map(t => ({
       id: t.id,
       title: t.title,
       artist: t.artist?.name || '',
       album: t.album?.title || '',
       cover: t.album?.cover_small || '',
+      coverMedium: t.album?.cover_medium || '',
+      duration: t.duration || 0,
     }));
     res.json({ data: results });
   } catch (e) {
     logger.warn({ error: e.message }, 'Deezer search proxy error');
     res.json({ data: [] });
+  }
+});
+
+// Deezer track detail proxy — fetches full metadata for a selected track
+app.get('/api/music-detail/:id', async (req, res) => {
+  const trackId = req.params.id;
+  if (!trackId || !/^\d+$/.test(trackId)) {
+    return res.json({ data: null });
+  }
+  try {
+    // Fetch track and album details in parallel
+    const trackRes = await fetch(`https://api.deezer.com/track/${trackId}`);
+    const track = await trackRes.json();
+    if (track.error) return res.json({ data: null });
+
+    let albumData = null;
+    if (track.album?.id) {
+      try {
+        const albumRes = await fetch(`https://api.deezer.com/album/${track.album.id}`);
+        albumData = await albumRes.json();
+        if (albumData.error) albumData = null;
+      } catch { /* album fetch optional */ }
+    }
+
+    const contributors = (track.contributors || []).map(c => ({
+      name: c.name || '',
+      role: c.role || '',
+    }));
+
+    const result = {
+      id: track.id,
+      title: track.title || '',
+      artist: track.artist?.name || '',
+      album: track.album?.title || '',
+      cover: track.album?.cover_small || '',
+      coverMedium: track.album?.cover_medium || '',
+      duration: track.duration || 0,
+      releaseDate: track.release_date || albumData?.release_date || '',
+      isrc: track.isrc || '',
+      bpm: track.bpm || 0,
+      trackPosition: track.track_position || 0,
+      diskNumber: track.disk_number || 0,
+      explicitLyrics: !!track.explicit_lyrics,
+      contributors,
+      label: albumData?.label || '',
+      genres: (albumData?.genres?.data || []).map(g => g.name),
+    };
+    res.json({ data: result });
+  } catch (e) {
+    logger.warn({ error: e.message }, 'Deezer detail proxy error');
+    res.json({ data: null });
   }
 });
 
@@ -556,15 +608,39 @@ wss.on('connection', (ws, req) => {
         if (!clientRoom || clientRole !== 'broadcaster') break;
         const trackText = typeof msg.text === 'string' ? msg.text.slice(0, 200) : '';
         if (!trackText) break;
-        const trackCover = typeof msg.cover === 'string' ? msg.cover.slice(0, 500) : undefined;
 
         // Avoid duplicate if the last track is the same title
         const existingTracks = rooms.getTrackList(clientRoom);
         if (existingTracks.length > 0 && existingTracks[0].title === trackText) break;
 
-        rooms.addTrack(clientRoom, trackText, trackCover);
+        // Build rich metadata object
+        const str = (k) => typeof msg[k] === 'string' ? msg[k].slice(0, 500) : undefined;
+        const num = (k) => typeof msg[k] === 'number' ? msg[k] : undefined;
+        const trackMeta = {
+          text: trackText,
+          cover: str('cover'),
+          coverMedium: str('coverMedium'),
+          artist: str('artist'),
+          title: str('title'),
+          album: str('album'),
+          duration: num('duration'),
+          releaseDate: str('releaseDate'),
+          isrc: str('isrc'),
+          bpm: num('bpm'),
+          trackPosition: num('trackPosition'),
+          diskNumber: num('diskNumber'),
+          explicitLyrics: msg.explicitLyrics === true ? true : undefined,
+          contributors: Array.isArray(msg.contributors) ? msg.contributors.slice(0, 20).map(c => ({
+            name: typeof c.name === 'string' ? c.name.slice(0, 200) : '',
+            role: typeof c.role === 'string' ? c.role.slice(0, 100) : '',
+          })) : undefined,
+          label: str('label'),
+          genres: Array.isArray(msg.genres) ? msg.genres.filter(g => typeof g === 'string').slice(0, 10) : undefined,
+        };
+
+        rooms.addTrack(clientRoom, trackMeta);
         // Also update metadata to match the committed track
-        rooms.setMetadata(clientRoom, trackText, trackCover);
+        rooms.setMetadata(clientRoom, trackText, trackMeta.coverMedium || trackMeta.cover);
 
         // Broadcast updated track list to all receivers + broadcaster
         const trackListMsg = JSON.stringify({ type: 'track-list', tracks: rooms.getTrackList(clientRoom) });
@@ -577,7 +653,7 @@ wss.on('connection', (ws, req) => {
 
         // Broadcast metadata to all receivers
         const trackMetaPayload = { type: 'metadata', text: trackText };
-        if (trackCover) trackMetaPayload.cover = trackCover;
+        if (trackMeta.coverMedium || trackMeta.cover) trackMetaPayload.cover = trackMeta.coverMedium || trackMeta.cover;
         const trackMetaMsg = JSON.stringify(trackMetaPayload);
         const trackMetaReceiverIds = rooms.getReceiverIds(clientRoom);
         for (const rid of trackMetaReceiverIds) {
@@ -588,7 +664,19 @@ wss.on('connection', (ws, req) => {
         // Push metadata to integration stream if active
         const integrationInfo = rooms.getIntegrationInfo(clientRoom);
         if (integrationInfo) {
-          updateStreamMetadata(integrationInfo.type, integrationInfo.credentials, trackText, logger)
+          // Build rich song string: "Artist - Title [Album (Year)]"
+          let songStr = trackText;
+          if (trackMeta.artist && trackMeta.title) {
+            songStr = `${trackMeta.artist} - ${trackMeta.title}`;
+            const parts = [];
+            if (trackMeta.album) parts.push(trackMeta.album);
+            if (trackMeta.releaseDate) {
+              const yr = trackMeta.releaseDate.match(/^(\d{4})/);
+              if (yr) parts.push(yr[1]);
+            }
+            if (parts.length) songStr += ` [${parts.join(' · ')}]`;
+          }
+          updateStreamMetadata(integrationInfo.type, integrationInfo.credentials, songStr, logger)
             .then((ok) => {
               if (ok) logger.debug({ roomId: clientRoom.slice(0, 8) }, 'Integration metadata updated');
             });

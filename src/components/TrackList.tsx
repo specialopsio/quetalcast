@@ -1,13 +1,40 @@
 import { Disc3, ListMusic, Download } from 'lucide-react';
 
 export interface Track {
-  title: string;
-  time: string;
-  cover?: string;
+  title: string;           // display string "Artist — Song"
+  time: string;            // HH:MM:SS when played
+  cover?: string;          // small album art URL
+  coverMedium?: string;    // medium album art URL
+  artist?: string;
+  trackTitle?: string;     // song name (distinct from display title)
+  album?: string;
+  duration?: number;       // seconds
+  releaseDate?: string;    // YYYY-MM-DD
+  isrc?: string;
+  bpm?: number;
+  trackPosition?: number;
+  diskNumber?: number;
+  explicitLyrics?: boolean;
+  contributors?: { name: string; role: string }[];
+  label?: string;
+  genres?: string[];
 }
 
 interface TrackListProps {
   tracks: Track[];
+}
+
+function formatDuration(sec?: number): string {
+  if (!sec || sec <= 0) return '';
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function extractYear(dateStr?: string): string {
+  if (!dateStr) return '';
+  const match = dateStr.match(/^(\d{4})/);
+  return match ? match[1] : '';
 }
 
 function escapeCsvField(field: string): string {
@@ -20,10 +47,37 @@ function escapeCsvField(field: string): string {
 function downloadCsv(tracks: Track[]) {
   // Tracks are stored newest-first; reverse for chronological CSV
   const rows = [...tracks].reverse();
-  const header = 'Time,Title';
-  const lines = rows.map((t) => `${escapeCsvField(t.time)},${escapeCsvField(t.title)}`);
-  const csv = [header, ...lines].join('\n');
+  const header = [
+    'Time Played', 'Artist', 'Title', 'Album', 'Duration', 'Release Date',
+    'ISRC', 'BPM', 'Label', 'Genres', 'Contributors', 'Track #', 'Disc #', 'Explicit',
+  ].join(',');
 
+  const lines = rows.map((t) => {
+    const dur = t.duration ? formatDuration(t.duration) : '';
+    const contribs = (t.contributors || [])
+      .map(c => `${c.name}${c.role ? ` (${c.role})` : ''}`)
+      .join('; ');
+    const genres = (t.genres || []).join('; ');
+
+    return [
+      escapeCsvField(t.time),
+      escapeCsvField(t.artist || ''),
+      escapeCsvField(t.trackTitle || t.title),
+      escapeCsvField(t.album || ''),
+      escapeCsvField(dur),
+      escapeCsvField(t.releaseDate || ''),
+      escapeCsvField(t.isrc || ''),
+      escapeCsvField(t.bpm ? String(t.bpm) : ''),
+      escapeCsvField(t.label || ''),
+      escapeCsvField(genres),
+      escapeCsvField(contribs),
+      escapeCsvField(t.trackPosition ? String(t.trackPosition) : ''),
+      escapeCsvField(t.diskNumber ? String(t.diskNumber) : ''),
+      escapeCsvField(t.explicitLyrics ? 'Yes' : ''),
+    ].join(',');
+  });
+
+  const csv = [header, ...lines].join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -54,37 +108,83 @@ export function TrackList({ tracks }: TrackListProps) {
           CSV
         </button>
       </div>
-      <div className="space-y-0.5 max-h-64 overflow-y-auto scrollbar-thin">
-        {tracks.map((track, i) => (
-          <div
-            key={i}
-            className={`flex items-center gap-2.5 px-2 py-1.5 rounded-sm text-xs ${
-              i === 0 ? 'bg-primary/5' : ''
-            }`}
-          >
-            {track.cover ? (
-              <img
-                src={track.cover}
-                alt=""
-                className="w-7 h-7 rounded shrink-0 bg-secondary"
-                loading="lazy"
-              />
-            ) : (
-              <Disc3
-                className={`h-3.5 w-3.5 shrink-0 ${
-                  i === 0 ? 'text-primary animate-spin' : 'text-muted-foreground/40'
-                }`}
-                style={i === 0 ? { animationDuration: '3s' } : undefined}
-              />
-            )}
-            <span className="text-muted-foreground/60 tabular-nums shrink-0 font-mono">
-              {track.time}
-            </span>
-            <span className={`truncate ${i === 0 ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
-              {track.title}
-            </span>
-          </div>
-        ))}
+
+      {/* Column headers */}
+      <div className="flex items-center gap-2.5 px-2 py-1 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider border-b border-border">
+        <span className="w-8 shrink-0" /> {/* artwork column */}
+        <span className="w-16 shrink-0">Time</span>
+        <span className="flex-1 min-w-0">Title</span>
+        <span className="hidden sm:block w-32 shrink-0 truncate">Album</span>
+        <span className="w-10 shrink-0 text-right">Dur.</span>
+        <span className="hidden sm:block w-10 shrink-0 text-right">Year</span>
+      </div>
+
+      <div className="space-y-0 max-h-72 overflow-y-auto scrollbar-thin">
+        {tracks.map((track, i) => {
+          const year = extractYear(track.releaseDate);
+          const dur = formatDuration(track.duration);
+          const isCurrent = i === 0;
+
+          return (
+            <div
+              key={i}
+              className={`flex items-center gap-2.5 px-2 py-1.5 text-xs transition-colors ${
+                isCurrent ? 'bg-primary/5' : 'hover:bg-secondary/30'
+              }`}
+            >
+              {/* Artwork */}
+              {(track.coverMedium || track.cover) ? (
+                <img
+                  src={track.coverMedium || track.cover}
+                  alt=""
+                  className="w-8 h-8 rounded shrink-0 bg-secondary"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded bg-secondary shrink-0 flex items-center justify-center">
+                  <Disc3
+                    className={`h-3.5 w-3.5 ${
+                      isCurrent ? 'text-primary animate-spin' : 'text-muted-foreground/40'
+                    }`}
+                    style={isCurrent ? { animationDuration: '3s' } : undefined}
+                  />
+                </div>
+              )}
+
+              {/* Time played */}
+              <span className="w-16 shrink-0 text-muted-foreground/60 tabular-nums font-mono">
+                {track.time}
+              </span>
+
+              {/* Title + Artist */}
+              <div className="flex-1 min-w-0">
+                <div className={`truncate ${isCurrent ? 'text-foreground font-medium' : 'text-foreground/80'}`}>
+                  {track.trackTitle || track.title}
+                </div>
+                {track.artist && (
+                  <div className="text-[10px] text-muted-foreground truncate">
+                    {track.artist}
+                  </div>
+                )}
+              </div>
+
+              {/* Album */}
+              <span className="hidden sm:block w-32 shrink-0 text-muted-foreground truncate text-[11px]">
+                {track.album || ''}
+              </span>
+
+              {/* Duration */}
+              <span className="w-10 shrink-0 text-right tabular-nums text-muted-foreground/60 font-mono">
+                {dur}
+              </span>
+
+              {/* Year */}
+              <span className="hidden sm:block w-10 shrink-0 text-right tabular-nums text-muted-foreground/60 font-mono">
+                {year}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
