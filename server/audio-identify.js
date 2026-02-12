@@ -85,15 +85,22 @@ async function lookupAcoustID(fingerprint, duration, logger) {
     throw new Error('ACOUSTID_API_KEY not configured');
   }
 
-  const params = new URLSearchParams({
+  const body = new URLSearchParams({
     client: ACOUSTID_API_KEY,
     fingerprint,
     duration: String(duration),
     meta: 'recordings',
   });
 
-  const res = await fetch(`${ACOUSTID_URL}?${params}`);
+  const res = await fetch(ACOUSTID_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+  });
+
   if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    logger?.warn({ status: res.status, body: text }, 'AcoustID API error response');
     throw new Error(`AcoustID API error: ${res.status}`);
   }
 
