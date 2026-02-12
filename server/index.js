@@ -265,7 +265,7 @@ app.get('/api/music-detail/:id', async (req, res) => {
 // Audio identification — accepts raw PCM (signed 16-bit LE, mono, 22050 Hz)
 const identifyLimiter = rateLimit({ windowMs: 10000, max: 2, message: { error: 'Too many identify requests' } });
 
-app.post('/api/identify-audio', requireAuth, identifyLimiter, express.raw({ type: 'application/octet-stream', limit: '1mb' }), async (req, res) => {
+app.post('/api/identify-audio', requireAuth, identifyLimiter, express.raw({ type: 'application/octet-stream', limit: '2mb' }), async (req, res) => {
   if (!req.body || req.body.length < 1000) {
     return res.status(400).json({ match: null, error: 'Audio data too short' });
   }
@@ -275,8 +275,8 @@ app.post('/api/identify-audio', requireAuth, identifyLimiter, express.raw({ type
   }
 
   try {
-    const sampleRate = parseInt(req.headers['x-sample-rate'], 10) || 22050;
-    const match = await identifyAudio(req.body, logger, sampleRate);
+    const audioFormat = req.headers['x-audio-format'] || 'webm';
+    const match = await identifyAudio(req.body, logger, audioFormat);
     res.json({ match });
   } catch (e) {
     logger.warn({ error: e.message }, 'Audio identify failed');

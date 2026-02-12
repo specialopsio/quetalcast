@@ -8,56 +8,23 @@ const ACOUSTID_API_KEY = process.env.ACOUSTID_API_KEY || '';
 const ACOUSTID_URL = 'https://api.acoustid.org/v2/lookup';
 
 /**
- * Write raw PCM (signed 16-bit LE, mono) to a temporary WAV file.
- * @param {Buffer} pcmBuffer
- * @param {number} sampleRate — sample rate of the PCM data (default 22050)
+ * Run fpcalc on an audio file and return { fingerprint, duration }.
+ * fpcalc uses FFmpeg internally to decode the audio (supports webm, ogg, wav, mp3, etc.).
+ *
+ * @param {Buffer} audioBuffer — encoded audio data (webm, ogg, wav, etc.)
+ * @param {string} ext — file extension for the temp file (e.g. 'webm', 'ogg', 'wav')
+ * @param {object} logger
  */
-function pcmToWavBuffer(pcmBuffer, sampleRate = 22050) {
-  const numChannels = 1;
-  const bitsPerSample = 16;
-  const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
-  const blockAlign = numChannels * (bitsPerSample / 8);
-  const dataSize = pcmBuffer.length;
-  const headerSize = 44;
-
-  const buffer = Buffer.alloc(headerSize + dataSize);
-
-  // RIFF header
-  buffer.write('RIFF', 0);
-  buffer.writeUInt32LE(headerSize + dataSize - 8, 4);
-  buffer.write('WAVE', 8);
-
-  // fmt chunk
-  buffer.write('fmt ', 12);
-  buffer.writeUInt32LE(16, 16); // chunk size
-  buffer.writeUInt16LE(1, 20);  // PCM format
-  buffer.writeUInt16LE(numChannels, 22);
-  buffer.writeUInt32LE(sampleRate, 24);
-  buffer.writeUInt32LE(byteRate, 28);
-  buffer.writeUInt16LE(blockAlign, 32);
-  buffer.writeUInt16LE(bitsPerSample, 34);
-
-  // data chunk
-  buffer.write('data', 36);
-  buffer.writeUInt32LE(dataSize, 40);
-  pcmBuffer.copy(buffer, headerSize);
-
-  return buffer;
-}
-
-/**
- * Run fpcalc on a WAV buffer and return { fingerprint, duration }.
- */
-function generateFingerprint(wavBuffer, logger) {
+function generateFingerprint(audioBuffer, ext, logger) {
   return new Promise(async (resolve, reject) => {
-    const tmpPath = path.join(tmpdir(), `qc-fp-${crypto.randomBytes(4).toString('hex')}.wav`);
+    const tmpPath = path.join(tmpdir(), `qc-fp-${crypto.randomBytes(4).toString('hex')}.${ext}`);
     try {
-      await writeFile(tmpPath, wavBuffer);
+      await writeFile(tmpPath, audioBuffer);
     } catch (err) {
-      return reject(new Error(`Failed to write temp WAV: ${err.message}`));
+      return reject(new Error(`Failed to write temp audio file: ${err.message}`));
     }
 
-    execFile('fpcalc', ['-json', tmpPath], { timeout: 15000 }, async (err, stdout) => {
+    execFile('fpcalc', ['-json', tmpPath], { timeout: 30000 }, async (err, stdout, stderr) => {
       // Clean up temp file
       unlink(tmpPath).catch(() => {});
 
@@ -65,11 +32,15 @@ function generateFingerprint(wavBuffer, logger) {
         if (err.code === 'ENOENT') {
           return reject(new Error('fpcalc not found — install Chromaprint (https://acoustid.org/chromaprint)'));
         }
+        logger?.warn({ stderr, exitCode: err.code }, 'fpcalc stderr');
         return reject(new Error(`fpcalc error: ${err.message}`));
       }
 
       try {
         const result = JSON.parse(stdout);
+        if (!result.fingerprint || !result.duration) {
+          return reject(new Error('fpcalc returned empty fingerprint or duration'));
+        }
         resolve({ fingerprint: result.fingerprint, duration: Math.round(result.duration) });
       } catch (e) {
         reject(new Error(`Failed to parse fpcalc output: ${e.message}`));
@@ -93,7 +64,7 @@ async function lookupAcoustID(fingerprint, duration, logger) {
     meta: 'recordings',
   });
 
-  logger?.info({ apiKey: ACOUSTID_API_KEY ? `${ACOUSTID_API_KEY.slice(0, 4)}...` : '(empty)', duration, fpLength: fingerprint.length }, 'Sending AcoustID lookup');
+  logger?.info({ duration, fpLength: fingerprint.length }, 'Sending AcoustID lookup');
 
   const res = await fetch(ACOUSTID_URL, {
     method: 'POST',
@@ -146,18 +117,19 @@ async function lookupAcoustID(fingerprint, duration, logger) {
 }
 
 /**
- * Full pipeline: PCM buffer → fingerprint → AcoustID lookup → { artist, title }
- * @param {Buffer} pcmBuffer — raw 16-bit signed LE mono PCM
+ * Full pipeline: encoded audio → fpcalc fingerprint → AcoustID lookup → { artist, title }
+ *
+ * @param {Buffer} audioBuffer — encoded audio data (webm, ogg, wav, etc.)
  * @param {object} logger
- * @param {number} sampleRate — sample rate of the PCM data (default 22050)
+ * @param {string} format — file extension/format hint (default 'webm')
  */
-export async function identifyAudio(pcmBuffer, logger, sampleRate = 22050) {
-  // Convert PCM to WAV with the correct sample rate
-  const wavBuffer = pcmToWavBuffer(pcmBuffer, sampleRate);
+export async function identifyAudio(audioBuffer, logger, format = 'webm') {
+  // Sanitize the format to a safe file extension
+  const ext = /^[a-z0-9]{1,10}$/.test(format) ? format : 'webm';
 
-  // Generate fingerprint
-  const { fingerprint, duration } = await generateFingerprint(wavBuffer, logger);
-  logger?.info({ duration, fpLength: fingerprint.length, pcmBytes: pcmBuffer.length }, 'Fingerprint generated');
+  // Generate fingerprint — fpcalc decodes the audio via FFmpeg
+  const { fingerprint, duration } = await generateFingerprint(audioBuffer, ext, logger);
+  logger?.info({ duration, fpLength: fingerprint.length, audioBytes: audioBuffer.length, format: ext }, 'Fingerprint generated');
 
   // Look up on AcoustID
   const match = await lookupAcoustID(fingerprint, duration, logger);
