@@ -928,54 +928,6 @@ const Broadcaster = () => {
 
             </div>
 
-            {/* System audio — only when on air */}
-            <div className="flex items-center gap-4 mt-3 pt-3 border-t border-border">
-              <button
-                onClick={handleToggleSystemAudio}
-                disabled={!isOnAir}
-                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                  !isOnAir ? 'opacity-50 cursor-not-allowed' : ''
-                } ${
-                  systemAudioActive
-                    ? 'bg-primary/20 text-primary'
-                    : 'bg-secondary text-muted-foreground hover:text-foreground'
-                }`}
-                title={systemAudioActive ? 'Stop system audio' : 'Share system audio'}
-              >
-                {systemAudioActive ? (
-                  <MonitorOff className="h-3.5 w-3.5" />
-                ) : (
-                  <Monitor className="h-3.5 w-3.5" />
-                )}
-                {systemAudioActive ? 'Stop System' : 'System Audio'}
-              </button>
-
-              {systemAudioActive && (
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground shrink-0">
-                    Vol
-                  </span>
-                  <Slider
-                    value={[systemAudioVolume]}
-                    onValueChange={([v]) => handleSystemAudioVolumeChange(v)}
-                    min={0}
-                    max={100}
-                    step={1}
-                    className="flex-1"
-                  />
-                  <span className="text-xs font-mono text-muted-foreground tabular-nums w-8 text-right shrink-0">
-                    {systemAudioVolume}%
-                  </span>
-                </div>
-              )}
-
-              {!systemAudioActive && (
-                <span className="text-[10px] text-muted-foreground">
-                  Route desktop / app audio into your broadcast
-                </span>
-              )}
-            </div>
-
             {/* Input Source */}
             <div className="mt-3 pt-3 border-t border-border">
               <div className="flex flex-col gap-0.5 mb-2">
@@ -1003,6 +955,63 @@ const Broadcaster = () => {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* System Audio */}
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+              <div className="flex flex-col">
+                <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <Monitor className="h-3 w-3" />
+                  System Audio
+                </span>
+                <span className="text-[10px] text-muted-foreground">
+                  {systemAudioActive
+                    ? 'Desktop / app audio mixed into your broadcast'
+                    : 'Route desktop / app audio into your broadcast'}
+                </span>
+                {systemAudioActive && (
+                  <div className="flex items-center gap-3 flex-1 min-w-0 mt-2">
+                    <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground shrink-0">
+                      Vol
+                    </span>
+                    <Slider
+                      value={[systemAudioVolume]}
+                      onValueChange={([v]) => handleSystemAudioVolumeChange(v)}
+                      min={0}
+                      max={100}
+                      step={1}
+                      className="flex-1 max-w-[120px]"
+                    />
+                    <span className="text-xs font-mono text-muted-foreground tabular-nums w-8 text-right shrink-0">
+                      {systemAudioVolume}%
+                    </span>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={handleToggleSystemAudio}
+                disabled={!isOnAir}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all shrink-0 ${
+                  !isOnAir ? 'opacity-50 cursor-not-allowed' : ''
+                } ${
+                  systemAudioActive
+                    ? 'bg-primary/20 text-primary'
+                    : 'bg-secondary text-muted-foreground hover:text-foreground'
+                }`}
+                title={systemAudioActive ? 'Stop system audio' : 'Share system audio'}
+              >
+                {systemAudioActive ? (
+                  <>
+                    <MonitorOff className="h-3 w-3" />
+                    Stop System
+                  </>
+                ) : (
+                  <>
+                    <Monitor className="h-3 w-3" />
+                    Connect Audio
+                  </>
+                )}
+              </button>
             </div>
 
             {/* Audio Quality */}
