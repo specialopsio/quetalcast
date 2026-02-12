@@ -241,13 +241,16 @@ const Broadcaster = () => {
   }, [mixer, micEffects, webrtc, selectedIntegration, addLog]);
 
   const handleGoOnAir = useCallback(async () => {
-    const hasPreviousData = logs.length > 0 || trackList.length > 0;
-    if (hasPreviousData) {
+    // Only show dialog when there's actual broadcast content from a previous session,
+    // not startup logs (Connecting..., Found audio inputs, etc.)
+    const hasTrackList = trackList.length > 0;
+    const hasBroadcastEnded = logs.some((e) => e.message.includes('Off air'));
+    if (hasTrackList || hasBroadcastEnded) {
       setStartBroadcastDialogOpen(true);
       return;
     }
     await doGoOnAir();
-  }, [logs.length, trackList.length, doGoOnAir]);
+  }, [logs, trackList.length, doGoOnAir]);
 
   const handleStartBroadcastContinue = useCallback(async () => {
     setLogs([]);

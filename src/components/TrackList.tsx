@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, Disc3, ListMusic, Download, Clock, Gauge, AlertTriangle } from 'lucide-react';
+import { ChevronDown, Disc3, ListMusic, Download, Clock, Gauge, AlertTriangle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -284,11 +284,6 @@ export function TrackList({ tracks, topContent, alwaysShow, roomId }: TrackListP
       <Collapsible open={open} onOpenChange={setOpen} className="panel">
         <CollapsibleTrigger className="w-full flex items-center justify-between text-left hover:bg-secondary/30 rounded-md transition-colors -m-2 p-2">
           <div className="panel-header flex items-center gap-1.5 !mb-0">
-            {open ? (
-              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            )}
             <ListMusic className="h-3.5 w-3.5" />
             Track List
             <span className="text-muted-foreground/60 font-normal">({tracks.length})</span>
@@ -305,6 +300,7 @@ export function TrackList({ tracks, topContent, alwaysShow, roomId }: TrackListP
               </button>
             )}
           </div>
+          <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
         </CollapsibleTrigger>
         <CollapsibleContent>
           {topContent && (
