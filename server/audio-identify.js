@@ -92,19 +92,29 @@ async function lookupAcoustID(fingerprint, duration, logger) {
     meta: 'recordings',
   });
 
+  logger?.info({ apiKey: ACOUSTID_API_KEY ? `${ACOUSTID_API_KEY.slice(0, 4)}...` : '(empty)', duration, fpLength: fingerprint.length }, 'Sending AcoustID lookup');
+
   const res = await fetch(ACOUSTID_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: body.toString(),
   });
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    logger?.warn({ status: res.status, body: text }, 'AcoustID API error response');
+  // AcoustID sometimes returns 200 with an error in JSON body,
+  // and sometimes returns non-200. Handle both cases.
+  const text = await res.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    logger?.warn({ status: res.status, body: text.slice(0, 500) }, 'AcoustID non-JSON response');
     throw new Error(`AcoustID API error: ${res.status}`);
   }
 
-  const data = await res.json();
+  if (!res.ok || data.status === 'error') {
+    logger?.warn({ status: res.status, acoustidStatus: data.status, error: data.error?.message || text.slice(0, 500) }, 'AcoustID API error response');
+    throw new Error(`AcoustID API error: ${res.status} — ${data.error?.message || 'unknown'}`);
+  }
   if (data.status !== 'ok' || !data.results?.length) {
     return null;
   }
@@ -143,7 +153,7 @@ export async function identifyAudio(pcmBuffer, logger) {
 
   // Generate fingerprint
   const { fingerprint, duration } = await generateFingerprint(wavBuffer, logger);
-  logger?.debug({ duration, fpLength: fingerprint.length }, 'Fingerprint generated');
+  logger?.info({ duration, fpLength: fingerprint.length, pcmBytes: pcmBuffer.length }, 'Fingerprint generated');
 
   // Look up on AcoustID
   const match = await lookupAcoustID(fingerprint, duration, logger);
