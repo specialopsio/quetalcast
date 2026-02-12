@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Disc3, Search, X } from 'lucide-react';
+import { toast } from '@/components/ui/sonner';
 
 interface DeezerResult {
   id: number;
@@ -17,7 +18,7 @@ export interface NowPlayingMeta {
 interface NowPlayingInputProps {
   value: string;
   onChange: (meta: NowPlayingMeta) => void;
-  /** Called when the user commits a track (Enter, blur, or Deezer selection) */
+  /** Called when the user commits a track (Enter or Deezer selection) */
   onCommit: (meta: NowPlayingMeta) => void;
 }
 
@@ -63,8 +64,16 @@ export function NowPlayingInput({ value, onChange, onCommit }: NowPlayingInputPr
     if (trimmed && trimmed !== lastCommittedRef.current) {
       lastCommittedRef.current = trimmed;
       onCommit({ text: trimmed, cover });
+      // Clear input and notify
+      lastCommittedRef.current = '';
+      setQuery('');
+      coverRef.current = undefined;
+      onChange({ text: '' });
+      setResults([]);
+      setOpen(false);
+      toast('Added to track list', { duration: 2000 });
     }
-  }, [onCommit]);
+  }, [onCommit, onChange]);
 
   const handleInput = (val: string) => {
     setQuery(val);
@@ -80,12 +89,8 @@ export function NowPlayingInput({ value, onChange, onCommit }: NowPlayingInputPr
   const handleSelect = (result: DeezerResult) => {
     const text = `${result.artist} — ${result.title}`;
     const cover = result.cover || undefined;
-    coverRef.current = cover;
-    setQuery(text);
-    onChange({ text, cover });
+    // commitTrack clears the input, shows toast, and notifies parent
     commitTrack(text, cover);
-    setOpen(false);
-    setResults([]);
   };
 
   const handleClear = () => {
@@ -96,15 +101,6 @@ export function NowPlayingInput({ value, onChange, onCommit }: NowPlayingInputPr
     setResults([]);
     setOpen(false);
     inputRef.current?.focus();
-  };
-
-  const handleBlur = () => {
-    // Small delay to allow dropdown clicks to register before closing
-    setTimeout(() => {
-      if (query.trim()) {
-        commitTrack(query, coverRef.current);
-      }
-    }, 200);
   };
 
   // Close dropdown when clicking outside
@@ -148,7 +144,6 @@ export function NowPlayingInput({ value, onChange, onCommit }: NowPlayingInputPr
             value={query}
             onChange={(e) => handleInput(e.target.value)}
             onFocus={() => { if (results.length > 0) setOpen(true); }}
-            onBlur={handleBlur}
             onKeyDown={handleKeyDown}
             placeholder="Search artist or song…"
             maxLength={200}
