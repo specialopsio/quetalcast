@@ -24,7 +24,6 @@ import { SoundBoard } from '@/components/SoundBoard';
 import { NowPlayingInput, type NowPlayingMeta, type TrackMeta } from '@/components/NowPlayingInput';
 import { TrackList, type Track } from '@/components/TrackList';
 import { EffectsBoard } from '@/components/EffectsBoard';
-import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Footer } from '@/components/Footer';
 import { ChatPanel } from '@/components/ChatPanel';
 import { IntegrationsSheet } from '@/components/IntegrationsSheet';
@@ -70,7 +69,6 @@ const Broadcaster = () => {
   const [cueMode, setCueMode] = useState(false);
   const [limiterDb, setLimiterDb] = useState<0 | -3 | -6 | -12>(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [boardTab, setBoardTab] = useState('sounds');
   const [listenerCount, setListenerCount] = useState(0);
   const [nowPlaying, setNowPlaying] = useState('');
   const [nowPlayingCover, setNowPlayingCover] = useState<string | undefined>();
@@ -1089,52 +1087,40 @@ const Broadcaster = () => {
         />
 
         {/* Soundboard / Effects */}
-        <div className="panel">
-          <Tabs value={boardTab} onValueChange={setBoardTab}>
-            <div className="flex items-center justify-between mb-3">
-              <div className="panel-header flex items-center gap-1.5 !mb-0">
-                {boardTab === 'sounds' ? <Music className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
-                {boardTab === 'sounds' ? 'Soundboard' : 'Effects'}
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setBoardTab('sounds')}
-                  className={`p-1.5 rounded transition-colors ${
-                    boardTab === 'sounds'
-                      ? 'text-primary'
-                      : 'text-muted-foreground/40 hover:text-muted-foreground'
-                  }`}
-                >
-                  <Music className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => setBoardTab('effects')}
-                  className={`p-1.5 rounded transition-colors ${
-                    boardTab === 'effects'
-                      ? 'text-primary'
-                      : 'text-muted-foreground/40 hover:text-muted-foreground'
-                  }`}
-                >
-                  <Sparkles className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-            <TabsContent value="sounds">
-              <SoundBoard connectElement={mixer.connectElement} triggerRef={soundboardTriggerRef} />
-            </TabsContent>
-            <TabsContent value="effects">
-              <EffectsBoard
-                effects={micEffects.effects}
-                onToggle={micEffects.toggleEffect}
-                onUpdate={micEffects.updateEffect}
-                presets={presets}
-                onApplyPreset={handleApplyPreset}
-                onSavePresetOpen={() => setSavePresetOpen(true)}
-                onDeletePreset={handleDeletePreset}
-                onPresetsChange={() => setPresets(getPresets())}
-              />
-            </TabsContent>
-          </Tabs>
+        <div className="panel !p-0">
+          <Accordion type="multiple" defaultValue={['sounds', 'effects']} className="border-0">
+            <AccordionItem value="sounds" className="border-b border-border">
+              <AccordionTrigger className="px-4 py-3 hover:no-underline">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <Music className="h-3.5 w-3.5" />
+                  Soundboard
+                </span>
+              </AccordionTrigger>
+              <AccordionContent className="px-4 pb-4 pt-0">
+                <SoundBoard connectElement={mixer.connectElement} triggerRef={soundboardTriggerRef} />
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="effects" className="border-b-0">
+              <AccordionTrigger className="px-4 py-3 hover:no-underline">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Effects
+                </span>
+              </AccordionTrigger>
+              <AccordionContent className="px-4 pb-4 pt-0">
+                <EffectsBoard
+                  effects={micEffects.effects}
+                  onToggle={micEffects.toggleEffect}
+                  onUpdate={micEffects.updateEffect}
+                  presets={presets}
+                  onApplyPreset={handleApplyPreset}
+                  onSavePresetOpen={() => setSavePresetOpen(true)}
+                  onDeletePreset={handleDeletePreset}
+                  onPresetsChange={() => setPresets(getPresets())}
+                />
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </div>
 
         {/* Health + Log — show when on air or when we have previous broadcast data */}
