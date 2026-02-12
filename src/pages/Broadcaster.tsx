@@ -835,25 +835,6 @@ const Broadcaster = () => {
                   </span>
                 </AccordionTrigger>
                 <AccordionContent className="px-4 pb-4">
-            {/* Audio input — in mixer so level meter is at top */}
-            <div className="mb-4">
-              <Select
-                value={selectedDevice}
-                onValueChange={setSelectedDevice}
-                disabled={isOnAir}
-              >
-                <SelectTrigger className="w-full bg-input border-border font-mono text-sm">
-                  <SelectValue placeholder="Select audio device…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {devices.map((d) => (
-                    <SelectItem key={d.deviceId} value={d.deviceId} className="font-mono text-sm">
-                      {d.label || `Device ${d.deviceId.slice(0, 8)}`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
             <div className="flex items-center gap-4">
               {/* Mic volume */}
               <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -987,6 +968,35 @@ const Broadcaster = () => {
                   Route desktop / app audio into your broadcast
                 </span>
               )}
+            </div>
+
+            {/* Input Source */}
+            <div className="mt-3 pt-3 border-t border-border">
+              <div className="flex flex-col gap-0.5 mb-2">
+                <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <Mic className="h-3 w-3" />
+                  Input Source
+                </span>
+                <span className="text-[10px] text-muted-foreground">
+                  Microphone or audio interface for your broadcast
+                </span>
+              </div>
+              <Select
+                value={selectedDevice}
+                onValueChange={setSelectedDevice}
+                disabled={isOnAir}
+              >
+                <SelectTrigger className="w-full bg-input border-border font-mono text-sm">
+                  <SelectValue placeholder="Select audio device…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {devices.map((d) => (
+                    <SelectItem key={d.deviceId} value={d.deviceId} className="font-mono text-sm">
+                      {d.label || `Device ${d.deviceId.slice(0, 8)}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Audio Quality */}
