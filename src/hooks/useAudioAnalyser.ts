@@ -110,12 +110,17 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
 
     const source = ctx.createMediaStreamSource(stream);
 
-    // Mono sources (mobile mic, some interfaces) only have channel 0. Duplicate ch0 to
-    // both merger inputs so both meters show activity. Avoid channelCount check —
-    // it can be unreliable on iOS and connecting to non-existent ch1 may throw.
+    // Mono sources (mobile mic, some interfaces) only have channel 0. Use ChannelMerger
+    // to get proper L/R: stereo when available, duplicate ch0 to both when mono.
     const merger = ctx.createChannelMerger(2);
     source.connect(merger, 0, 0);
-    source.connect(merger, 0, 1);
+    try {
+      // Try stereo — connect ch1 to merger input 1. Throws on iOS if source is mono.
+      source.connect(merger, 1, 1);
+    } catch {
+      // Fallback: duplicate ch0 to right so both meters show activity
+      source.connect(merger, 0, 1);
+    }
 
     const splitter = ctx.createChannelSplitter(2);
 
