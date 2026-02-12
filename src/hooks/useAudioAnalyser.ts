@@ -110,13 +110,15 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
 
     const source = ctx.createMediaStreamSource(stream);
 
-    // Force stereo before splitting — ChannelSplitter uses 'discrete'
-    // interpretation so it won't upmix mono. This GainNode upmixes mono
-    // sources to both L and R using 'speakers' interpretation.
-    const stereoUpMix = ctx.createGain();
-    stereoUpMix.channelCount = 2;
-    stereoUpMix.channelCountMode = 'explicit';
-    stereoUpMix.channelInterpretation = 'speakers';
+    // Mono sources (mobile mic, some interfaces) only have channel 0. Explicitly
+    // duplicate to both L and R using ChannelMerger so both meters show activity.
+    const merger = ctx.createChannelMerger(2);
+    source.connect(merger, 0, 0);
+    if (source.channelCount >= 2) {
+      source.connect(merger, 1, 1);
+    } else {
+      source.connect(merger, 0, 1);
+    }
 
     const splitter = ctx.createChannelSplitter(2);
 
@@ -128,8 +130,7 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
     rightAnalyser.fftSize = 2048;
     rightAnalyser.smoothingTimeConstant = 0.3;
 
-    source.connect(stereoUpMix);
-    stereoUpMix.connect(splitter);
+    merger.connect(splitter);
     splitter.connect(leftAnalyser, 0);
     splitter.connect(rightAnalyser, 1);
 
@@ -142,7 +143,7 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
     return () => {
       cancelAnimationFrame(rafRef.current);
       source.disconnect();
-      stereoUpMix.disconnect();
+      merger.disconnect();
       splitter.disconnect();
       leftAnalyser.disconnect();
       rightAnalyser.disconnect();

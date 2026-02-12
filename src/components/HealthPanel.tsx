@@ -10,11 +10,12 @@ interface HealthPanelProps {
 }
 
 function StatItem({ label, value, unit, warn }: { label: string; value: string | number; unit?: string; warn?: boolean }) {
+  const hasData = value !== '—';
   return (
     <div className="flex flex-col items-center">
       <span className={`stat-value ${warn ? 'text-destructive' : ''}`}>
         {value}
-        {unit && <span className="text-xs text-muted-foreground ml-0.5">{unit}</span>}
+        {unit && hasData && <span className="text-xs text-muted-foreground ml-0.5">{unit}</span>}
       </span>
       <span className="stat-label">{label}</span>
     </div>

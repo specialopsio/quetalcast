@@ -861,10 +861,10 @@ const Broadcaster = () => {
                   </span>
                 </AccordionTrigger>
                 <AccordionContent className="px-4 pb-4">
-            <div className="flex items-center gap-4">
-              {/* Mic volume */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+              {/* Mic volume — full width on mobile */}
               <div className="flex items-center gap-3 flex-1 min-w-0">
-                <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground shrink-0">
+                <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground shrink-0 w-8">
                   Mic
                 </span>
                 <Slider
@@ -873,79 +873,74 @@ const Broadcaster = () => {
                   min={0}
                   max={100}
                   step={1}
-                  className="flex-1"
+                  className="flex-1 min-w-0"
                 />
-                <span className="text-xs font-mono text-muted-foreground tabular-nums w-8 text-right shrink-0">
+                <span className="text-xs font-mono text-muted-foreground tabular-nums w-10 text-right shrink-0">
                   {micMuted ? '—' : `${micVolume}%`}
                 </span>
               </div>
 
-              {/* Mute mic — only when on air */}
-              <button
-                onClick={handleToggleMute}
-                disabled={!isOnAir}
-                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                  !isOnAir ? 'opacity-50 cursor-not-allowed' : ''
-                } ${
-                  micMuted
-                    ? 'bg-destructive/20 text-destructive'
-                    : 'bg-secondary text-muted-foreground hover:text-foreground'
-                }`}
-                title={micMuted ? 'Unmute mic' : 'Mute mic'}
-              >
-                <MicOff className="h-3.5 w-3.5" />
-                Mute
-              </button>
-
-              {/* Listen — only when on air */}
-              <button
-                onClick={handleToggleListen}
-                disabled={!isOnAir}
-                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                  !isOnAir ? 'opacity-50 cursor-not-allowed' : ''
-                } ${
-                  listening
-                    ? 'bg-primary/20 text-primary'
-                    : 'bg-secondary text-muted-foreground hover:text-foreground'
-                }`}
-                title={listening ? 'Stop listening' : 'Listen to broadcast'}
-              >
-                <Headphones className="h-3.5 w-3.5" />
-                Listen
-              </button>
-
-              {/* Cue — only when on air */}
-              <button
-                onClick={handleToggleCue}
-                disabled={!isOnAir}
-                className={`shrink-0 px-3 py-1.5 rounded-md text-xs font-mono font-bold uppercase tracking-wider transition-all ${
-                  !isOnAir ? 'opacity-50 cursor-not-allowed' : ''
-                } ${
-                  cueMode
-                    ? 'bg-accent/20 text-accent'
-                    : 'bg-secondary text-muted-foreground hover:text-foreground'
-                }`}
-                title={cueMode ? 'Cue mode on — sounds are local only' : 'Enable cue mode'}
-              >
-                CUE
-              </button>
-
-              {/* Limiter */}
-              <div className="shrink-0 flex items-center gap-1.5">
-                <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Limit</span>
-                <Select value={String(limiterDb)} onValueChange={handleLimiterChange}>
-                  <SelectTrigger className="w-[92px] h-7 bg-secondary border-border text-xs font-mono">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="0" className="text-xs font-mono">0 dB</SelectItem>
-                    <SelectItem value="-3" className="text-xs font-mono">-3 dB</SelectItem>
-                    <SelectItem value="-6" className="text-xs font-mono">-6 dB</SelectItem>
-                    <SelectItem value="-12" className="text-xs font-mono">-12 dB</SelectItem>
-                  </SelectContent>
-                </Select>
+              {/* Mute, Listen, CUE, Limit — wrap on mobile */}
+              <div className="flex flex-wrap gap-2 sm:shrink-0">
+                <button
+                  onClick={handleToggleMute}
+                  disabled={!isOnAir}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                    !isOnAir ? 'opacity-50 cursor-not-allowed' : ''
+                  } ${
+                    micMuted
+                      ? 'bg-destructive/20 text-destructive'
+                      : 'bg-secondary text-muted-foreground hover:text-foreground'
+                  }`}
+                  title={micMuted ? 'Unmute mic' : 'Mute mic'}
+                >
+                  <MicOff className="h-3.5 w-3.5" />
+                  Mute
+                </button>
+                <button
+                  onClick={handleToggleListen}
+                  disabled={!isOnAir}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                    !isOnAir ? 'opacity-50 cursor-not-allowed' : ''
+                  } ${
+                    listening
+                      ? 'bg-primary/20 text-primary'
+                      : 'bg-secondary text-muted-foreground hover:text-foreground'
+                  }`}
+                  title={listening ? 'Stop listening' : 'Listen to broadcast'}
+                >
+                  <Headphones className="h-3.5 w-3.5" />
+                  Listen
+                </button>
+                <button
+                  onClick={handleToggleCue}
+                  disabled={!isOnAir}
+                  className={`px-3 py-1.5 rounded-md text-xs font-mono font-bold uppercase tracking-wider transition-all ${
+                    !isOnAir ? 'opacity-50 cursor-not-allowed' : ''
+                  } ${
+                    cueMode
+                      ? 'bg-accent/20 text-accent'
+                      : 'bg-secondary text-muted-foreground hover:text-foreground'
+                  }`}
+                  title={cueMode ? 'Cue mode on — sounds are local only' : 'Enable cue mode'}
+                >
+                  CUE
+                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Limit</span>
+                  <Select value={String(limiterDb)} onValueChange={handleLimiterChange}>
+                    <SelectTrigger className="w-[92px] h-7 bg-secondary border-border text-xs font-mono">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0" className="text-xs font-mono">0 dB</SelectItem>
+                      <SelectItem value="-3" className="text-xs font-mono">-3 dB</SelectItem>
+                      <SelectItem value="-6" className="text-xs font-mono">-6 dB</SelectItem>
+                      <SelectItem value="-12" className="text-xs font-mono">-12 dB</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-
             </div>
 
             {/* Input Source */}
@@ -978,8 +973,8 @@ const Broadcaster = () => {
             </div>
 
             {/* System Audio */}
-            <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
-              <div className="flex flex-col">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-3 pt-3 border-t border-border">
+              <div className="flex flex-col min-w-0">
                 <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                   <Monitor className="h-3 w-3" />
                   System Audio
@@ -1000,9 +995,9 @@ const Broadcaster = () => {
                       min={0}
                       max={100}
                       step={1}
-                      className="flex-1 max-w-[120px]"
+                      className="flex-1 max-w-[120px] sm:max-w-none"
                     />
-                    <span className="text-xs font-mono text-muted-foreground tabular-nums w-8 text-right shrink-0">
+                    <span className="text-xs font-mono text-muted-foreground tabular-nums w-10 text-right shrink-0">
                       {systemAudioVolume}%
                     </span>
                   </div>
@@ -1011,7 +1006,7 @@ const Broadcaster = () => {
               <button
                 onClick={handleToggleSystemAudio}
                 disabled={!isOnAir && !previewStream}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all shrink-0 ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all shrink-0 self-start sm:self-center ${
                   (!isOnAir && !previewStream) ? 'opacity-50 cursor-not-allowed' : ''
                 } ${
                   systemAudioActive
@@ -1035,8 +1030,8 @@ const Broadcaster = () => {
             </div>
 
             {/* Audio Quality */}
-            <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
-              <div className="flex flex-col">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mt-3 pt-3 border-t border-border">
+              <div className="flex flex-col min-w-0">
                 <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                   <Zap className="h-3 w-3" />
                   Audio Quality
@@ -1055,7 +1050,7 @@ const Broadcaster = () => {
                 </span>
               </div>
               <Select value={qualityMode} onValueChange={handleQualityChange}>
-                <SelectTrigger className="w-[92px] h-7 bg-secondary border-border text-xs font-mono shrink-0">
+                <SelectTrigger className="w-[92px] h-7 bg-secondary border-border text-xs font-mono shrink-0 self-start sm:self-center">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1067,8 +1062,8 @@ const Broadcaster = () => {
             </div>
 
             {/* Recording */}
-            <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
-              <div className="flex flex-col">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mt-3 pt-3 border-t border-border">
+              <div className="flex flex-col min-w-0">
                 <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                   <Circle className={`h-3 w-3 ${recorder.recording ? 'text-red-500 fill-red-500 animate-pulse' : ''}`} />
                   Record
@@ -1082,7 +1077,7 @@ const Broadcaster = () => {
               <button
                 onClick={handleToggleRecording}
                 disabled={!recorder.recording && !(isOnAir ? mixer.mixedStream : previewStream)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all shrink-0 self-start sm:self-center ${
                   (!recorder.recording && !(isOnAir ? mixer.mixedStream : previewStream)) ? 'opacity-50 cursor-not-allowed' : ''
                 } ${
                   recorder.recording
