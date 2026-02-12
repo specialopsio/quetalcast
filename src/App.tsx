@@ -8,6 +8,7 @@ import Login from "./pages/Login";
 import Broadcaster from "./pages/Broadcaster";
 import Receiver from "./pages/Receiver";
 import Admin from "./pages/Admin";
+import Docs from "./pages/Docs";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -25,6 +26,7 @@ const App = () => (
           <Route path="/receive" element={<Receiver />} />
           <Route path="/receive/:roomId" element={<Receiver />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/docs" element={<Docs />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

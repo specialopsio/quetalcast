@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react';
-import { MessageCircle } from 'lucide-react';
+import { MessageCircle, Download } from 'lucide-react';
 
 export interface LogEntry {
   time: string;
@@ -10,6 +10,32 @@ export interface LogEntry {
 interface EventLogProps {
   entries: LogEntry[];
   maxEntries?: number;
+  roomId?: string;
+}
+
+function escapeCsvField(field: string): string {
+  if (field.includes(',') || field.includes('"') || field.includes('\n')) {
+    return `"${field.replace(/"/g, '""')}"`;
+  }
+  return field;
+}
+
+function downloadEventLogCsv(entries: LogEntry[], roomId?: string) {
+  const header = roomId ? 'Room ID,Time,Level,Message' : 'Time,Level,Message';
+  const lines = entries.map((e) => {
+    const row = [escapeCsvField(e.time), escapeCsvField(e.level), escapeCsvField(e.message)];
+    return roomId ? [escapeCsvField(roomId), ...row].join(',') : row.join(',');
+  });
+  const csv = [header, ...lines].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const date = new Date().toISOString().slice(0, 10);
+  const shortHash = Math.random().toString(36).slice(2, 8);
+  a.download = `quetalcast-eventlog-${date}-${shortHash}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 const levelColors: Record<string, string> = {
@@ -19,7 +45,7 @@ const levelColors: Record<string, string> = {
   chat: 'text-blue-400',
 };
 
-export function EventLog({ entries, maxEntries = 30 }: EventLogProps) {
+export function EventLog({ entries, maxEntries = 30, roomId }: EventLogProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const visible = entries.slice(-maxEntries);
 
@@ -31,7 +57,18 @@ export function EventLog({ entries, maxEntries = 30 }: EventLogProps) {
 
   return (
     <div className="panel flex flex-col">
-      <div className="panel-header">Event Log</div>
+      <div className="flex items-center justify-between">
+        <div className="panel-header !mb-0">Event Log</div>
+        {entries.length > 0 && (
+          <button
+            onClick={() => downloadEventLogCsv(entries, roomId)}
+            className="p-0.5 text-muted-foreground hover:text-foreground transition-colors rounded"
+            title="Download event log as CSV"
+          >
+            <Download className="h-3 w-3" />
+          </button>
+        )}
+      </div>
       <div
         ref={scrollRef}
         className="event-log flex-1 overflow-y-auto max-h-48 scrollbar-thin"

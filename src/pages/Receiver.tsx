@@ -292,8 +292,14 @@ const Receiver = () => {
           </div>
         )}
 
-        {/* Track List */}
-        <TrackList tracks={trackList} />
+        {/* Track List — always show when joined, with empty state */}
+        {joined && (
+          <TrackList
+            tracks={trackList}
+            alwaysShow
+            roomId={roomInput || paramRoomId || undefined}
+          />
+        )}
       </div>
 
       <Footer />

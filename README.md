@@ -16,7 +16,7 @@ Real-time audio broadcasting application built with WebRTC, React, and Node.js. 
 - **Live chat** — Bidirectional chat via floating action button (full-screen on mobile, floating panel on desktop). Users provide a display name before chatting. Chat history is sent to new receivers on join. Join/leave system messages appear when someone joins or leaves the chat (with their name). Unread badge on FAB when chat is closed; browser tab title flashes when new messages arrive until viewed. Rate-limited to 1 message per second, max 280 characters
 - **Listener count** — Real-time count of connected listeners displayed in the Stats panel during broadcast
 - **Now playing** — Broadcaster sets stream metadata with Deezer-powered autocomplete (artist + song search with album art). Visible to all listeners in real time. Metadata is also forwarded to external integration streams (Icecast/Shoutcast)
-- **Track list** — Chronological history of every track played during the broadcast. Visible to both broadcaster and receivers, with the current track highlighted. New receivers get the full history on join
+- **Track list** — Chronological history of every track played during the broadcast. Visible to both broadcaster and receivers, with the current track highlighted. New receivers get the full history on join. CSV download includes room ID. Collapsible panel with Now Playing search at top for broadcasters
 <!-- Auto-identify (temporarily disabled): Automatic song identification using AcoustID/Chromaprint. Ear icon toggle during broadcast. Code remains in useAutoIdentify.ts and audio-identify.js for future re-enable. -->
 - **Local recording** — Record your broadcast as a 320 kbps stereo MP3, auto-downloaded when you stop. Uses AudioWorklet + Web Worker for energy-efficient encoding
 - **Keyboard shortcuts** — Space (mute), R (record), L (listen), C (cue), 1–0 (soundboard pads), ? (help). Active while on air, disabled when typing in inputs
@@ -24,6 +24,8 @@ Real-time audio broadcasting application built with WebRTC, React, and Node.js. 
 - **Multi-receiver** — Up to 4 concurrent listeners per room
 - **TURN relay** — Dynamic credential fetching via Metered.ca (or static config)
 - **Auto-reconnect** — Receivers automatically reconnect on connection drops with exponential backoff (up to 5 attempts). Manual retry available after max attempts
+- **Room persistence** — When a broadcast ends, the room ID in the broadcaster status bar is hidden and a new room is created when starting a new broadcast. The previous room remains visible on the receiver page for 24 hours post-broadcast to show events, track list, and chat. CSV exports (event log and track list) include the room ID for reference
+- **Post-broadcast flow** — Logs, track list, and chat are not purged until a new broadcast is started. When starting a new broadcast with existing data, a dialog offers to download logs and track list as a ZIP, copy the room link (24h access), or continue to start fresh
 
 ## Architecture
 
@@ -159,7 +161,7 @@ fly deploy
 │   │   ├── LevelMeter.tsx      # Stereo VU meter with dBFS scale
 │   │   ├── StatusBar.tsx       # Room ID, timer, connection status
 │   │   ├── HealthPanel.tsx     # RTT, packet loss, jitter display
-│   │   ├── EventLog.tsx        # Connection event timeline with chat
+│   │   ├── EventLog.tsx        # Connection event timeline with chat + CSV export
 │   │   ├── Footer.tsx          # Credits and help modal
 │   │   └── ui/                 # shadcn/ui primitives
 │   ├── hooks/
@@ -177,7 +179,8 @@ fly deploy
 │   │   ├── debug.ts            # VITE_DEBUG-gated console logging
 │   │   ├── integrations.ts     # Integration platform registry + localStorage config
 │   │   ├── presets.ts          # Audio preset definitions + localStorage management
-│   │   └── webrtc-stats.ts     # Stats parsing utilities
+│   │   ├── webrtc-stats.ts     # Stats parsing utilities
+│   │   └── zip-export.ts       # ZIP export of event log + track list
 │   └── pages/
 │       ├── Login.tsx           # Broadcaster authentication
 │       ├── Broadcaster.tsx     # Main broadcast control page

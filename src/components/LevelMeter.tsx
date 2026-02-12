@@ -73,16 +73,12 @@ export function LevelMeter({ left, right, label = 'Level', segments = 48 }: Leve
       <div className="flex items-center justify-between mb-2">
         <span className="panel-header mb-0">{label}</span>
         <div className="flex items-center gap-3">
-          {maxLevel > MIN_DB && (
-            <span className="text-[10px] font-mono text-muted-foreground tabular-nums">
-              {maxLevel.toFixed(1)} dB
-            </span>
-          )}
-          {maxPeak > MIN_DB && (
-            <span className="text-[10px] font-mono text-muted-foreground/60 tabular-nums">
-              pk {maxPeak.toFixed(1)}
-            </span>
-          )}
+          <span className="text-[10px] font-mono text-muted-foreground tabular-nums min-w-[3.5rem]">
+            {maxLevel > MIN_DB ? `${maxLevel.toFixed(1)} dB` : '—'}
+          </span>
+          <span className="text-[10px] font-mono text-muted-foreground/60 tabular-nums min-w-[3.5rem]">
+            pk {maxPeak > MIN_DB ? maxPeak.toFixed(1) : '—'}
+          </span>
           {clipping && (
             <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-destructive animate-pulse">
               CLIP

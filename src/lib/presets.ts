@@ -1,14 +1,10 @@
 import { type EffectName, type EffectState, DEFAULT_PARAMS } from '@/hooks/useMicEffects';
-import { type AudioQuality } from '@/hooks/useWebRTC';
 
 // ── Types ──────────────────────────────────────────────────────────
 
 export interface Preset {
   name: string;
   builtIn: boolean;
-  micVolume: number;       // 0–100
-  limiterDb: 0 | -3 | -6 | -12;
-  qualityMode: AudioQuality;
   effects: Record<EffectName, EffectState>;
 }
 
@@ -30,9 +26,6 @@ const BUILT_IN_PRESETS: Preset[] = [
   {
     name: 'Podcast Voice',
     builtIn: true,
-    micVolume: 100,
-    limiterDb: -3,
-    qualityMode: 'high',
     effects: {
       enhance: on('enhance', { gate: 40, cleanup: 50, clarity: 30 }),
       tone: off('tone'),
@@ -45,9 +38,6 @@ const BUILT_IN_PRESETS: Preset[] = [
   {
     name: 'DJ Mode',
     builtIn: true,
-    micVolume: 100,
-    limiterDb: -6,
-    qualityMode: 'high',
     effects: {
       enhance: off('enhance'),
       tone: on('tone', { bass: 30, mids: 10, treble: 20 }),
@@ -60,9 +50,6 @@ const BUILT_IN_PRESETS: Preset[] = [
   {
     name: 'Lo-Fi',
     builtIn: true,
-    micVolume: 80,
-    limiterDb: 0,
-    qualityMode: 'low',
     effects: {
       enhance: off('enhance'),
       tone: on('tone', { bass: 40, mids: -20, treble: -30 }),
@@ -76,11 +63,17 @@ const BUILT_IN_PRESETS: Preset[] = [
 
 // ── Functions ──────────────────────────────────────────────────────
 
+/** Migrate old presets that have mixer fields — strip them to effects-only */
+function migratePreset(p: Preset & { micVolume?: number; limiterDb?: number; qualityMode?: string }): Preset {
+  return { name: p.name, builtIn: p.builtIn, effects: p.effects };
+}
+
 function loadUserPresets(): Preset[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    return JSON.parse(raw) as Preset[];
+    const parsed = JSON.parse(raw) as (Preset & { micVolume?: number; limiterDb?: number; qualityMode?: string })[];
+    return parsed.map(migratePreset);
   } catch {
     return [];
   }
@@ -95,7 +88,7 @@ export function getPresets(): Preset[] {
   return [...BUILT_IN_PRESETS, ...loadUserPresets()];
 }
 
-/** Save a new user preset (or overwrite existing by name) */
+/** Save a new user preset (or overwrite existing by name) — effects only */
 export function savePreset(name: string, config: Omit<Preset, 'name' | 'builtIn'>): void {
   const userPresets = loadUserPresets().filter((p) => p.name !== name);
   userPresets.push({ ...config, name, builtIn: false });

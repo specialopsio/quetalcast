@@ -2,12 +2,24 @@ import crypto from 'crypto';
 import { createStatsLogger } from './logger.js';
 
 const MAX_RECEIVERS = 4;
+const ROOM_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export class RoomManager {
   constructor(logger) {
     this.rooms = new Map();
     this.logger = logger;
     this.statsLogger = createStatsLogger();
+    this.cleanupInterval = setInterval(() => this.cleanupExpiredRooms(), 15 * 60 * 1000); // every 15 min
+  }
+
+  cleanupExpiredRooms() {
+    const cutoff = new Date(Date.now() - ROOM_TTL_MS).toISOString();
+    for (const [id, room] of this.rooms) {
+      if (room.endedAt && room.endedAt < cutoff) {
+        this.rooms.delete(id);
+        this.logger.info({ roomId: id.slice(0, 8) }, 'Room expired (24h TTL)');
+      }
+    }
   }
 
   create() {
@@ -22,6 +34,7 @@ export class RoomManager {
       chatParticipants: new Map(), // participantId (receiverId or 'broadcaster') → { name }
       integrationInfo: null, // { type, credentials } — active integration connection
       createdAt: new Date().toISOString(),
+      endedAt: null, // set when broadcaster leaves; room kept for 24h
     });
     return roomId;
   }
@@ -64,14 +77,18 @@ export class RoomManager {
 
     if (role === 'broadcaster') {
       room.broadcaster = null;
+      room.endedAt = new Date().toISOString();
+      this.logger.info({ roomId: roomId.slice(0, 8) }, 'Broadcast ended — room kept for 24h');
     } else if (role === 'receiver' && receiverId) {
       room.receivers.delete(receiverId);
     }
 
-    // Clean up empty rooms
-    if (!room.broadcaster && room.receivers.size === 0) {
+    // Only delete room if it was never used (no track list, no chat) and empty
+    // Rooms with endedAt are kept for 24h via cleanupExpiredRooms
+    const hasContent = (room.trackList?.length || 0) > 0 || (room.chatHistory?.length || 0) > 0;
+    if (!room.broadcaster && room.receivers.size === 0 && !room.endedAt && !hasContent) {
       this.rooms.delete(roomId);
-      this.logger.info({ roomId: roomId.slice(0, 8) }, 'Room destroyed (empty)');
+      this.logger.info({ roomId: roomId.slice(0, 8) }, 'Room destroyed (empty, unused)');
     }
   }
 

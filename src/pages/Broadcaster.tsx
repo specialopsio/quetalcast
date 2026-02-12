@@ -8,7 +8,7 @@ import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
-import { Copy, Mic, MicOff, Radio, Headphones, Music, Sparkles, Zap, Plug2, Circle, Square, Keyboard, ListMusic, Trash2, Monitor, MonitorOff } from 'lucide-react';
+import { Copy, Mic, MicOff, Radio, Headphones, Music, Sparkles, Zap, Plug2, Circle, Square, Keyboard, Monitor, MonitorOff, Download } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
 import { Slider } from '@/components/ui/slider';
 import {
@@ -34,6 +34,7 @@ import { getPresets, savePreset, deletePreset, type Preset } from '@/lib/presets
 import { type EffectName, CHAIN_ORDER } from '@/hooks/useMicEffects';
 import { useRecorder } from '@/hooks/useRecorder';
 import { useKeyboardShortcuts, SHORTCUT_MAP } from '@/hooks/useKeyboardShortcuts';
+import { downloadBroadcastZip } from '@/lib/zip-export';
 import {
   Dialog,
   DialogContent,
@@ -92,6 +93,8 @@ const Broadcaster = () => {
   const [systemAudioVolume, setSystemAudioVolume] = useState(100);
   const [systemAudioInfoOpen, setSystemAudioInfoOpen] = useState(false);
   const systemAudioStreamRef = useRef<MediaStream | null>(null);
+
+  const [startBroadcastDialogOpen, setStartBroadcastDialogOpen] = useState(false);
 
   const addLog = useCallback((msg: string, level: LogEntry['level'] = 'info') => {
     setLogs((prev) => [...prev.slice(-100), createLogEntry(msg, level)]);
@@ -197,7 +200,7 @@ const Broadcaster = () => {
 
   const broadcastStartedRef = useRef(false);
 
-  const handleGoOnAir = async () => {
+  const doGoOnAir = useCallback(async () => {
     try {
       const constraints: MediaStreamConstraints = {
         audio: {
@@ -221,11 +224,9 @@ const Broadcaster = () => {
 
       addLog('Mic connected');
 
-      // Always create a room for signaling (chat, listener count, metadata)
-      if (!webrtc.roomId) {
-        webrtc.createRoom();
-        addLog('Setting up room…');
-      }
+      // Always create a new room for each broadcast
+      webrtc.createRoom();
+      addLog('Setting up room…');
       broadcastStartedRef.current = false;
 
       if (selectedIntegration) {
@@ -237,7 +238,23 @@ const Broadcaster = () => {
     } catch (e) {
       addLog('Couldn\'t start broadcast — check mic permissions', 'error');
     }
-  };
+  }, [mixer, micEffects, webrtc, selectedIntegration, addLog]);
+
+  const handleGoOnAir = useCallback(async () => {
+    const hasPreviousData = logs.length > 0 || trackList.length > 0;
+    if (hasPreviousData) {
+      setStartBroadcastDialogOpen(true);
+      return;
+    }
+    await doGoOnAir();
+  }, [logs.length, trackList.length, doGoOnAir]);
+
+  const handleStartBroadcastContinue = useCallback(async () => {
+    setLogs([]);
+    setTrackList([]);
+    setStartBroadcastDialogOpen(false);
+    await doGoOnAir();
+  }, [doGoOnAir]);
 
   // Start broadcast once room is ready and we have a mixed stream (native mode)
   useEffect(() => {
@@ -379,18 +396,12 @@ const Broadcaster = () => {
   };
 
   const handleApplyPreset = (preset: Preset) => {
-    handleMicVolumeChange(preset.micVolume);
-    handleLimiterChange(String(preset.limiterDb));
-    handleQualityChange(preset.qualityMode);
-    // Apply effects
     for (const effectName of CHAIN_ORDER) {
       const effectState = preset.effects[effectName];
       if (effectState) {
-        // Toggle to match preset state
         if (micEffects.effects[effectName].enabled !== effectState.enabled) {
           micEffects.toggleEffect(effectName);
         }
-        // Update params
         for (const [param, value] of Object.entries(effectState.params)) {
           micEffects.updateEffect(effectName, param, value);
         }
@@ -403,9 +414,6 @@ const Broadcaster = () => {
     const name = newPresetName.trim();
     if (!name) return;
     savePreset(name, {
-      micVolume,
-      limiterDb,
-      qualityMode,
       effects: { ...micEffects.effects } as Record<EffectName, { enabled: boolean; params: Record<string, number> }>,
     });
     setPresets(getPresets());
@@ -525,7 +533,7 @@ const Broadcaster = () => {
     onTriggerPad: (index: number) => soundboardTriggerRef.current?.(index),
   });
 
-  // Reset controls when going off air
+  // Reset controls when going off air (keep logs and trackList until new broadcast)
   useEffect(() => {
     if (!isOnAir) {
       setMicVolume(100);
@@ -537,7 +545,6 @@ const Broadcaster = () => {
       setListenerCount(0);
       setNowPlaying('');
       setNowPlayingCover(undefined);
-      setTrackList([]);
     }
   }, [isOnAir]);
 
@@ -573,7 +580,7 @@ const Broadcaster = () => {
     <div className="min-h-[100dvh] bg-background flex flex-col">
       <StatusBar
         status={selectedIntegration && isOnAir ? 'on-air' : webrtc.status}
-        roomId={webrtc.roomId}
+        roomId={isOnAir ? webrtc.roomId : null}
         integrationName={isOnAir && integrationInfo ? integrationInfo.name : undefined}
       />
 
@@ -849,56 +856,6 @@ const Broadcaster = () => {
               </Select>
             </div>
 
-            {/* Presets */}
-            <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
-              <div className="flex flex-col">
-                <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                  <ListMusic className="h-3 w-3" />
-                  Presets
-                </span>
-                <span className="text-[10px] text-muted-foreground">
-                  Save and recall mixer + effects profiles
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Select onValueChange={(val) => {
-                  if (val === '__save__') {
-                    setSavePresetOpen(true);
-                  } else {
-                    const preset = presets.find((p) => p.name === val);
-                    if (preset) handleApplyPreset(preset);
-                  }
-                }}>
-                  <SelectTrigger className="w-[140px] h-7 bg-secondary border-border text-xs font-mono shrink-0">
-                    <SelectValue placeholder="Load preset…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {presets.map((p) => (
-                      <SelectItem key={p.name} value={p.name} className="text-xs font-mono">
-                        <div className="flex items-center justify-between w-full gap-2">
-                          <span>{p.name}</span>
-                          {!p.builtIn && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeletePreset(p.name);
-                              }}
-                              className="text-muted-foreground/40 hover:text-destructive transition-colors"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </button>
-                          )}
-                        </div>
-                      </SelectItem>
-                    ))}
-                    <SelectItem value="__save__" className="text-xs font-mono text-primary">
-                      Save Current…
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
             {/* Recording */}
             <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
               <div className="flex flex-col">
@@ -934,20 +891,29 @@ const Broadcaster = () => {
               </button>
             </div>
 
-            {/* Now Playing — with Deezer autocomplete */}
-            <div className="mt-3 pt-3 border-t border-border">
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </div>
+        )}
+
+        {/* Track List — above soundboard, with Now Playing search; show when on air or has previous data */}
+        {(isOnAir || trackList.length > 0) && (
+          <TrackList
+            tracks={trackList}
+            alwaysShow
+            roomId={webrtc.roomId ?? undefined}
+            topContent={isOnAir ? (
               <NowPlayingInput
                 value={nowPlaying}
                 onChange={handleNowPlayingChange}
                 onCommit={(meta: TrackMeta) => {
                   signaling.send({ type: 'add-track', ...meta });
+                  addLog(`Added to track list: ${meta.text || meta.title || 'Unknown'}`, 'info');
                 }}
               />
-            </div>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
-          </div>
+            ) : undefined}
+          />
         )}
 
         {/* Soundboard / Effects */}
@@ -986,26 +952,31 @@ const Broadcaster = () => {
                 effects={micEffects.effects}
                 onToggle={micEffects.toggleEffect}
                 onUpdate={micEffects.updateEffect}
+                presets={presets}
+                onApplyPreset={handleApplyPreset}
+                onSavePresetOpen={() => setSavePresetOpen(true)}
+                onDeletePreset={handleDeletePreset}
+                onPresetsChange={() => setPresets(getPresets())}
               />
             </TabsContent>
           </Tabs>
         </div>
 
-        {/* Health + Log */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <HealthPanel
-            stats={webrtc.stats}
-            connectionState={webrtc.connectionState}
-            iceConnectionState={webrtc.iceConnectionState}
-            signalingState={webrtc.signalingState}
-            peerConnected={webrtc.peerConnected}
-            listenerCount={listenerCount}
-          />
-          <EventLog entries={logs} />
-        </div>
+        {/* Health + Log — show when on air or when we have previous broadcast data */}
+        {(isOnAir || logs.length > 0 || trackList.length > 0) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <HealthPanel
+              stats={webrtc.stats}
+              connectionState={webrtc.connectionState}
+              iceConnectionState={webrtc.iceConnectionState}
+              signalingState={webrtc.signalingState}
+              peerConnected={webrtc.peerConnected}
+              listenerCount={listenerCount}
+            />
+            <EventLog entries={logs} roomId={webrtc.roomId ?? undefined} />
+          </div>
+        )}
 
-        {/* Track List */}
-        <TrackList tracks={trackList} />
       </div>
 
       <Footer />
@@ -1072,13 +1043,72 @@ const Broadcaster = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Start new broadcast — download/copy previous data before starting */}
+      <Dialog open={startBroadcastDialogOpen} onOpenChange={setStartBroadcastDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Start New Broadcast</DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground leading-relaxed">
+              You have logs and/or track list from your previous broadcast. Would you like to download them before starting a new one?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 mt-2">
+            <p className="text-xs text-muted-foreground">
+              Logs and track listings remain available in the room link for 24 hours post broadcast. Listeners can still view them and chat.
+            </p>
+
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={async () => {
+                  await downloadBroadcastZip(logs, trackList, webrtc.roomId ?? undefined);
+                  toast('Download started');
+                }}
+                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-md bg-primary text-primary-foreground font-semibold hover:opacity-90 transition-opacity"
+              >
+                <Download className="h-4 w-4" />
+                Download Logs & Track List (ZIP)
+              </button>
+              <button
+                onClick={() => {
+                  if (webrtc.roomId) {
+                    const link = `${window.location.origin}/receive/${webrtc.roomId}`;
+                    navigator.clipboard.writeText(link);
+                    toast('Room link copied');
+                  }
+                }}
+                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-md bg-secondary text-foreground font-medium hover:bg-secondary/80 transition-colors"
+              >
+                <Copy className="h-4 w-4" />
+                Copy Room Link (24h access)
+              </button>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-border">
+            <button
+              onClick={() => setStartBroadcastDialogOpen(false)}
+              className="px-4 py-2 rounded-md text-sm font-medium bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleStartBroadcastContinue}
+              className="px-6 py-2 rounded-md text-sm font-semibold bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
+            >
+              Continue — Start New Broadcast
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Save preset dialog */}
       <Dialog open={savePresetOpen} onOpenChange={setSavePresetOpen}>
         <DialogContent className="sm:max-w-xs">
           <DialogHeader>
             <DialogTitle>Save Preset</DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              Save current mixer settings and effects as a preset.
+              Save current effects as a preset.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 pt-2">

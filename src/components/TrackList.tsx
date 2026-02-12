@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Disc3, ListMusic, Download, Clock, Gauge, AlertTriangle } from 'lucide-react';
+import { ChevronDown, ChevronRight, Disc3, ListMusic, Download, Clock, Gauge, AlertTriangle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 export interface Track {
   title: string;           // display string "Artist — Song"
@@ -29,6 +30,12 @@ export interface Track {
 
 interface TrackListProps {
   tracks: Track[];
+  /** Optional slot rendered above the list (e.g. Now Playing search for broadcasters) */
+  topContent?: React.ReactNode;
+  /** Whether to show the collapsible even when empty (for empty state) */
+  alwaysShow?: boolean;
+  /** Room ID to include in CSV export */
+  roomId?: string;
 }
 
 function formatDuration(sec?: number): string {
@@ -69,12 +76,13 @@ function escapeCsvField(field: string): string {
   return field;
 }
 
-function downloadCsv(tracks: Track[]) {
+function downloadCsv(tracks: Track[], roomId?: string) {
   const rows = [...tracks].reverse();
-  const header = [
+  const baseHeader = [
     'Time Played', 'Artist', 'Title', 'Album', 'Duration', 'Release Date',
     'ISRC', 'BPM', 'Label', 'Genres', 'Contributors', 'Track #', 'Disc #', 'Explicit',
-  ].join(',');
+  ];
+  const header = roomId ? ['Room ID', ...baseHeader].join(',') : baseHeader.join(',');
 
   const lines = rows.map((t) => {
     const dur = t.duration ? formatDuration(t.duration) : '';
@@ -83,7 +91,7 @@ function downloadCsv(tracks: Track[]) {
       .join('; ');
     const genres = (t.genres || []).join('; ');
 
-    return [
+    const baseRow = [
       escapeCsvField(formatTime(t.time)),
       escapeCsvField(t.artist || ''),
       escapeCsvField(t.trackTitle || t.title),
@@ -98,7 +106,8 @@ function downloadCsv(tracks: Track[]) {
       escapeCsvField(t.trackPosition ? String(t.trackPosition) : ''),
       escapeCsvField(t.diskNumber ? String(t.diskNumber) : ''),
       escapeCsvField(t.explicitLyrics ? 'Yes' : ''),
-    ].join(',');
+    ];
+    return roomId ? [escapeCsvField(roomId), ...baseRow].join(',') : baseRow.join(',');
   });
 
   const csv = [header, ...lines].join('\n');
@@ -107,7 +116,8 @@ function downloadCsv(tracks: Track[]) {
   const a = document.createElement('a');
   a.href = url;
   const date = new Date().toISOString().slice(0, 10);
-  a.download = `quetalcast-tracklist-${date}.csv`;
+  const shortHash = Math.random().toString(36).slice(2, 8);
+  a.download = `quetalcast-tracklist-${date}-${shortHash}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -262,30 +272,52 @@ function TrackDetailModal({ track, open, onOpenChange }: { track: Track | null; 
 }
 
 /* ── Main TrackList Component ── */
-export function TrackList({ tracks }: TrackListProps) {
+export function TrackList({ tracks, topContent, alwaysShow, roomId }: TrackListProps) {
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
+  const [open, setOpen] = useState(true);
 
-  if (tracks.length === 0) return null;
+  const showPanel = alwaysShow || tracks.length > 0 || topContent;
+  if (!showPanel) return null;
 
   return (
     <>
-      <div className="panel">
-        <div className="flex items-center justify-between">
-          <div className="panel-header flex items-center gap-1.5">
+      <Collapsible open={open} onOpenChange={setOpen} className="panel">
+        <CollapsibleTrigger className="w-full flex items-center justify-between text-left hover:bg-secondary/30 rounded-md transition-colors -m-2 p-2">
+          <div className="panel-header flex items-center gap-1.5 !mb-0">
+            {open ? (
+              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            )}
             <ListMusic className="h-3.5 w-3.5" />
             Track List
             <span className="text-muted-foreground/60 font-normal">({tracks.length})</span>
+            {tracks.length > 0 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  downloadCsv(tracks, roomId);
+                }}
+                className="p-0.5 ml-1 text-muted-foreground hover:text-foreground transition-colors rounded"
+                title="Download track list as CSV"
+              >
+                <Download className="h-3 w-3" />
+              </button>
+            )}
           </div>
-          <button
-            onClick={() => downloadCsv(tracks)}
-            className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-secondary"
-            title="Download track list as CSV"
-          >
-            <Download className="h-3 w-3" />
-            CSV
-          </button>
-        </div>
-
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          {topContent && (
+            <div className="pt-3 pb-2 border-b border-border">
+              {topContent}
+            </div>
+          )}
+          {tracks.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground text-xs">
+              No tracks have been added yet
+            </div>
+          ) : (
+            <>
         {/* Column headers */}
         <div className="flex items-center gap-2.5 px-2 py-1 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider border-b border-border">
           <span className="w-8 shrink-0" />
@@ -364,7 +396,10 @@ export function TrackList({ tracks }: TrackListProps) {
             );
           })}
         </div>
-      </div>
+            </>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* Track Detail Modal */}
       <TrackDetailModal

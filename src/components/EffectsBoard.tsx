@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AudioLines, MicVocal, Timer, SlidersHorizontal, Gauge, Wand2, Settings } from 'lucide-react';
+import { AudioLines, MicVocal, Timer, SlidersHorizontal, Gauge, Wand2, Settings, ListMusic, Trash2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -9,10 +9,19 @@ import {
 } from '@/components/ui/dialog';
 import { Slider } from '@/components/ui/slider';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   type EffectName,
   type EffectState,
   EFFECT_LABELS,
 } from '@/hooks/useMicEffects';
+import { getPresets, type Preset } from '@/lib/presets';
+import { CHAIN_ORDER } from '@/hooks/useMicEffects';
 
 // ── Props ──────────────────────────────────────────────────────────
 
@@ -20,6 +29,11 @@ interface EffectsBoardProps {
   effects: Record<EffectName, EffectState>;
   onToggle: (name: EffectName) => void;
   onUpdate: (name: EffectName, params: Record<string, number>) => void;
+  presets?: Preset[];
+  onApplyPreset?: (preset: Preset) => void;
+  onSavePresetOpen?: () => void;
+  onDeletePreset?: (name: string) => void;
+  onPresetsChange?: () => void;
 }
 
 // ── Config ─────────────────────────────────────────────────────────
@@ -158,18 +172,41 @@ const EFFECT_SETTINGS: Record<EffectName, SliderConfig[]> = {
 
 // ── Component ──────────────────────────────────────────────────────
 
-export function EffectsBoard({ effects, onToggle, onUpdate }: EffectsBoardProps) {
+export function EffectsBoard({
+  effects,
+  onToggle,
+  onUpdate,
+  presets: presetsProp,
+  onApplyPreset,
+  onSavePresetOpen,
+  onDeletePreset,
+  onPresetsChange,
+}: EffectsBoardProps) {
   const [editEffect, setEditEffect] = useState<EffectName | null>(null);
+  const presets = presetsProp ?? getPresets();
 
   const openSettings = (name: EffectName, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditEffect(name);
   };
 
+  const handleToggle = (name: EffectName) => {
+    const wasEnabled = effects[name].enabled;
+    onToggle(name);
+    // When activating an effect, auto-open settings panel
+    if (!wasEnabled) {
+      setEditEffect(name);
+    }
+  };
+
   const handleParamChange = (key: string, value: number) => {
     if (editEffect) {
       onUpdate(editEffect, { [key]: value });
     }
+  };
+
+  const handleApplyPreset = (preset: Preset) => {
+    onApplyPreset?.(preset);
   };
 
   return (
@@ -182,7 +219,7 @@ export function EffectsBoard({ effects, onToggle, onUpdate }: EffectsBoardProps)
           return (
             <div key={effectName} className="relative aspect-square">
               <button
-                onClick={() => onToggle(effectName)}
+                onClick={() => handleToggle(effectName)}
                 className={`w-full h-full rounded-md border flex flex-col items-center justify-center gap-4 transition-all ${
                   effect.enabled
                     ? 'border-primary bg-primary/15 glow-ring'
@@ -215,6 +252,69 @@ export function EffectsBoard({ effects, onToggle, onUpdate }: EffectsBoardProps)
           );
         })}
       </div>
+
+      {/* Presets — effects only */}
+      {onApplyPreset && (
+        <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
+          <div className="flex flex-col">
+            <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+              <ListMusic className="h-3 w-3" />
+              Presets
+            </span>
+            <span className="text-[10px] text-muted-foreground">
+              Save and recall effect profiles
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Select
+              onValueChange={(val) => {
+                if (val === '__save__') {
+                  onSavePresetOpen?.();
+                } else {
+                  const preset = presets.find((p) => p.name === val);
+                  if (preset) handleApplyPreset(preset);
+                }
+                onPresetsChange?.();
+              }}
+            >
+              <SelectTrigger className="w-[140px] h-7 bg-secondary border-border text-xs font-mono shrink-0">
+                <SelectValue placeholder="Load preset…" />
+              </SelectTrigger>
+              <SelectContent className="text-left">
+                {presets.map((p) => (
+                  <SelectItem
+                    key={p.name}
+                    value={p.name}
+                    className="text-xs font-mono cursor-pointer justify-start text-left"
+                  >
+                    <div className="flex items-center justify-between w-full gap-2">
+                      <span>{p.name}</span>
+                      {!p.builtIn && onDeletePreset && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeletePreset(p.name);
+                            onPresetsChange?.();
+                          }}
+                          className="text-muted-foreground/40 hover:text-destructive transition-colors"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  </SelectItem>
+                ))}
+                <SelectItem
+                  value="__save__"
+                  className="text-xs font-mono text-primary cursor-pointer justify-start text-left"
+                >
+                  Save Current…
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      )}
 
       {/* Settings modal */}
       <Dialog
