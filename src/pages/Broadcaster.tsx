@@ -97,6 +97,12 @@ const Broadcaster = () => {
   const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
 
   const [startBroadcastDialogOpen, setStartBroadcastDialogOpen] = useState(false);
+  const [boardAccordion, setBoardAccordion] = useState<string>('sounds');
+  const lastBoardRef = useRef<'sounds' | 'effects'>('sounds');
+  useEffect(() => {
+    if (boardAccordion) lastBoardRef.current = boardAccordion as 'sounds' | 'effects';
+  }, [boardAccordion]);
+  const boardActive = boardAccordion || lastBoardRef.current;
 
   const addLog = useCallback((msg: string, level: LogEntry['level'] = 'info') => {
     setLogs((prev) => [...prev.slice(-100), createLogEntry(msg, level)]);
@@ -1098,7 +1104,41 @@ const Broadcaster = () => {
 
         {/* Soundboard / Effects */}
         <div className="panel !p-0">
-          <Accordion type="multiple" defaultValue={['sounds', 'effects']} className="border-0">
+          <div className="flex items-center justify-between px-4 pt-3 pb-1">
+            <span className="panel-header flex items-center gap-1.5 !mb-0">
+              {boardActive === 'effects' ? (
+                <Sparkles className="h-3.5 w-3.5" />
+              ) : (
+                <Music className="h-3.5 w-3.5" />
+              )}
+              {boardActive === 'effects' ? 'Effects' : 'Soundboard'}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setBoardAccordion('sounds')}
+                className={`p-1.5 rounded transition-colors ${
+                  boardActive === 'sounds'
+                    ? 'text-primary'
+                    : 'text-muted-foreground/40 hover:text-muted-foreground'
+                }`}
+                title="Soundboard"
+              >
+                <Music className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setBoardAccordion('effects')}
+                className={`p-1.5 rounded transition-colors ${
+                  boardActive === 'effects'
+                    ? 'text-primary'
+                    : 'text-muted-foreground/40 hover:text-muted-foreground'
+                }`}
+                title="Effects"
+              >
+                <Sparkles className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+          <Accordion type="single" collapsible value={boardAccordion} onValueChange={setBoardAccordion} className="border-0">
             <AccordionItem value="sounds" className="border-b border-border">
               <AccordionTrigger className="px-4 py-3 hover:no-underline">
                 <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
