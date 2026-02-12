@@ -516,13 +516,19 @@ const Broadcaster = () => {
   const handleSystemAudioConfirm = async () => {
     setSystemAudioInfoOpen(false);
     try {
-      // Request system audio via getDisplayMedia
-      // We ask for video: true because some browsers require it,
-      // but we only use the audio track
+      // Request system audio via getDisplayMedia.
+      // Video is required by browsers, but we request the absolute minimum
+      // (1x1 @ 1fps) to avoid GPU/CPU overhead from screen capture encoding.
+      // Suggesting users share a browser tab instead of "Entire Screen" also
+      // dramatically reduces resource usage.
       const stream = await navigator.mediaDevices.getDisplayMedia({
         audio: true,
-        video: true, // required by some browsers; we discard the video track
-      });
+        video: {
+          width: { ideal: 1 },
+          height: { ideal: 1 },
+          frameRate: { ideal: 1 },
+        },
+      } as DisplayMediaStreamOptions);
 
       // Stop the video track immediately — we only need audio
       stream.getVideoTracks().forEach(t => t.stop());
@@ -1093,7 +1099,7 @@ const Broadcaster = () => {
               System Audio
             </DialogTitle>
             <DialogDescription className="text-sm text-muted-foreground leading-relaxed">
-              To capture audio from your computer, your browser will ask you to share your screen. This is how browsers provide access to system audio.
+              To capture audio from your computer, your browser will ask you to share a screen or tab. This is how browsers provide access to system audio.
             </DialogDescription>
           </DialogHeader>
 
@@ -1102,21 +1108,24 @@ const Broadcaster = () => {
               <p className="text-sm font-medium text-foreground">When the sharing dialog appears:</p>
               <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
                 <li>
-                  Select <strong className="text-foreground">"Entire Screen"</strong> (or any screen/tab)
+                  Select a <strong className="text-foreground">browser tab</strong> — this is the most lightweight option and won't slow down your computer
                 </li>
                 <li>
-                  Toggle <strong className="text-foreground">"Share system audio"</strong> on — this is the important part
+                  Toggle <strong className="text-foreground">"Also share tab audio"</strong> on — this is the important part
                 </li>
                 <li>
                   Click <strong className="text-foreground">Share</strong>
                 </li>
               </ol>
+              <p className="text-xs text-muted-foreground/70 mt-1 pl-0.5">
+                Tip: Sharing "Entire Screen" also works but uses more CPU. A browser tab is much lighter.
+              </p>
             </div>
 
             <div className="flex items-start gap-2 text-xs text-muted-foreground/80">
               <span className="shrink-0 mt-0.5">🔒</span>
               <p>
-                <strong className="text-muted-foreground">Your screen is not being shared or recorded.</strong>{' '}
+                <strong className="text-muted-foreground">Nothing on your screen is being shared or recorded.</strong>{' '}
                 We immediately discard the video — only the audio is captured and mixed into your broadcast.
               </p>
             </div>
