@@ -7,6 +7,7 @@ import { createLogger } from './logger.js';
 import { RoomManager } from './room-manager.js';
 import { SessionManager } from './auth.js';
 import { testConnection, connectToServer, updateStreamMetadata } from './integration-relay.js';
+import { identifyAudio } from './audio-identify.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -258,6 +259,27 @@ app.get('/api/music-detail/:id', async (req, res) => {
   } catch (e) {
     logger.warn({ error: e.message }, 'Deezer detail proxy error');
     res.json({ data: null });
+  }
+});
+
+// Audio identification — accepts raw PCM (signed 16-bit LE, mono, 22050 Hz)
+const identifyLimiter = rateLimit({ windowMs: 10000, max: 2, message: { error: 'Too many identify requests' } });
+
+app.post('/api/identify-audio', requireAuth, identifyLimiter, express.raw({ type: 'application/octet-stream', limit: '1mb' }), async (req, res) => {
+  if (!req.body || req.body.length < 1000) {
+    return res.status(400).json({ match: null, error: 'Audio data too short' });
+  }
+
+  if (!process.env.ACOUSTID_API_KEY) {
+    return res.status(503).json({ match: null, error: 'Audio identification not configured (ACOUSTID_API_KEY missing)' });
+  }
+
+  try {
+    const match = await identifyAudio(req.body, logger);
+    res.json({ match });
+  } catch (e) {
+    logger.warn({ error: e.message }, 'Audio identify failed');
+    res.status(500).json({ match: null, error: e.message });
   }
 });
 

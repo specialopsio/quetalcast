@@ -212,7 +212,7 @@ export function NowPlayingInput({ value, onChange, onCommit }: NowPlayingInputPr
   };
 
   return (
-    <div className="flex items-center gap-3 mt-3 pt-3 border-t border-border">
+    <div className="flex items-center gap-3">
       <span className="text-xs font-semibold text-foreground flex items-center gap-1.5 shrink-0">
         <Disc3 className="h-3 w-3" />
         Now Playing
