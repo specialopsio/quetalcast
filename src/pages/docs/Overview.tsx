@@ -15,7 +15,7 @@ export default function DocsOverview() {
             Broadcaster
           </Link>
           {' — '}
-          Level meter, mixer controls, going on air, soundboard, effects, track list, recording
+          Level meter, mixer controls, going on air, sounds, effects, track list, recording
         </li>
         <li>
           <Link to="/docs/receiver" className="text-primary hover:underline">

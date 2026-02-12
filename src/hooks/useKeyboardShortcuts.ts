@@ -82,6 +82,6 @@ export const SHORTCUT_MAP = [
   { key: 'R', description: 'Toggle recording' },
   { key: 'L', description: 'Toggle listen' },
   { key: 'C', description: 'Toggle cue mode' },
-  { key: '1–9, 0', description: 'Trigger soundboard pads 1–10' },
+  { key: '1–9, 0', description: 'Trigger sound pads 1–10' },
   { key: '?', description: 'Show/hide shortcuts' },
 ];

@@ -3,7 +3,7 @@ export default function DocsBroadcaster() {
     <div className="prose prose-invert prose-sm max-w-none text-muted-foreground leading-relaxed [&_strong]:text-foreground space-y-10">
       <p className="text-base">
         The broadcaster view is where you control your stream. All panels (Audio Input, Level Meter,
-        Mixer Controls, Track List, Soundboard, Stats, Event Log) have icons in their headers for
+        Mixer Controls, Track List, Sounds / Effects, Stats, Event Log) have icons in their headers for
         consistency. Mixer controls and the track list are visible before you go on air so you can
         prepare in advance.
       </p>
@@ -44,12 +44,12 @@ export default function DocsBroadcaster() {
             avoid feedback.
           </li>
           <li>
-            <strong>Cue</strong> — Preview mode. Soundboard plays only for you, nothing goes to
+            <strong>Cue</strong> — Preview mode. Sounds play only for you, nothing goes to
             listeners (on air only).
           </li>
           <li>
             <strong>Limiter</strong> — 0, -3, -6, or -12 dB. Keeps broadcast from getting too loud.
-            Lower settings catch more peaks; handy for loud soundboard clips.
+            Lower settings catch more peaks; handy for loud sound clips.
           </li>
           <li>
             <strong>System audio</strong> — Route desktop or app audio into your broadcast (on air
@@ -82,9 +82,9 @@ export default function DocsBroadcaster() {
       </section>
 
       <section>
-        <h2 className="text-lg font-semibold text-foreground mb-3">Soundboard</h2>
+        <h2 className="text-lg font-semibold text-foreground mb-3">Sounds</h2>
         <p>
-          The grid of pads below the controls is your soundboard. Tap an empty pad to load an
+          The grid of pads below the controls is your sounds grid. Tap an empty pad to load an
           audio file. Once loaded:
         </p>
         <ul className="list-disc list-inside mt-2 space-y-1 pl-1">
@@ -94,16 +94,20 @@ export default function DocsBroadcaster() {
           <li>X (top left) — remove the clip.</li>
         </ul>
         <p className="mt-2">
-          Everything on the soundboard is mixed into your broadcast. Use Cue mode to preview clips
+          Everything on the sounds grid is mixed into your broadcast. Use Cue mode to preview clips
           privately before playing them on air.
         </p>
       </section>
 
       <section>
-        <h2 className="text-lg font-semibold text-foreground mb-3">Effects</h2>
+        <h2 className="text-lg font-semibold text-foreground mb-3">Sounds & Effects</h2>
         <p>
-          Switch to the <strong>Effects</strong> tab (next to Sounds) for real-time mic effects.
-          Tap an effect pad to turn it on or off.
+          The <strong>Sounds / Effects</strong> section is collapsible. When expanded, use the
+          music and sparkle icons to switch between <strong>Sounds</strong> (the pad grid) and{' '}
+          <strong>Effects</strong> (real-time mic effects).
+        </p>
+        <p className="mt-2">
+          In <strong>Effects</strong> mode, tap an effect pad to turn it on or off.
         </p>
         <ul className="list-disc list-inside mt-2 space-y-1 pl-1">
           <li>
@@ -126,7 +130,7 @@ export default function DocsBroadcaster() {
           </li>
         </ul>
         <p className="mt-2">
-          Tap the gear icon to customize. Effects only apply to your mic — soundboard clips are not
+          Tap the gear icon to customize. Effects only apply to your mic — sound clips are not
           affected. <strong>Presets</strong> (in the effects panel) save and recall effect profiles
           only (not mixer settings). Built-in: Podcast Voice, DJ Mode, Lo-Fi. Save your own and
           delete with the trash icon.

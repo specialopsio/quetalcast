@@ -37,7 +37,7 @@ export default function DocsIntegrations() {
             <strong>C</strong> — Toggle cue mode
           </li>
           <li>
-            <strong>1–9, 0</strong> — Trigger soundboard pads 1–10
+            <strong>1–9, 0</strong> — Trigger sound pads 1–10
           </li>
           <li>
             <strong>?</strong> — Show/hide shortcuts reference

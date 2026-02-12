@@ -5,7 +5,7 @@ Real-time audio broadcasting application built with WebRTC, React, and Node.js. 
 ## Features
 
 - **High-fidelity audio** — Opus codec at up to 510 kbps stereo with adaptive quality (High / Auto / Low)
-- **Soundboard** — 5x2 pad grid with MP3 loading, loop toggle, per-pad volume (up to 300%), and broadcast mixing
+- **Sounds** — 5x2 pad grid with MP3 loading, loop toggle, per-pad volume (up to 300%), and broadcast mixing
 - **Mic effects** — Enhance (noise gate, rumble filter, clarity boost), tone/EQ, compressor, pitch shift, delay, and reverb with per-effect settings
 - **Audio presets** — Save and recall effect profiles (effects only, not mixer). In effects panel. 3 built-in presets (Podcast Voice, DJ Mode, Lo-Fi) plus unlimited custom presets stored in localStorage
 - **Stereo VU meter** — Calibrated dBFS metering with peak hold. At top of page; works as soon as you select a mic (preview stream) so you can level-check before going live
@@ -19,7 +19,7 @@ Real-time audio broadcasting application built with WebRTC, React, and Node.js. 
 - **Track list** — Chronological history of every track played. Always visible (collapsible). Now Playing search at top when on air. New receivers get full history on join. CSV download (icon next to title) includes room ID. Event log also has CSV download next to title
 <!-- Auto-identify (temporarily disabled): Automatic song identification using AcoustID/Chromaprint. Ear icon toggle during broadcast. Code remains in useAutoIdentify.ts and audio-identify.js for future re-enable. -->
 - **Local recording** — Record your broadcast as a 320 kbps stereo MP3, auto-downloaded when you stop. If you end the broadcast while recording, recording continues until you stop or start a new broadcast. The "Download ZIP" option in the post-broadcast dialog includes the MP3 when recording was active. Uses AudioWorklet + Web Worker for energy-efficient encoding
-- **Keyboard shortcuts** — Space (mute), R (record), L (listen), C (cue), 1–0 (soundboard pads), ? (help). Active while on air, disabled when typing in inputs
+- **Keyboard shortcuts** — Space (mute), R (record), L (listen), C (cue), 1–0 (sound pads), ? (help). Active while on air, disabled when typing in inputs
 - **Integrations** — Stream to external platforms (Icecast, Shoutcast, Radio.co) via server-side relay. Test connection, remember credentials in localStorage. Room is still created for chat and metadata. Now Playing metadata is automatically pushed to the external server's admin API
 - **Multi-receiver** — Up to 4 concurrent listeners per room
 - **TURN relay** — Dynamic credential fetching via Metered.ca (or static config)
@@ -50,7 +50,7 @@ Real-time audio broadcasting application built with WebRTC, React, and Node.js. 
 ```
 Microphone ─► Mic Effects ─► Gain ──┐
                                     ├─► Broadcast Bus (stereo) ─► Limiter ─► WebRTC
-Soundboard Pads ─► Gain ───────────┤                             └─► VU Meter
+Sound Pads ─► Gain ────────────────┤                             └─► VU Meter
 System Audio ─► Gain ──────────────┘
 ```
 
@@ -157,7 +157,7 @@ fly deploy
 │   │   ├── IntegrationsSheet.tsx # External streaming platform config
 │   │   ├── NowPlayingInput.tsx # Deezer autocomplete for now-playing metadata
 │   │   ├── TrackList.tsx       # Chronological track history display
-│   │   ├── SoundBoard.tsx      # 5x2 soundboard pad grid
+│   │   ├── SoundBoard.tsx      # 5x2 sound pad grid
 │   │   ├── LevelMeter.tsx      # Stereo VU meter with dBFS scale
 │   │   ├── StatusBar.tsx       # Room ID, timer, connection status
 │   │   ├── HealthPanel.tsx     # RTT, packet loss, jitter display
