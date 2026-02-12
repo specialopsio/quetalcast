@@ -276,6 +276,12 @@ const Broadcaster = () => {
 
   const doGoOnAir = useCallback(async () => {
     try {
+      // Stop pre-broadcast recording so we don't tear down its source when going on air
+      if (recorder.recording && !isOnAir) {
+        recorder.stopRecording();
+        addLog('Recording stopped — saving MP3 before going on air');
+      }
+
       const constraints: MediaStreamConstraints = {
         audio: {
           deviceId: selectedDevice ? { exact: selectedDevice } : undefined,
@@ -316,7 +322,7 @@ const Broadcaster = () => {
     } catch (e) {
       addLog('Couldn\'t start broadcast — check mic permissions', 'error');
     }
-  }, [mixer, micEffects, webrtc, selectedIntegration, addLog, micVolume, micMuted]);
+  }, [mixer, micEffects, webrtc, selectedIntegration, addLog, micVolume, micMuted, recorder, isOnAir]);
 
   const handleGoOnAir = useCallback(async () => {
     // Only show dialog when there's actual broadcast content from a previous session,
@@ -372,6 +378,11 @@ const Broadcaster = () => {
     }
     setStartBroadcastDialogOpen(false);
     try {
+      if (recorder.recording) {
+        recorder.stopRecording();
+        addLog('Recording stopped — saving MP3 before resuming');
+      }
+
       const constraints: MediaStreamConstraints = {
         audio: {
           deviceId: selectedDevice ? { exact: selectedDevice } : undefined,
@@ -545,12 +556,15 @@ const Broadcaster = () => {
     if (recorder.recording) {
       recorder.stopRecording();
       addLog('Recording stopped — saving MP3');
-    } else if (mixer.mixedStream) {
-      try {
-        await recorder.startRecording(mixer.mixedStream);
-        addLog('Recording started (320 kbps MP3)');
-      } catch (e) {
-        addLog('Failed to start recording', 'error');
+    } else {
+      const stream = isOnAir ? mixer.mixedStream : previewStream;
+      if (stream) {
+        try {
+          await recorder.startRecording(stream);
+          addLog(isOnAir ? 'Recording started (320 kbps MP3)' : 'Recording started (mic only, before broadcast)');
+        } catch (e) {
+          addLog('Failed to start recording', 'error');
+        }
       }
     }
   };
@@ -1068,9 +1082,9 @@ const Broadcaster = () => {
               </div>
               <button
                 onClick={handleToggleRecording}
-                disabled={!isOnAir}
+                disabled={!recorder.recording && !(isOnAir ? mixer.mixedStream : previewStream)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                  !isOnAir ? 'opacity-50 cursor-not-allowed' : ''
+                  (!recorder.recording && !(isOnAir ? mixer.mixedStream : previewStream)) ? 'opacity-50 cursor-not-allowed' : ''
                 } ${
                   recorder.recording
                     ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30'
