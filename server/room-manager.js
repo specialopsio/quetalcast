@@ -19,6 +19,7 @@ export class RoomManager {
       metadata: null, // now-playing text
       trackList: [],  // { title, time } — chronological track list
       chatHistory: [], // { name, text, time, system? } — persisted chat messages
+      chatParticipants: new Map(), // participantId (receiverId or 'broadcaster') → { name }
       integrationInfo: null, // { type, credentials } — active integration connection
       createdAt: new Date().toISOString(),
     });
@@ -180,6 +181,24 @@ export class RoomManager {
   getChatHistory(roomId) {
     const room = this.rooms.get(roomId);
     return room ? room.chatHistory : [];
+  }
+
+  /** Add a chat participant (when they send their first message). Returns true if newly added. */
+  addChatParticipant(roomId, participantId, name) {
+    const room = this.rooms.get(roomId);
+    if (!room) return false;
+    const had = room.chatParticipants.has(participantId);
+    room.chatParticipants.set(participantId, { name });
+    return !had;
+  }
+
+  /** Get and remove a chat participant (when they leave). Returns their name or null. */
+  removeChatParticipant(roomId, participantId) {
+    const room = this.rooms.get(roomId);
+    if (!room) return null;
+    const p = room.chatParticipants.get(participantId);
+    room.chatParticipants.delete(participantId);
+    return p?.name ?? null;
   }
 
   setIntegrationInfo(roomId, info) {

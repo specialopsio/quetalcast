@@ -248,7 +248,7 @@ export function Footer() {
                   chat button when you have new messages while the panel is closed. When
                   new messages arrive and the chat is closed or the tab is in the
                   background, the browser tab title flashes until you view the chat.
-                  System messages appear when listeners join or leave the room.
+                  System messages show when others join or leave the chat (with their name).
                 </p>
               </section>
 
@@ -419,7 +419,7 @@ export function Footer() {
                   history from the broadcast. The first time you open chat, you'll be
                   asked for a display name. Send messages to the broadcaster and see
                   their replies. Messages are limited to 280 characters, 1 per second.
-                  System messages appear when other listeners join or leave. An unread
+                  System messages show when others join or leave the chat (with their name). An unread
                   badge shows on the button when you have new messages while the panel
                   is closed. The browser tab title flashes when new messages arrive
                   until you view the chat.
