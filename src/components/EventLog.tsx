@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react';
-import { MessageCircle, Download } from 'lucide-react';
+import { MessageCircle, Download, ScrollText } from 'lucide-react';
 
 export interface LogEntry {
   time: string;
@@ -57,12 +57,13 @@ export function EventLog({ entries, maxEntries = 30, roomId }: EventLogProps) {
 
   return (
     <div className="panel flex flex-col">
-      <div className="flex items-center justify-between">
-        <div className="panel-header !mb-0">Event Log</div>
+      <div className="panel-header flex items-center gap-1.5 !mb-0">
+        <ScrollText className="h-3.5 w-3.5" />
+        Event Log
         {entries.length > 0 && (
           <button
             onClick={() => downloadEventLogCsv(entries, roomId)}
-            className="p-0.5 text-muted-foreground hover:text-foreground transition-colors rounded"
+            className="p-0.5 ml-1 text-muted-foreground hover:text-foreground transition-colors rounded"
             title="Download event log as CSV"
           >
             <Download className="h-3 w-3" />

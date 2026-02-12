@@ -1,3 +1,4 @@
+import { BarChart2 } from 'lucide-react';
 import type { WebRTCStats } from '@/lib/webrtc-stats';
 
 interface HealthPanelProps {
@@ -62,7 +63,10 @@ function StateIndicator({ label, value }: { label: string; value: string }) {
 export function HealthPanel({ stats, connectionState, iceConnectionState, signalingState, peerConnected, listenerCount }: HealthPanelProps) {
   return (
     <div className="panel space-y-4">
-      <div className="panel-header">Stats</div>
+      <div className="panel-header flex items-center gap-1.5 !mb-0">
+        <BarChart2 className="h-3.5 w-3.5" />
+        Stats
+      </div>
 
       {/* Stats grid */}
       <div className={`grid gap-3 ${listenerCount !== undefined ? 'grid-cols-5' : 'grid-cols-4'}`}>

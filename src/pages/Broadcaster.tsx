@@ -8,7 +8,7 @@ import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
-import { Copy, Mic, MicOff, Radio, Headphones, Music, Sparkles, Zap, Plug2, Circle, Square, Keyboard, Monitor, MonitorOff, Download } from 'lucide-react';
+import { Copy, Mic, MicOff, Radio, Headphones, Music, Sparkles, Zap, Plug2, Circle, Square, Keyboard, Monitor, MonitorOff, Download, SlidersHorizontal } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
 import { Slider } from '@/components/ui/slider';
 import {
@@ -641,7 +641,10 @@ const Broadcaster = () => {
 
         {/* Device select + quality */}
         <div className="panel">
-          <div className="panel-header">Audio Input</div>
+          <div className="panel-header flex items-center gap-1.5 !mb-0">
+            <Mic className="h-3.5 w-3.5" />
+            Audio Input
+          </div>
           <Select
             value={selectedDevice}
             onValueChange={setSelectedDevice}
@@ -700,7 +703,10 @@ const Broadcaster = () => {
             <Accordion type="single" collapsible defaultValue="mixer">
               <AccordionItem value="mixer" className="border-b-0">
                 <AccordionTrigger className="px-4 py-3 hover:no-underline">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mixer Controls</span>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <SlidersHorizontal className="h-3.5 w-3.5" />
+                    Mixer Controls
+                  </span>
                 </AccordionTrigger>
                 <AccordionContent className="px-4 pb-4">
             <div className="flex items-center gap-4">
@@ -936,7 +942,10 @@ const Broadcaster = () => {
         <div className="panel">
           <Tabs value={boardTab} onValueChange={setBoardTab}>
             <div className="flex items-center justify-between mb-3">
-              <div className="panel-header !mb-0">{boardTab === 'sounds' ? 'Soundboard' : 'Effects'}</div>
+              <div className="panel-header flex items-center gap-1.5 !mb-0">
+                {boardTab === 'sounds' ? <Music className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
+                {boardTab === 'sounds' ? 'Soundboard' : 'Effects'}
+              </div>
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => setBoardTab('sounds')}

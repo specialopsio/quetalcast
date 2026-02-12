@@ -1,3 +1,4 @@
+import { Gauge } from 'lucide-react';
 import type { ChannelAnalysis } from '@/hooks/useAudioAnalyser';
 
 interface LevelMeterProps {
@@ -71,7 +72,10 @@ export function LevelMeter({ left, right, label = 'Level', segments = 48 }: Leve
   return (
     <div className="panel">
       <div className="flex items-center justify-between mb-2">
-        <span className="panel-header mb-0">{label}</span>
+        <span className="panel-header flex items-center gap-1.5 mb-0">
+          <Gauge className="h-3.5 w-3.5" />
+          {label}
+        </span>
         <div className="flex items-center gap-3">
           <span className="text-[10px] font-mono text-muted-foreground tabular-nums min-w-[3.5rem]">
             {maxLevel > MIN_DB ? `${maxLevel.toFixed(1)} dB` : '—'}
