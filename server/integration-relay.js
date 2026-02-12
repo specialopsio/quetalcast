@@ -6,13 +6,15 @@ import net from 'net';
  * Protocol:
  *   → SOURCE /mount ICE/1.0\r\n
  *   → content-type: audio/mpeg\r\n
- *   → Authorization: Basic base64(source:password)\r\n
+ *   → Authorization: Basic base64(username:password)\r\n
+ *   → ice-name: QuetalCast\r\n
+ *   → ice-public: 0\r\n
  *   → \r\n
  *   ← HTTP/1.0 200 OK\r\n\r\n
  *
  * Returns a writable net.Socket on success.
  */
-export function connectIcecast({ host, port, mount, password }, logger) {
+export function connectIcecast({ host, port, mount, password, username }, logger) {
   return new Promise((resolve, reject) => {
     const portNum = parseInt(port, 10);
     if (!host || !portNum || !mount || !password) {
@@ -22,6 +24,9 @@ export function connectIcecast({ host, port, mount, password }, logger) {
     // Ensure mount starts with /
     const mountPath = mount.startsWith('/') ? mount : `/${mount}`;
 
+    // Source username defaults to 'source' (Icecast standard)
+    const sourceUser = username?.trim() || 'source';
+
     const socket = net.createConnection(portNum, host);
 
     const timeout = setTimeout(() => {
@@ -30,12 +35,14 @@ export function connectIcecast({ host, port, mount, password }, logger) {
     }, 10000);
 
     socket.once('connect', () => {
-      const authStr = Buffer.from(`source:${password}`).toString('base64');
+      const authStr = Buffer.from(`${sourceUser}:${password}`).toString('base64');
       const request = [
         `SOURCE ${mountPath} ICE/1.0`,
         `content-type: audio/mpeg`,
         `Authorization: Basic ${authStr}`,
         `User-Agent: QuetalCast/1.0`,
+        `ice-name: QuetalCast`,
+        `ice-public: 0`,
         ``,
         ``,
       ].join('\r\n');
@@ -152,10 +159,11 @@ export function connectToServer(type, credentials, logger) {
  * Update stream metadata on an Icecast server.
  * Uses the admin endpoint: /admin/metadata?mount=/mount&mode=updinfo&song=...
  */
-export async function updateIcecastMetadata({ host, port, mount, password }, songTitle) {
+export async function updateIcecastMetadata({ host, port, mount, password, username }, songTitle) {
   const mountPath = mount.startsWith('/') ? mount : `/${mount}`;
   const url = `http://${host}:${port}/admin/metadata?mount=${encodeURIComponent(mountPath)}&mode=updinfo&song=${encodeURIComponent(songTitle)}`;
-  const authStr = Buffer.from(`source:${password}`).toString('base64');
+  const sourceUser = username?.trim() || 'source';
+  const authStr = Buffer.from(`${sourceUser}:${password}`).toString('base64');
 
   try {
     const res = await fetch(url, {

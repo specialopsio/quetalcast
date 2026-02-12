@@ -10,12 +10,14 @@ export interface CredentialField {
   placeholder: string;
   type: 'text' | 'number' | 'password';
   required: boolean;
+  hint?: string;
 }
 
 export interface Integration {
   id: string;
   name: string;
   type: IntegrationType;
+  description?: string;
   credentialFields: CredentialField[];
 }
 
@@ -38,11 +40,13 @@ export const INTEGRATIONS: Integration[] = [
     id: 'internet-radio',
     name: 'internet-radio.com',
     type: 'icecast',
+    description: 'For Icecast servers on internet-radio.com. Find your settings in the Centova Cast control panel under Settings > Mount Points. If AutoDJ is running, you may need to stop it before going live.',
     credentialFields: [
-      { key: 'host', label: 'Server Host', placeholder: 'uk3.internet-radio.com', type: 'text', required: true },
-      { key: 'port', label: 'Port', placeholder: '8000', type: 'number', required: true },
-      { key: 'mount', label: 'Mount Point', placeholder: '/live', type: 'text', required: true },
-      { key: 'password', label: 'Source Password', placeholder: '', type: 'password', required: true },
+      { key: 'host', label: 'Server Host', placeholder: 'uk3.internet-radio.com', type: 'text', required: true, hint: 'From your Centova Cast dashboard' },
+      { key: 'port', label: 'Port', placeholder: '8000', type: 'number', required: true, hint: 'Found in Settings > Stream' },
+      { key: 'username', label: 'Source Username', placeholder: 'source', type: 'text', required: false, hint: 'Usually "source" unless customized per mount point' },
+      { key: 'mount', label: 'Mount Point', placeholder: '/stream', type: 'text', required: true, hint: 'Default is /stream — check Settings > Mount Points' },
+      { key: 'password', label: 'Source Password', placeholder: '', type: 'password', required: true, hint: 'The source/admin password from Settings > Stream' },
     ],
   },
   {
@@ -63,6 +67,7 @@ export const INTEGRATIONS: Integration[] = [
     credentialFields: [
       { key: 'host', label: 'DJ Host', placeholder: 'dj.radio.co', type: 'text', required: true },
       { key: 'port', label: 'Port', placeholder: '80', type: 'number', required: true },
+      { key: 'username', label: 'Source Username', placeholder: 'source', type: 'text', required: false },
       { key: 'mount', label: 'Mount Point', placeholder: '/stream', type: 'text', required: true },
       { key: 'password', label: 'DJ Password', placeholder: '', type: 'password', required: true },
     ],

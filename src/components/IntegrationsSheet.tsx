@@ -189,6 +189,12 @@ export function IntegrationsSheet({
           Back to integrations
         </button>
 
+        {activeIntegration.description && (
+          <p className="text-xs text-muted-foreground leading-relaxed bg-secondary/50 rounded-md px-3 py-2">
+            {activeIntegration.description}
+          </p>
+        )}
+
         <div className="space-y-3">
           {activeIntegration.credentialFields.map((field) => (
             <div key={field.key}>
@@ -204,6 +210,9 @@ export function IntegrationsSheet({
                 placeholder={field.placeholder}
                 className="w-full bg-input border border-border rounded-md px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
               />
+              {field.hint && (
+                <p className="text-[11px] text-muted-foreground/70 mt-0.5 ml-0.5">{field.hint}</p>
+              )}
             </div>
           ))}
         </div>
