@@ -7,16 +7,16 @@ Real-time audio broadcasting application built with WebRTC, React, and Node.js. 
 - **High-fidelity audio** — Opus codec at up to 510 kbps stereo with adaptive quality (High / Auto / Low)
 - **Soundboard** — 5x2 pad grid with MP3 loading, loop toggle, per-pad volume (up to 300%), and broadcast mixing
 - **Mic effects** — Enhance (noise gate, rumble filter, clarity boost), tone/EQ, compressor, pitch shift, delay, and reverb with per-effect settings
-- **Audio presets** — Save and recall mixer + effects profiles. 3 built-in presets (Podcast Voice, DJ Mode, Lo-Fi) plus unlimited custom presets stored in localStorage
-- **Stereo VU meter** — Calibrated dBFS metering with peak hold
+- **Audio presets** — Save and recall effect profiles (effects only, not mixer). In effects panel. 3 built-in presets (Podcast Voice, DJ Mode, Lo-Fi) plus unlimited custom presets stored in localStorage
+- **Stereo VU meter** — Calibrated dBFS metering with peak hold. At top of page; works as soon as you select a mic (preview stream) so you can level-check before going live
 - **Output limiter** — Selectable ceiling (0 dB, -3 dB, -6 dB, -12 dB)
 - **Broadcast timer** — Elapsed time display while on air
-- **Mixer controls** — Collapsible panel with mic volume, mute, listen mode, cue mode, and system audio routing
+- **Mixer controls** — Collapsible panel with audio input selector, mic volume, mute, listen mode, cue mode, and system audio routing. Visible pre-broadcast so you can dial in before going live
 - **System audio** — Route desktop or application audio into the broadcast via screen share audio capture, with independent volume control
 - **Live chat** — Bidirectional chat via floating action button (full-screen on mobile, floating panel on desktop). Users provide a display name before chatting. Chat history is sent to new receivers on join. Join/leave system messages appear when someone joins or leaves the chat (with their name). Unread badge on FAB when chat is closed; browser tab title flashes when new messages arrive until viewed. Rate-limited to 1 message per second, max 280 characters
 - **Listener count** — Real-time count of connected listeners displayed in the Stats panel during broadcast
 - **Now playing** — Broadcaster sets stream metadata with Deezer-powered autocomplete (artist + song search with album art). Visible to all listeners in real time. Metadata is also forwarded to external integration streams (Icecast/Shoutcast)
-- **Track list** — Chronological history of every track played during the broadcast. Visible to both broadcaster and receivers, with the current track highlighted. New receivers get the full history on join. CSV download includes room ID. Collapsible panel with Now Playing search at top for broadcasters
+- **Track list** — Chronological history of every track played. Always visible (collapsible). Now Playing search at top when on air. New receivers get full history on join. CSV download (icon next to title) includes room ID. Event log also has CSV download next to title
 <!-- Auto-identify (temporarily disabled): Automatic song identification using AcoustID/Chromaprint. Ear icon toggle during broadcast. Code remains in useAutoIdentify.ts and audio-identify.js for future re-enable. -->
 - **Local recording** — Record your broadcast as a 320 kbps stereo MP3, auto-downloaded when you stop. Uses AudioWorklet + Web Worker for energy-efficient encoding
 - **Keyboard shortcuts** — Space (mute), R (record), L (listen), C (cue), 1–0 (soundboard pads), ? (help). Active while on air, disabled when typing in inputs
@@ -98,9 +98,9 @@ pnpm run dev
 ### 4. Use the app
 
 1. Open `http://localhost:5173` and log in with your configured password
-2. Select an audio input device
-3. Click **Go On Air** — a room ID is generated and copied
-4. Share the receiver link; listeners open it and click **Join**
+2. Expand **Mixer Controls** and select your audio input device — the level meter at top shows input immediately so you can dial in
+3. Click **Go On Air** — a room ID is generated
+4. Share the receiver link (Copy Receiver Link); listeners open it and click **Join**
 
 ## Deployment (Fly.io)
 

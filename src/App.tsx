@@ -8,7 +8,11 @@ import Login from "./pages/Login";
 import Broadcaster from "./pages/Broadcaster";
 import Receiver from "./pages/Receiver";
 import Admin from "./pages/Admin";
-import Docs from "./pages/Docs";
+import DocsLayout from "./pages/docs/DocsLayout";
+import DocsOverview from "./pages/docs/Overview";
+import DocsBroadcaster from "./pages/docs/Broadcaster";
+import DocsReceiver from "./pages/docs/Receiver";
+import DocsIntegrations from "./pages/docs/Integrations";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -26,7 +30,12 @@ const App = () => (
           <Route path="/receive" element={<Receiver />} />
           <Route path="/receive/:roomId" element={<Receiver />} />
           <Route path="/admin" element={<Admin />} />
-          <Route path="/docs" element={<Docs />} />
+          <Route path="/docs" element={<DocsLayout />}>
+            <Route index element={<DocsOverview />} />
+            <Route path="broadcaster" element={<DocsBroadcaster />} />
+            <Route path="receiver" element={<DocsReceiver />} />
+            <Route path="integrations" element={<DocsIntegrations />} />
+          </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
