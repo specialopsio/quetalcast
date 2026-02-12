@@ -20,7 +20,7 @@ export default function DocsLayout() {
 
   return (
     <div className="min-h-[100dvh] bg-background flex">
-      <aside className="hidden lg:block w-64 shrink-0 border-r border-border p-4 sticky top-0 h-[100dvh] overflow-y-auto">
+      <aside className="hidden lg:flex lg:flex-col lg:w-64 shrink-0 border-r border-border p-4 sticky top-0 h-[100dvh] overflow-y-auto">
         <Link
           to="/"
           className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
@@ -43,6 +43,9 @@ export default function DocsLayout() {
             </Link>
           ))}
         </nav>
+        <div className="mt-auto pt-6">
+          <Footer />
+        </div>
       </aside>
       <main className="flex-1 min-w-0">
         <div className="max-w-3xl mx-auto px-4 py-12 pb-24">
@@ -56,7 +59,10 @@ export default function DocsLayout() {
             </div>
           </div>
           <Outlet />
-          <Footer />
+          {/* Footer on mobile when sidebar is hidden */}
+          <div className="lg:hidden mt-8">
+            <Footer />
+          </div>
         </div>
       </main>
     </div>
