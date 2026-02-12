@@ -94,6 +94,9 @@ const Broadcaster = () => {
   const [systemAudioInfoOpen, setSystemAudioInfoOpen] = useState(false);
   const systemAudioStreamRef = useRef<MediaStream | null>(null);
 
+  /** Preview stream for level meter when not on air — so user can dial in before going live */
+  const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
+
   const [startBroadcastDialogOpen, setStartBroadcastDialogOpen] = useState(false);
 
   const addLog = useCallback((msg: string, level: LogEntry['level'] = 'info') => {
@@ -104,7 +107,9 @@ const Broadcaster = () => {
   const webrtc = useWebRTC(signaling, 'broadcaster');
   const mixer = useAudioMixer();
   const micEffects = useMicEffects();
-  const audioAnalysis = useAudioAnalyser(mixer.mixedStream);
+  /** Level meter: use mixer when on air, preview stream when not (so user can dial in before going live) */
+  const levelMeterStream = isOnAir ? mixer.mixedStream : previewStream;
+  const audioAnalysis = useAudioAnalyser(levelMeterStream);
 
   // Auth check — verify both local token and server session
   useEffect(() => {
@@ -140,6 +145,49 @@ const Broadcaster = () => {
     }
     getDevices();
   }, [addLog, selectedDevice]);
+
+  // Preview stream for level meter when not on air — user can dial in before going live
+  const previewStreamRef = useRef<MediaStream | null>(null);
+  useEffect(() => {
+    if (isOnAir || !selectedDevice) {
+      if (previewStreamRef.current) {
+        previewStreamRef.current.getTracks().forEach((t) => t.stop());
+        previewStreamRef.current = null;
+      }
+      setPreviewStream(null);
+      return;
+    }
+    let cancelled = false;
+    navigator.mediaDevices
+      .getUserMedia({
+        audio: {
+          deviceId: { exact: selectedDevice },
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          sampleRate: { ideal: 48000 },
+        },
+      })
+      .then((stream) => {
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        previewStreamRef.current = stream;
+        setPreviewStream(stream);
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewStream(null);
+      });
+    return () => {
+      cancelled = true;
+      if (previewStreamRef.current) {
+        previewStreamRef.current.getTracks().forEach((t) => t.stop());
+        previewStreamRef.current = null;
+      }
+      setPreviewStream(null);
+    };
+  }, [isOnAir, selectedDevice]);
 
   const statusLabels: Record<ConnectionStatus, string> = {
     idle: 'Ready',
@@ -639,31 +687,7 @@ const Broadcaster = () => {
           )}
         </div>
 
-        {/* Device select + quality */}
-        <div className="panel">
-          <div className="panel-header flex items-center gap-1.5 !mb-0">
-            <Mic className="h-3.5 w-3.5" />
-            Audio Input
-          </div>
-          <Select
-            value={selectedDevice}
-            onValueChange={setSelectedDevice}
-            disabled={isOnAir}
-          >
-            <SelectTrigger className="w-full bg-input border-border font-mono text-sm">
-              <SelectValue placeholder="Select audio device…" />
-            </SelectTrigger>
-            <SelectContent>
-              {devices.map((d) => (
-                <SelectItem key={d.deviceId} value={d.deviceId} className="font-mono text-sm">
-                  {d.label || `Device ${d.deviceId.slice(0, 8)}`}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Level meter */}
+        {/* Level meter — at top so user can dial in as soon as mic is connected */}
         <LevelMeter
           left={audioAnalysis.left}
           right={audioAnalysis.right}
@@ -709,6 +733,25 @@ const Broadcaster = () => {
                   </span>
                 </AccordionTrigger>
                 <AccordionContent className="px-4 pb-4">
+            {/* Audio input — in mixer so level meter is at top */}
+            <div className="mb-4">
+              <Select
+                value={selectedDevice}
+                onValueChange={setSelectedDevice}
+                disabled={isOnAir}
+              >
+                <SelectTrigger className="w-full bg-input border-border font-mono text-sm">
+                  <SelectValue placeholder="Select audio device…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {devices.map((d) => (
+                    <SelectItem key={d.deviceId} value={d.deviceId} className="font-mono text-sm">
+                      {d.label || `Device ${d.deviceId.slice(0, 8)}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex items-center gap-4">
               {/* Mic volume */}
               <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -919,24 +962,22 @@ const Broadcaster = () => {
             </Accordion>
           </div>
 
-        {/* Track List — above soundboard, with Now Playing search; show when on air or has previous data */}
-        {(isOnAir || trackList.length > 0) && (
-          <TrackList
-            tracks={trackList}
-            alwaysShow
-            roomId={webrtc.roomId ?? undefined}
-            topContent={isOnAir ? (
-              <NowPlayingInput
-                value={nowPlaying}
-                onChange={handleNowPlayingChange}
-                onCommit={(meta: TrackMeta) => {
-                  signaling.send({ type: 'add-track', ...meta });
-                  addLog(`Added to track list: ${meta.text || meta.title || 'Unknown'}`, 'info');
-                }}
-              />
-            ) : undefined}
-          />
-        )}
+        {/* Track List — always visible (like mixer), Now Playing when on air */}
+        <TrackList
+          tracks={trackList}
+          alwaysShow
+          roomId={webrtc.roomId ?? undefined}
+          topContent={isOnAir ? (
+            <NowPlayingInput
+              value={nowPlaying}
+              onChange={handleNowPlayingChange}
+              onCommit={(meta: TrackMeta) => {
+                signaling.send({ type: 'add-track', ...meta });
+                addLog(`Added to track list: ${meta.text || meta.title || 'Unknown'}`, 'info');
+              }}
+            />
+          ) : undefined}
+        />
 
         {/* Soundboard / Effects */}
         <div className="panel">

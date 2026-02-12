@@ -57,7 +57,7 @@ export function EventLog({ entries, maxEntries = 30, roomId }: EventLogProps) {
 
   return (
     <div className="panel flex flex-col">
-      <div className="panel-header flex items-center gap-1.5 !mb-0">
+      <div className="panel-header flex items-center gap-1.5">
         <ScrollText className="h-3.5 w-3.5" />
         Event Log
         {entries.length > 0 && (
