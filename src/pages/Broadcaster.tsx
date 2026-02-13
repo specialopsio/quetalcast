@@ -66,37 +66,66 @@ function PanKnob({
   const clamped = Math.max(-100, Math.min(100, value));
   const angle = (clamped / 100) * 135;
   const label = clamped === 0 ? 'C' : clamped < 0 ? `L${Math.abs(clamped)}` : `R${clamped}`;
+  const knobRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; startValue: number } | null>(null);
+  const [hovering, setHovering] = useState(false);
+  const [dragging, setDragging] = useState(false);
 
-  const nudge = (delta: number) => {
+  const nudge = useCallback((delta: number) => {
     if (disabled) return;
     onChange(Math.max(-100, Math.min(100, clamped + delta)));
-  };
+  }, [disabled, onChange, clamped]);
+
+  const showReadout = hovering || dragging;
 
   return (
-    <div className={`flex items-center gap-2 ${disabled ? 'opacity-40' : ''}`}>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => nudge(-5)}
-        className="h-6 w-6 rounded bg-secondary text-[10px] text-muted-foreground disabled:cursor-not-allowed"
-        aria-label="Pan left"
-      >
-        L
-      </button>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => nudge(5)}
-        className="h-6 w-6 rounded bg-secondary text-[10px] text-muted-foreground disabled:cursor-not-allowed"
-        aria-label="Pan right"
-      >
-        R
-      </button>
+    <div className={`relative flex items-center justify-center w-14 ${disabled ? 'opacity-40' : ''}`}>
       <div
-        className={`relative h-10 w-10 rounded-full border border-border/80 bg-gradient-to-b from-secondary to-background shadow-[inset_0_1px_4px_rgba(0,0,0,0.5)] ${disabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
+        ref={knobRef}
+        className={`relative h-10 w-10 rounded-full border border-border/80 bg-gradient-to-b from-secondary to-background shadow-[inset_0_1px_4px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.35)] ${disabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
+        onMouseEnter={() => setHovering(true)}
+        onMouseLeave={() => setHovering(false)}
         onWheel={(e) => {
           e.preventDefault();
           nudge(e.deltaY > 0 ? -3 : 3);
+        }}
+        onPointerDown={(e) => {
+          if (disabled) return;
+          e.preventDefault();
+          dragRef.current = {
+            pointerId: e.pointerId,
+            startX: e.clientX,
+            startY: e.clientY,
+            startValue: clamped,
+          };
+          setDragging(true);
+          knobRef.current?.setPointerCapture(e.pointerId);
+        }}
+        onPointerMove={(e) => {
+          const drag = dragRef.current;
+          if (!drag || drag.pointerId !== e.pointerId || disabled) return;
+          const dx = e.clientX - drag.startX;
+          const dy = drag.startY - e.clientY;
+          const next = drag.startValue + (dx + dy) * 0.9;
+          onChange(Math.max(-100, Math.min(100, Math.round(next))));
+        }}
+        onPointerUp={(e) => {
+          if (dragRef.current?.pointerId === e.pointerId) {
+            dragRef.current = null;
+            setDragging(false);
+            if (knobRef.current?.hasPointerCapture(e.pointerId)) {
+              knobRef.current.releasePointerCapture(e.pointerId);
+            }
+          }
+        }}
+        onPointerCancel={(e) => {
+          if (dragRef.current?.pointerId === e.pointerId) {
+            dragRef.current = null;
+            setDragging(false);
+            if (knobRef.current?.hasPointerCapture(e.pointerId)) {
+              knobRef.current.releasePointerCapture(e.pointerId);
+            }
+          }
         }}
       >
         <div
@@ -104,10 +133,35 @@ function PanKnob({
           style={{ transform: `translate(-50%, -88%) rotate(${angle}deg)`, transformOrigin: '50% 150%' }}
         />
       </div>
-      <span className="text-[10px] font-mono text-muted-foreground w-10 text-right">{label}</span>
+      {showReadout && (
+        <span className="absolute -bottom-4 text-[10px] font-mono text-muted-foreground">{label}</span>
+      )}
     </div>
   );
 }
+
+const MIXER_SLIDER_CLASS = [
+  "flex-1 min-w-0",
+  "[&>*:first-child]:h-2.5",
+  "[&>*:first-child]:rounded-full",
+  "[&>*:first-child]:border",
+  "[&>*:first-child]:border-border/70",
+  "[&>*:first-child]:bg-gradient-to-b",
+  "[&>*:first-child]:from-secondary",
+  "[&>*:first-child]:to-background",
+  "[&>*:first-child]:shadow-[inset_0_1px_3px_rgba(0,0,0,0.45)]",
+  "[&>*:first-child>*]:bg-gradient-to-r",
+  "[&>*:first-child>*]:from-primary/90",
+  "[&>*:first-child>*]:to-primary",
+  "[&>*:first-child>*]:shadow-[0_0_8px_rgba(34,197,94,0.25)]",
+  "[&>[role=slider]]:h-5",
+  "[&>[role=slider]]:w-5",
+  "[&>[role=slider]]:border-border/80",
+  "[&>[role=slider]]:bg-gradient-to-b",
+  "[&>[role=slider]]:from-background",
+  "[&>[role=slider]]:to-secondary",
+  "[&>[role=slider]]:shadow-[0_1px_2px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.05)]",
+].join(' ');
 
 const Broadcaster = () => {
   const navigate = useNavigate();
@@ -1202,14 +1256,6 @@ const Broadcaster = () => {
                         <span className="text-xs font-mono text-muted-foreground tabular-nums">{micMuted ? '—' : `${micVolume}%`}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Slider
-                          value={[micVolume]}
-                          onValueChange={([v]) => handleMicVolumeChange(v)}
-                          min={0}
-                          max={100}
-                          step={1}
-                          className="flex-1 min-w-0"
-                        />
                         <button
                           onClick={() => setMicMuted((v) => !v)}
                           className={`px-2 py-1 rounded text-[10px] font-mono ${micMuted ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'}`}
@@ -1224,9 +1270,14 @@ const Broadcaster = () => {
                         >
                           S
                         </button>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-mono text-muted-foreground">PAN</span>
+                        <Slider
+                          value={[micVolume]}
+                          onValueChange={([v]) => handleMicVolumeChange(v)}
+                          min={0}
+                          max={100}
+                          step={1}
+                          className={MIXER_SLIDER_CLASS}
+                        />
                         <PanKnob value={micPan} onChange={setMicPan} />
                       </div>
                     </div>
@@ -1238,15 +1289,6 @@ const Broadcaster = () => {
                         <span className="text-xs font-mono text-muted-foreground tabular-nums">{systemAudioActive ? `${systemAudioVolume}%` : 'OFF'}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Slider
-                          value={[systemAudioVolume]}
-                          onValueChange={([v]) => handleSystemAudioVolumeChange(v)}
-                          min={0}
-                          max={100}
-                          step={1}
-                          disabled={!systemAudioActive}
-                          className="flex-1 min-w-0"
-                        />
                         <button
                           onClick={() => setSystemAudioMuted((v) => !v)}
                           disabled={!systemAudioActive}
@@ -1263,9 +1305,15 @@ const Broadcaster = () => {
                         >
                           S
                         </button>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-mono text-muted-foreground">PAN</span>
+                        <Slider
+                          value={[systemAudioVolume]}
+                          onValueChange={([v]) => handleSystemAudioVolumeChange(v)}
+                          min={0}
+                          max={100}
+                          step={1}
+                          disabled={!systemAudioActive}
+                          className={MIXER_SLIDER_CLASS}
+                        />
                         <PanKnob value={systemAudioPan} onChange={setSystemAudioPan} disabled={!systemAudioActive} />
                       </div>
                     </div>
@@ -1277,14 +1325,6 @@ const Broadcaster = () => {
                         <span className="text-xs font-mono text-muted-foreground tabular-nums">{padsMuted ? '—' : `${padsVolume}%`}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Slider
-                          value={[padsVolume]}
-                          onValueChange={([v]) => setPadsVolume(v)}
-                          min={0}
-                          max={100}
-                          step={1}
-                          className="flex-1 min-w-0"
-                        />
                         <button
                           onClick={() => setPadsMuted((v) => !v)}
                           className={`px-2 py-1 rounded text-[10px] font-mono ${padsMuted ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'}`}
@@ -1299,9 +1339,14 @@ const Broadcaster = () => {
                         >
                           S
                         </button>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-mono text-muted-foreground">PAN</span>
+                        <Slider
+                          value={[padsVolume]}
+                          onValueChange={([v]) => setPadsVolume(v)}
+                          min={0}
+                          max={100}
+                          step={1}
+                          className={MIXER_SLIDER_CLASS}
+                        />
                         <PanKnob value={padsPan} onChange={setPadsPan} />
                       </div>
                     </div>
