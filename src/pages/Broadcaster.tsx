@@ -169,6 +169,39 @@ function PanKnob({
   );
 }
 
+function VolumeLeds({
+  value,
+  disabled = false,
+}: {
+  value: number;
+  disabled?: boolean;
+}) {
+  const clamped = Math.max(0, Math.min(100, value));
+  const ledCount = 10;
+  const activeCount = disabled ? 0 : Math.round((clamped / 100) * ledCount);
+
+  return (
+    <div className={`inline-flex items-center gap-0.5 ${disabled ? 'opacity-30' : ''}`} aria-hidden>
+      {Array.from({ length: ledCount }).map((_, i) => {
+        const active = i < activeCount;
+        const tone = i >= 9 ? 'danger' : i >= 7 ? 'warn' : 'safe';
+        const activeClass = tone === 'danger'
+          ? 'bg-red-500/95 border-red-400/80 shadow-[0_0_4px_rgba(239,68,68,0.55)]'
+          : tone === 'warn'
+            ? 'bg-yellow-400/95 border-yellow-300/80 shadow-[0_0_4px_rgba(250,204,21,0.5)]'
+            : 'bg-primary/95 border-primary/70 shadow-[0_0_4px_rgba(34,197,94,0.45)]';
+
+        return (
+          <span
+            key={i}
+            className={`h-2 w-1 rounded-[2px] border ${active ? activeClass : 'bg-muted/25 border-border/40'}`}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 const MIXER_SLIDER_CLASS = [
   "flex-1 min-w-0",
 ].join(' ');
@@ -1335,6 +1368,9 @@ const Broadcaster = () => {
                         <span className="text-xs font-semibold text-foreground">
                           Mic <span className="font-mono text-muted-foreground tabular-nums">{micMuted ? '—' : `${micVolume}%`}</span>
                         </span>
+                        <span className="ml-3">
+                          <VolumeLeds value={micMuted ? 0 : micVolume} disabled={micMuted} />
+                        </span>
                       </div>
                       <div className="flex items-center gap-2">
                         <button
@@ -1369,6 +1405,12 @@ const Broadcaster = () => {
                       <div className="flex items-center">
                         <span className="text-xs font-semibold text-foreground">
                           System Audio <span className="font-mono text-muted-foreground tabular-nums">{systemAudioActive ? `${systemAudioVolume}%` : 'OFF'}</span>
+                        </span>
+                        <span className="ml-3">
+                          <VolumeLeds
+                            value={systemAudioActive && !systemAudioMuted ? systemAudioVolume : 0}
+                            disabled={!systemAudioActive || systemAudioMuted}
+                          />
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
@@ -1407,6 +1449,9 @@ const Broadcaster = () => {
                       <div className="flex items-center">
                         <span className="text-xs font-semibold text-foreground">
                           SOUND PADS <span className="font-mono text-muted-foreground tabular-nums">{padsMuted ? '—' : `${padsVolume}%`}</span>
+                        </span>
+                        <span className="ml-3">
+                          <VolumeLeds value={padsMuted ? 0 : padsVolume} disabled={padsMuted} />
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
