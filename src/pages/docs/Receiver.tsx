@@ -51,6 +51,14 @@ export default function DocsReceiver() {
       </section>
 
       <section>
+        <h2 className="text-lg font-semibold text-foreground mb-3">Layout</h2>
+        <p>
+          The receiver layout mirrors the broadcaster: track list at the top, stats and event log
+          below. On mobile, stats are in a 2-column grid.
+        </p>
+      </section>
+
+      <section>
         <h2 className="text-lg font-semibold text-foreground mb-3">Track list</h2>
         <p>
           A collapsible track list shows every track played, with album artwork, duration, and

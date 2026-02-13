@@ -15,7 +15,7 @@ export default function DocsOverview() {
             Broadcaster
           </Link>
           {' — '}
-          Level meter, mixer controls, going on air, sounds, effects, track list, recording
+          Level meter, audio controls, going on air, sounds, effects, track list, recording
         </li>
         <li>
           <Link to="/docs/receiver" className="text-primary hover:underline">
@@ -37,7 +37,7 @@ export default function DocsOverview() {
       <ol className="list-decimal list-inside space-y-2 pl-1">
         <li>Log in with your credentials.</li>
         <li>
-          Expand <strong>Mixer Controls</strong> and select your audio input. The level meter at the
+          Expand <strong>Audio Controls</strong> and select your audio input. The level meter at the
           top immediately shows your input so you can dial in before going live.
         </li>
         <li>Click <strong>Go On Air</strong> — a room ID is created.</li>

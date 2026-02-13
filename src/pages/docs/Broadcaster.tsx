@@ -3,8 +3,8 @@ export default function DocsBroadcaster() {
     <div className="prose prose-invert prose-sm max-w-none text-muted-foreground leading-relaxed [&_strong]:text-foreground space-y-10">
       <p className="text-base">
         The broadcaster view is where you control your stream. All panels (Audio Input, Level Meter,
-        Mixer Controls, Track List, Sounds / Effects, Stats, Event Log) have icons in their headers for
-        consistency. Mixer controls and the track list are visible before you go on air so you can
+        Audio Controls, Track List, Sounds / Effects, Stats, Event Log) have icons in their headers for
+        consistency. Audio controls and the track list are visible before you go on air so you can
         prepare in advance.
       </p>
 
@@ -24,45 +24,37 @@ export default function DocsBroadcaster() {
       </section>
 
       <section>
-        <h2 className="text-lg font-semibold text-foreground mb-3">Mixer controls</h2>
+        <h2 className="text-lg font-semibold text-foreground mb-3">Audio controls</h2>
         <p>
-          The mixer panel is visible <strong>before</strong> you go on air. Expand it to access:
+          The audio controls panel is visible <strong>before</strong> you go on air. Expand it to access:
         </p>
         <ul className="list-disc list-inside mt-2 space-y-1 pl-1">
           <li>
-            <strong>Audio input</strong> — Select your microphone or audio interface. At the top of
-            the mixer so the level meter above can show input as soon as you choose.
+            <strong>Mute, Listen, Cue, Limiter</strong> — Top row. Mute silences your mic; Listen lets you hear
+            what listeners hear (on air only); Cue previews sounds for you only (on air only); Limiter
+            sets the ceiling (0, -3, -6, or -12 dB).
           </li>
           <li>
-            <strong>Mic slider</strong> — Adjust microphone volume. Available pre-broadcast.
+            <strong>Audio input</strong> — Select your microphone or audio interface. At the top so the
+            level meter above can show input as soon as you choose.
           </li>
           <li>
-            <strong>Mute</strong> — Silence your mic without losing volume (on air only).
+            <strong>System audio</strong> — Route desktop or app audio into your broadcast. Connect button
+            only; volume and pan are in the Mixer Board below. Browser asks for screen share with
+            audio; video is discarded.
           </li>
           <li>
-            <strong>Listen</strong> — Hear what listeners hear (on air only). Off by default to
-            avoid feedback.
-          </li>
-          <li>
-            <strong>Cue</strong> — Preview mode. Sounds play only for you, nothing goes to
-            listeners (on air only).
-          </li>
-          <li>
-            <strong>Limiter</strong> — 0, -3, -6, or -12 dB. Keeps broadcast from getting too loud.
-            Lower settings catch more peaks; handy for loud sound clips.
-          </li>
-          <li>
-            <strong>System audio</strong> — Route desktop or app audio into your broadcast. Connect
-            before going on air to set levels and prep the mix; the level meter shows the combined
-            mic + system audio. Browser asks for screen share with audio; video is discarded.
-          </li>
-          <li>
-            <strong>Audio quality</strong> — High (510 kbps), Auto (adaptive), or Low (32 kbps
-            mono).
+            <strong>Audio quality</strong> — High (510 kbps), Auto (adaptive), or Low (32 kbps mono).
           </li>
           <li>
             <strong>Record</strong> — Save as 320 kbps MP3. Start before going on air to capture
             from the moment you hit record, or during broadcast for the full mix.
+          </li>
+          <li>
+            <strong>Mixer Board</strong> — Collapsible section with channel strips for Mic, System Audio,
+            and Pads. Each strip has a level slider, Mute (M) and Solo (S) buttons, and a pan knob.
+            Drag the pan knob or use the mouse wheel to adjust stereo position. System Audio strip is
+            grayed when not connected.
           </li>
         </ul>
       </section>
@@ -158,16 +150,16 @@ export default function DocsBroadcaster() {
       <section>
         <h2 className="text-lg font-semibold text-foreground mb-3">Event log & Stats</h2>
         <p>
-          The event log shows connection events, track additions, and chat messages. Download as
-          CSV (icon next to the title). Stats panel shows speed, jitter, delay, packet loss, and
-          listener count when on air.
+          The event log shows connection events, track additions, and chat messages. The header
+          displays the listener count when on air. Download as CSV (icon next to the title). Stats
+          panel shows speed, jitter, delay, and packet loss.
         </p>
       </section>
 
       <section>
         <h2 className="text-lg font-semibold text-foreground mb-3">Recording</h2>
         <p>
-          Press <strong>Record</strong> in the mixer controls to capture as a 320 kbps stereo MP3. A
+          Press <strong>Record</strong> in the audio controls to capture as a 320 kbps stereo MP3. A
           pulsing red dot shows when recording, with elapsed time and file size. When you stop,
           the MP3 downloads automatically. Start recording before going on air to capture from the
           moment you hit record (mic only); during broadcast you capture the full mix. If you end
