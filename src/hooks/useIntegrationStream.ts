@@ -35,8 +35,16 @@ export function useIntegrationStream(): UseIntegrationStreamReturn {
   const ctxRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const chunkCountRef = useRef(0);
+  const flowCheckTimerRef = useRef<number | null>(null);
 
   const stopStream = useCallback(() => {
+    if (flowCheckTimerRef.current !== null) {
+      window.clearTimeout(flowCheckTimerRef.current);
+      flowCheckTimerRef.current = null;
+    }
+    chunkCountRef.current = 0;
+
     // Clean up audio processing
     if (processorRef.current) {
       processorRef.current.disconnect();
@@ -121,6 +129,10 @@ export function useIntegrationStream(): UseIntegrationStreamReturn {
       // Set up MP3 encoding pipeline
       const ctx = new AudioContext({ sampleRate: 44100 });
       ctxRef.current = ctx;
+      await ctx.resume();
+      if (ctx.state !== 'running') {
+        throw new Error('Audio engine is suspended — interact with the page and try again');
+      }
 
       const source = ctx.createMediaStreamSource(stream);
       sourceRef.current = source;
@@ -132,6 +144,13 @@ export function useIntegrationStream(): UseIntegrationStreamReturn {
 
       // lamejs MP3 encoder: 1 channel, 44100 Hz, 128 kbps
       const mp3Encoder = new lame.Mp3Encoder(1, 44100, 128);
+      chunkCountRef.current = 0;
+
+      // Send a short silent warmup frame so source dashboards detect an active stream quickly.
+      const warmup = mp3Encoder.encodeBuffer(new Int16Array(1152));
+      if (warmup.length > 0 && wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(warmup);
+      }
 
       processor.onaudioprocess = (e: AudioProcessingEvent) => {
         if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
@@ -148,11 +167,20 @@ export function useIntegrationStream(): UseIntegrationStreamReturn {
         const mp3buf = mp3Encoder.encodeBuffer(samples);
         if (mp3buf.length > 0) {
           wsRef.current.send(mp3buf);
+          chunkCountRef.current += 1;
         }
       };
 
       source.connect(processor);
       processor.connect(ctx.destination); // ScriptProcessor needs to be connected to work
+
+      // Fail fast if no encoded frames are produced after startup.
+      flowCheckTimerRef.current = window.setTimeout(() => {
+        if (chunkCountRef.current === 0) {
+          setError('Connected to relay, but no audio frames are being produced');
+          stopStream();
+        }
+      }, 5000);
 
       // Handle WebSocket close/error
       ws.onclose = () => {

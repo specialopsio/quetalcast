@@ -856,6 +856,8 @@ integrationWss.on('connection', (ws, req) => {
   let sourceSocket = null;
   let initialized = false;
   let integrationRoomId = null;
+  let firstAudioChunkReceived = false;
+  let firstAudioChunkTimeout = null;
 
   logger.info({ ip }, 'Integration stream WebSocket connected');
 
@@ -892,6 +894,17 @@ integrationWss.on('connection', (ws, req) => {
           });
 
           initialized = true;
+          firstAudioChunkReceived = false;
+
+          // Guard against false "connected" states where auth succeeds but no audio ever arrives.
+          firstAudioChunkTimeout = setTimeout(() => {
+            if (firstAudioChunkReceived) return;
+            logger.warn({ ip, type }, 'Integration stream connected but no audio payload received');
+            if (ws.readyState === ws.OPEN) {
+              ws.send(JSON.stringify({ type: 'error', error: 'Connected to server, but no audio data received' }));
+              ws.close();
+            }
+          }, 8000);
 
           // Store integration info on the room for metadata updates
           if (msgRoomId) {
@@ -916,6 +929,13 @@ integrationWss.on('connection', (ws, req) => {
     // After initialization, relay binary MP3 data to the source socket
     if (sourceSocket && !sourceSocket.destroyed) {
       try {
+        if (!firstAudioChunkReceived) {
+          firstAudioChunkReceived = true;
+          if (firstAudioChunkTimeout) {
+            clearTimeout(firstAudioChunkTimeout);
+            firstAudioChunkTimeout = null;
+          }
+        }
         const data = isBinary ? raw : Buffer.from(raw);
         sourceSocket.write(data);
       } catch (err) {
@@ -925,6 +945,10 @@ integrationWss.on('connection', (ws, req) => {
   });
 
   ws.on('close', () => {
+    if (firstAudioChunkTimeout) {
+      clearTimeout(firstAudioChunkTimeout);
+      firstAudioChunkTimeout = null;
+    }
     if (sourceSocket && !sourceSocket.destroyed) {
       sourceSocket.destroy();
       sourceSocket = null;
@@ -937,6 +961,10 @@ integrationWss.on('connection', (ws, req) => {
 
   ws.on('error', (err) => {
     logger.error({ ip, error: err.message }, 'Integration stream WebSocket error');
+    if (firstAudioChunkTimeout) {
+      clearTimeout(firstAudioChunkTimeout);
+      firstAudioChunkTimeout = null;
+    }
     if (sourceSocket && !sourceSocket.destroyed) {
       sourceSocket.destroy();
       sourceSocket = null;
