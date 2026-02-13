@@ -123,10 +123,12 @@ export function useAudioMixer(): UseAudioMixerReturn {
     padsAnalyser.fftSize = 256;
     padsAnalyser.smoothingTimeConstant = 0.7;
 
-    // Force broadcastBus to always process in stereo so a mono mic
-    // is properly upmixed to both L and R channels before output.
+    // Keep bus stereo but let Web Audio perform normal speaker upmix/downmix.
+    // Using explicit channel mode here can leave mono sources effectively left-only
+    // until a panner move re-distributes channels.
     broadcastBus.channelCount = 2;
-    broadcastBus.channelCountMode = 'explicit';
+    broadcastBus.channelCountMode = 'max';
+    broadcastBus.channelInterpretation = 'speakers';
 
     // Default gains
     micGain.gain.value = 1;
