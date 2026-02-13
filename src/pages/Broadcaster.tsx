@@ -146,48 +146,6 @@ function PanKnob({
 
 const MIXER_SLIDER_CLASS = [
   "flex-1 min-w-0",
-  "[&>*:first-child]:h-2.5",
-  "[&>*:first-child]:relative",
-  "[&>*:first-child]:overflow-hidden",
-  "[&>*:first-child]:rounded-full",
-  "[&>*:first-child]:border",
-  "[&>*:first-child]:border-border/80",
-  "[&>*:first-child]:bg-[linear-gradient(180deg,rgba(10,10,10,0.92)_0%,rgba(34,34,34,0.95)_45%,rgba(12,12,12,0.96)_100%)]",
-  "[&>*:first-child]:shadow-[inset_0_1px_2px_rgba(255,255,255,0.06),inset_0_-1px_2px_rgba(0,0,0,0.8),0_1px_1px_rgba(0,0,0,0.35)]",
-  "[&>*:first-child]:before:content-['']",
-  "[&>*:first-child]:before:absolute",
-  "[&>*:first-child]:before:inset-x-0",
-  "[&>*:first-child]:before:top-[1px]",
-  "[&>*:first-child]:before:h-px",
-  "[&>*:first-child]:before:bg-white/20",
-  "[&>*:first-child]:after:content-['']",
-  "[&>*:first-child]:after:absolute",
-  "[&>*:first-child]:after:inset-x-0",
-  "[&>*:first-child]:after:bottom-[1px]",
-  "[&>*:first-child]:after:h-px",
-  "[&>*:first-child]:after:bg-black/45",
-  "[&>*:first-child>*]:bg-gradient-to-r",
-  "[&>*:first-child>*]:from-primary/80",
-  "[&>*:first-child>*]:via-primary",
-  "[&>*:first-child>*]:to-emerald-700",
-  "[&>*:first-child>*]:shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_0_10px_rgba(34,197,94,0.2)]",
-  "[&>[role=slider]]:h-6",
-  "[&>[role=slider]]:w-4",
-  "[&>[role=slider]]:rounded-[3px]",
-  "[&>[role=slider]]:border-border/90",
-  "[&>[role=slider]]:bg-[linear-gradient(180deg,rgba(241,241,241,0.95)_0%,rgba(184,184,184,0.95)_46%,rgba(120,120,120,0.96)_100%)]",
-  "[&>[role=slider]]:relative",
-  "[&>[role=slider]]:overflow-hidden",
-  "[&>[role=slider]]:ring-1",
-  "[&>[role=slider]]:ring-black/35",
-  "[&>[role=slider]]:shadow-[0_2px_3px_rgba(0,0,0,0.48),inset_0_1px_0_rgba(255,255,255,0.35),inset_0_-1px_0_rgba(0,0,0,0.55)]",
-  "[&>[role=slider]]:before:content-['']",
-  "[&>[role=slider]]:before:absolute",
-  "[&>[role=slider]]:before:inset-x-[3px]",
-  "[&>[role=slider]]:before:top-[2px]",
-  "[&>[role=slider]]:before:bottom-[2px]",
-  "[&>[role=slider]]:before:rounded-[2px]",
-  "[&>[role=slider]]:before:bg-[repeating-linear-gradient(180deg,rgba(255,255,255,0.35)_0_1px,rgba(255,255,255,0)_1px_3px)]",
 ].join(' ');
 
 const Broadcaster = () => {
@@ -1303,6 +1261,7 @@ const Broadcaster = () => {
                           min={0}
                           max={100}
                           step={1}
+                          sliderVariant="mixer"
                           className={MIXER_SLIDER_CLASS}
                         />
                         <PanKnob value={micPan} onChange={setMicPan} />
@@ -1339,6 +1298,7 @@ const Broadcaster = () => {
                           max={100}
                           step={1}
                           disabled={!systemAudioActive}
+                          sliderVariant="mixer"
                           className={MIXER_SLIDER_CLASS}
                         />
                         <PanKnob value={systemAudioPan} onChange={setSystemAudioPan} disabled={!systemAudioActive} />
@@ -1372,6 +1332,7 @@ const Broadcaster = () => {
                           min={0}
                           max={100}
                           step={1}
+                          sliderVariant="mixer"
                           className={MIXER_SLIDER_CLASS}
                         />
                         <PanKnob value={padsPan} onChange={setPadsPan} />
