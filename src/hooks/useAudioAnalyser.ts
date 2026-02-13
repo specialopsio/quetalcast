@@ -48,6 +48,7 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
   const leftAnalyserRef = useRef<AnalyserNode | null>(null);
   const rightAnalyserRef = useRef<AnalyserNode | null>(null);
   const rafRef = useRef<number>(0);
+  const monoHintRef = useRef(false);
   const monoMirrorRef = useRef(false);
 
   // Per-channel peak state
@@ -79,7 +80,17 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
       }
     }
 
-    // Peak hold with decay — right (or mirror left for known mono sources)
+    // Mono handling: only mirror when we have a mono hint *and* right channel
+    // remains effectively silent. If right becomes active, immediately unmirror.
+    if (monoHintRef.current) {
+      const rightActive = right.rmsDb > -45 || right.peakDb > -35;
+      const leftActive = left.rmsDb > -50 || left.peakDb > -40;
+      monoMirrorRef.current = !rightActive && leftActive;
+    } else {
+      monoMirrorRef.current = false;
+    }
+
+    // Peak hold with decay — right (or mirrored left in mono mode)
     if (monoMirrorRef.current) {
       rightPeakRef.current = leftPeakRef.current;
       rightDecayRef.current = leftDecayRef.current;
@@ -107,6 +118,7 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
 
   useEffect(() => {
     if (!stream || stream.getTracks().length === 0) {
+      monoHintRef.current = false;
       monoMirrorRef.current = false;
       setAnalysis(EMPTY_ANALYSIS);
       return;
@@ -120,9 +132,10 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
     const source = ctx.createMediaStreamSource(stream);
     const track = stream.getAudioTracks()[0];
     const channels = track?.getSettings?.().channelCount;
-    // Mirror only when the track explicitly reports mono.
-    // If unknown/undefined, treat as stereo to avoid false linked-mono display.
-    monoMirrorRef.current = channels === 1;
+    // Some browsers/devices report mono channelCount for paths that still carry
+    // stereo content. Treat this only as a hint; runtime activity decides mirror.
+    monoHintRef.current = channels === 1;
+    monoMirrorRef.current = false;
 
     const splitter = ctx.createChannelSplitter(2);
 

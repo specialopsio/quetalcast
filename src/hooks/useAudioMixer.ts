@@ -419,8 +419,10 @@ export function useAudioMixer(): UseAudioMixerReturn {
       sum += normalized * normalized;
     }
     const rms = Math.sqrt(sum / data.length);
-    // Map low-level RMS into useful UI range
-    return Math.max(0, Math.min(1, rms * 3.2));
+    if (rms <= 0) return 0;
+    // Use dB-like scaling so mini LEDs track the main meter feel more closely.
+    const db = Math.max(-60, 20 * Math.log10(rms));
+    return Math.max(0, Math.min(1, (db + 60) / 60));
   }, []);
 
   const getChannelLevels = useCallback(() => {
