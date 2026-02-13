@@ -43,6 +43,8 @@ export function useAudioMixer(): UseAudioMixerReturn {
   const ctxRef = useRef<AudioContext | null>(null);
   const destRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   const micSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const micPrepSplitterRef = useRef<ChannelSplitterNode | null>(null);
+  const micPrepMergerRef = useRef<ChannelMergerNode | null>(null);
   const sysAudioSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const sysAudioGainRef = useRef<GainNode | null>(null);
   const sysAudioPanRef = useRef<StereoPannerNode | null>(null);
@@ -221,7 +223,25 @@ export function useAudioMixer(): UseAudioMixerReturn {
       }
 
       const source = ctx.createMediaStreamSource(stream);
-      source.connect(micGain);
+      const track = stream.getAudioTracks()[0];
+      const channels = track?.getSettings?.().channelCount;
+
+      // Normalize mic input to 2ch before the mixer path.
+      // - 2ch sources keep L/R separation.
+      // - Non-2ch sources are duplicated to both sides.
+      const splitter = ctx.createChannelSplitter(2);
+      const merger = ctx.createChannelMerger(2);
+      source.connect(splitter);
+      splitter.connect(merger, 0, 0);
+      if (channels === 2) {
+        splitter.connect(merger, 1, 1);
+      } else {
+        splitter.connect(merger, 0, 1);
+      }
+      merger.connect(micGain);
+
+      micPrepSplitterRef.current = splitter;
+      micPrepMergerRef.current = merger;
       micGain.connect(micVolumeGainRef.current!);
       micSourceRef.current = source;
     },
@@ -236,6 +256,14 @@ export function useAudioMixer(): UseAudioMixerReturn {
         // already disconnected
       }
       micSourceRef.current = null;
+    }
+    if (micPrepSplitterRef.current) {
+      try { micPrepSplitterRef.current.disconnect(); } catch {}
+      micPrepSplitterRef.current = null;
+    }
+    if (micPrepMergerRef.current) {
+      try { micPrepMergerRef.current.disconnect(); } catch {}
+      micPrepMergerRef.current = null;
     }
   }, []);
 
