@@ -51,11 +51,13 @@ export default function DocsBroadcaster() {
             from the moment you hit record, or during broadcast for the full mix.
           </li>
           <li>
-            <strong>Mixer Board</strong> — Collapsible section with channel strips for Mic, System Audio,
-            and SOUND PADS. Each strip has a level slider, Mute (M) and Solo (S) buttons, and a pan knob.
-            Strip labels show the current level inline (for example, <code>Mic 100%</code>). Pan readouts
-            are always visible above each knob; drag or mouse-wheel to adjust stereo position, and
-            double-click to center. System Audio strip is grayed when not connected.
+            <strong>Mixer Board</strong> — Collapsible section with channel strips in this order: Mic,
+            SOUND PADS, then System Audio. Each strip has a level slider, Mute (M) and Solo (S)
+            buttons, and a pan knob. A vertical LED signal meter (live audio level, not slider value)
+            appears at the left of each strip label. Strip labels also show the current level inline
+            (for example, <code>Mic 100%</code>). Pan readouts are always visible above each knob; drag
+            or mouse-wheel to adjust stereo position, and double-click to center. System Audio strip
+            is grayed when not connected.
           </li>
         </ul>
       </section>
