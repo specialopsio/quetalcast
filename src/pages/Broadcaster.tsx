@@ -85,6 +85,10 @@ function PanKnob({
         className={`relative h-10 w-10 rounded-full border border-border/80 bg-gradient-to-b from-secondary to-background shadow-[inset_0_1px_4px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.35)] ${disabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
         onMouseEnter={() => setHovering(true)}
         onMouseLeave={() => setHovering(false)}
+        onDoubleClick={() => {
+          if (disabled) return;
+          onChange(0);
+        }}
         onWheel={(e) => {
           e.preventDefault();
           nudge(e.deltaY > 0 ? -3 : 3);
@@ -142,25 +146,32 @@ function PanKnob({
 
 const MIXER_SLIDER_CLASS = [
   "flex-1 min-w-0",
-  "[&>*:first-child]:h-2.5",
+  "[&>*:first-child]:h-3",
+  "[&>*:first-child]:relative",
   "[&>*:first-child]:rounded-full",
   "[&>*:first-child]:border",
-  "[&>*:first-child]:border-border/70",
+  "[&>*:first-child]:border-border/80",
   "[&>*:first-child]:bg-gradient-to-b",
-  "[&>*:first-child]:from-secondary",
-  "[&>*:first-child]:to-background",
-  "[&>*:first-child]:shadow-[inset_0_1px_3px_rgba(0,0,0,0.45)]",
+  "[&>*:first-child]:from-background",
+  "[&>*:first-child]:via-secondary/90",
+  "[&>*:first-child]:to-background/85",
+  "[&>*:first-child]:shadow-[inset_0_1px_1px_rgba(255,255,255,0.08),inset_0_-1px_2px_rgba(0,0,0,0.65),0_1px_1px_rgba(0,0,0,0.4)]",
   "[&>*:first-child>*]:bg-gradient-to-r",
-  "[&>*:first-child>*]:from-primary/90",
+  "[&>*:first-child>*]:from-primary/75",
+  "[&>*:first-child>*]:via-primary/95",
   "[&>*:first-child>*]:to-primary",
-  "[&>*:first-child>*]:shadow-[0_0_8px_rgba(34,197,94,0.25)]",
-  "[&>[role=slider]]:h-5",
-  "[&>[role=slider]]:w-5",
+  "[&>*:first-child>*]:shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_10px_rgba(34,197,94,0.25)]",
+  "[&>[role=slider]]:h-7",
+  "[&>[role=slider]]:w-4",
+  "[&>[role=slider]]:rounded-[4px]",
   "[&>[role=slider]]:border-border/80",
   "[&>[role=slider]]:bg-gradient-to-b",
-  "[&>[role=slider]]:from-background",
+  "[&>[role=slider]]:from-secondary/95",
+  "[&>[role=slider]]:via-background",
   "[&>[role=slider]]:to-secondary",
-  "[&>[role=slider]]:shadow-[0_1px_2px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.05)]",
+  "[&>[role=slider]]:ring-1",
+  "[&>[role=slider]]:ring-black/25",
+  "[&>[role=slider]]:shadow-[0_2px_3px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.22),inset_0_-1px_0_rgba(0,0,0,0.45)]",
 ].join(' ');
 
 const Broadcaster = () => {
@@ -1321,7 +1332,7 @@ const Broadcaster = () => {
                     {/* Pads strip */}
                     <div className="rounded-md border border-border/70 p-2.5 space-y-2 bg-gradient-to-b from-background to-background/60">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-foreground">Pads</span>
+                        <span className="text-xs font-semibold text-foreground">SOUND PADS</span>
                         <span className="text-xs font-mono text-muted-foreground tabular-nums">{padsMuted ? '—' : `${padsVolume}%`}</span>
                       </div>
                       <div className="flex items-center gap-2">
