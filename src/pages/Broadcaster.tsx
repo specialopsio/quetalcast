@@ -102,23 +102,20 @@ function PanKnob({
   const label = clamped === 0 ? 'C' : clamped < 0 ? `L${Math.abs(clamped)}` : `R${clamped}`;
   const knobRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ pointerId: number; startX: number; startY: number; startValue: number } | null>(null);
-  const [hovering, setHovering] = useState(false);
-  const [dragging, setDragging] = useState(false);
 
   const nudge = useCallback((delta: number) => {
     if (disabled) return;
     onChange(Math.max(-100, Math.min(100, clamped + delta)));
   }, [disabled, onChange, clamped]);
 
-  const showReadout = hovering || dragging;
-
   return (
     <div className={`relative flex items-center justify-center w-14 ${disabled ? 'opacity-40' : ''}`}>
+      <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-[10px] font-mono text-muted-foreground">
+        {label}
+      </span>
       <div
         ref={knobRef}
         className={`relative h-10 w-10 rounded-full border border-border/80 bg-gradient-to-b from-secondary to-background shadow-[inset_0_1px_4px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.35)] ${disabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
-        onMouseEnter={() => setHovering(true)}
-        onMouseLeave={() => setHovering(false)}
         onDoubleClick={() => {
           if (disabled) return;
           onChange(0);
@@ -136,7 +133,6 @@ function PanKnob({
             startY: e.clientY,
             startValue: clamped,
           };
-          setDragging(true);
           knobRef.current?.setPointerCapture(e.pointerId);
         }}
         onPointerMove={(e) => {
@@ -150,7 +146,6 @@ function PanKnob({
         onPointerUp={(e) => {
           if (dragRef.current?.pointerId === e.pointerId) {
             dragRef.current = null;
-            setDragging(false);
             if (knobRef.current?.hasPointerCapture(e.pointerId)) {
               knobRef.current.releasePointerCapture(e.pointerId);
             }
@@ -159,7 +154,6 @@ function PanKnob({
         onPointerCancel={(e) => {
           if (dragRef.current?.pointerId === e.pointerId) {
             dragRef.current = null;
-            setDragging(false);
             if (knobRef.current?.hasPointerCapture(e.pointerId)) {
               knobRef.current.releasePointerCapture(e.pointerId);
             }
@@ -171,9 +165,6 @@ function PanKnob({
           style={{ transform: `translate(-50%, -88%) rotate(${angle}deg)`, transformOrigin: '50% 150%' }}
         />
       </div>
-      {showReadout && (
-        <span className="absolute -bottom-4 text-[10px] font-mono text-muted-foreground">{label}</span>
-      )}
     </div>
   );
 }
@@ -1340,9 +1331,10 @@ const Broadcaster = () => {
                   <AccordionContent className="pt-2 space-y-3">
                     {/* Mic strip */}
                     <div className="rounded-md border border-border/70 p-2.5 space-y-2 bg-gradient-to-b from-background to-background/60">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-foreground">Mic</span>
-                        <span className="text-xs font-mono text-muted-foreground tabular-nums">{micMuted ? '—' : `${micVolume}%`}</span>
+                      <div className="flex items-center">
+                        <span className="text-xs font-semibold text-foreground">
+                          Mic <span className="font-mono text-muted-foreground tabular-nums">{micMuted ? '—' : `${micVolume}%`}</span>
+                        </span>
                       </div>
                       <div className="flex items-center gap-2">
                         <button
@@ -1374,9 +1366,10 @@ const Broadcaster = () => {
 
                     {/* System strip */}
                     <div className={`rounded-md border p-2.5 space-y-2 bg-gradient-to-b from-background to-background/60 ${systemAudioActive ? 'border-border/70' : 'border-border/40 opacity-50'}`}>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-foreground">System Audio</span>
-                        <span className="text-xs font-mono text-muted-foreground tabular-nums">{systemAudioActive ? `${systemAudioVolume}%` : 'OFF'}</span>
+                      <div className="flex items-center">
+                        <span className="text-xs font-semibold text-foreground">
+                          System Audio <span className="font-mono text-muted-foreground tabular-nums">{systemAudioActive ? `${systemAudioVolume}%` : 'OFF'}</span>
+                        </span>
                       </div>
                       <div className="flex items-center gap-2">
                         <button
@@ -1411,9 +1404,10 @@ const Broadcaster = () => {
 
                     {/* Pads strip */}
                     <div className="rounded-md border border-border/70 p-2.5 space-y-2 bg-gradient-to-b from-background to-background/60">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-foreground">SOUND PADS</span>
-                        <span className="text-xs font-mono text-muted-foreground tabular-nums">{padsMuted ? '—' : `${padsVolume}%`}</span>
+                      <div className="flex items-center">
+                        <span className="text-xs font-semibold text-foreground">
+                          SOUND PADS <span className="font-mono text-muted-foreground tabular-nums">{padsMuted ? '—' : `${padsVolume}%`}</span>
+                        </span>
                       </div>
                       <div className="flex items-center gap-2">
                         <button
