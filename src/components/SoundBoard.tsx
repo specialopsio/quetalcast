@@ -13,6 +13,7 @@ interface PadState {
   file: File | null;
   audioEl: HTMLAudioElement | null;
   objectUrl: string | null;
+  dataUrl: string | null;
   title: string;
   volume: number; // 0–300
   gainNode: GainNode | null;
@@ -24,6 +25,7 @@ const EMPTY_PAD: PadState = {
   file: null,
   audioEl: null,
   objectUrl: null,
+  dataUrl: null,
   title: '',
   volume: 100,
   gainNode: null,
@@ -32,6 +34,23 @@ const EMPTY_PAD: PadState = {
 };
 
 const PAD_COUNT = 10;
+const SOUNDBOARD_STORAGE_KEY = 'quetalcast:soundboard:v1';
+
+interface StoredPad {
+  title: string;
+  volume: number;
+  loop: boolean;
+  dataUrl: string | null;
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ''));
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+}
 
 interface SoundBoardProps {
   connectElement: (audio: HTMLAudioElement) => GainNode | null;
@@ -55,12 +74,74 @@ export function SoundBoard({ connectElement, triggerRef }: SoundBoardProps) {
     setPads((prev) => prev.map((p, i) => (i === index ? { ...p, ...update } : p)));
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const bootstrap = async () => {
+      try {
+        const raw = localStorage.getItem(SOUNDBOARD_STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw) as StoredPad[] | null;
+        if (!Array.isArray(parsed)) return;
+
+        const nextPads = await Promise.all(
+          Array.from({ length: PAD_COUNT }, async (_, index): Promise<PadState> => {
+            const stored = parsed[index];
+            if (!stored?.dataUrl) return { ...EMPTY_PAD };
+
+            const audio = new Audio(stored.dataUrl);
+            audio.loop = Boolean(stored.loop);
+            audio.volume = 1;
+            const gainNode = connectElement(audio);
+            if (gainNode) gainNode.gain.value = (stored.volume ?? 100) / 100;
+            audio.addEventListener('ended', () => {
+              setPads((prev) => prev.map((p, i) => (i === index ? { ...p, isPlaying: false } : p)));
+            });
+
+            return {
+              file: null,
+              audioEl: audio,
+              objectUrl: null,
+              dataUrl: stored.dataUrl,
+              title: stored.title || `Pad ${index + 1}`,
+              volume: typeof stored.volume === 'number' ? stored.volume : 100,
+              gainNode,
+              loop: Boolean(stored.loop),
+              isPlaying: false,
+            };
+          }),
+        );
+
+        if (!cancelled) setPads(nextPads);
+      } catch {
+        // Ignore invalid persisted payloads
+      }
+    };
+    void bootstrap();
+    return () => {
+      cancelled = true;
+    };
+  }, [connectElement]);
+
+  useEffect(() => {
+    const serializable: StoredPad[] = pads.map((p) => ({
+      title: p.title,
+      volume: p.volume,
+      loop: p.loop,
+      dataUrl: p.dataUrl,
+    }));
+    try {
+      localStorage.setItem(SOUNDBOARD_STORAGE_KEY, JSON.stringify(serializable));
+    } catch {
+      // Most likely quota exceeded; keep runtime state functional.
+    }
+  }, [pads]);
+
   const handleLoadFile = (index: number) => {
     activePadRef.current = index;
     fileInputRef.current?.click();
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     const index = activePadRef.current;
     if (!file || index === null) return;
@@ -77,6 +158,12 @@ export function SoundBoard({ connectElement, triggerRef }: SoundBoardProps) {
 
     const objectUrl = URL.createObjectURL(file);
     const audio = new Audio(objectUrl);
+    let dataUrl: string | null = null;
+    try {
+      dataUrl = await fileToDataUrl(file);
+    } catch {
+      dataUrl = null;
+    }
 
     // Connect to the mixer so it routes to broadcast + local speakers
     const gainNode = connectElement(audio);
@@ -94,6 +181,7 @@ export function SoundBoard({ connectElement, triggerRef }: SoundBoardProps) {
       file,
       audioEl: audio,
       objectUrl,
+      dataUrl,
       title: defaultTitle,
       volume: 100,
       gainNode,

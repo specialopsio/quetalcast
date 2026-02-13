@@ -261,6 +261,7 @@ export interface UseMicEffectsReturn {
   effects: Record<EffectName, EffectState>;
   toggleEffect: (name: EffectName) => void;
   updateEffect: (name: EffectName, params: Record<string, number>) => void;
+  replaceEffects: (next: Partial<Record<EffectName, EffectState>>) => void;
   insertIntoChain: (ctx: AudioContext, input: AudioNode, output: AudioNode) => Promise<void>;
   removeFromChain: () => void;
 }
@@ -420,5 +421,49 @@ export function useMicEffects(): UseMicEffectsReturn {
     }
   }, []);
 
-  return { effects, toggleEffect, updateEffect, insertIntoChain, removeFromChain };
+  const replaceEffects = useCallback((next: Partial<Record<EffectName, EffectState>>) => {
+    const merged = buildInitialState();
+    for (const name of CHAIN_ORDER) {
+      const incoming = next[name];
+      if (!incoming) continue;
+      merged[name] = {
+        enabled: Boolean(incoming.enabled),
+        params: { ...merged[name].params, ...(incoming.params ?? {}) },
+      };
+    }
+
+    audioStateRef.current = merged;
+    setEffects(merged);
+
+    if (effectNodesRef.current && ctxRef.current) {
+      for (const name of CHAIN_ORDER) {
+        const nodeSet = effectNodesRef.current[name];
+        const fullParams = merged[name].params;
+        switch (name) {
+          case 'enhance':
+            applyEnhanceParams(nodeSet, fullParams);
+            break;
+          case 'tone':
+            applyToneParams(nodeSet, fullParams);
+            break;
+          case 'compressor':
+            applyCompressorParams(nodeSet, fullParams);
+            break;
+          case 'voiceShift':
+            applyVoiceShiftParams(nodeSet, fullParams);
+            break;
+          case 'delay':
+            applyDelayParams(nodeSet, fullParams);
+            break;
+          case 'echo':
+            applyEchoParams(ctxRef.current, nodeSet, fullParams);
+            break;
+        }
+      }
+    }
+
+    rebuildChain();
+  }, [rebuildChain]);
+
+  return { effects, toggleEffect, updateEffect, replaceEffects, insertIntoChain, removeFromChain };
 }

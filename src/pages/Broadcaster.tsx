@@ -54,6 +54,40 @@ const WS_URL = import.meta.env.VITE_WS_URL || (
     : `ws://${window.location.hostname}:3001`
 );
 
+const BROADCASTER_LAYOUT_STORAGE_KEY = 'quetalcast:broadcaster-layout:v1';
+
+type PersistedBroadcasterLayout = {
+  qualityMode: AudioQuality;
+  limiterDb: 0 | -3 | -6 | -12;
+  micVolume: number;
+  micMuted: boolean;
+  micSolo: boolean;
+  micPan: number;
+  systemAudioVolume: number;
+  systemAudioMuted: boolean;
+  systemAudioSolo: boolean;
+  systemAudioPan: number;
+  padsVolume: number;
+  padsMuted: boolean;
+  padsSolo: boolean;
+  padsPan: number;
+  selectedDevice: string;
+  boardAccordion: string;
+  boardExpanded: boolean;
+  effects: Record<EffectName, { enabled: boolean; params: Record<string, number> }>;
+};
+
+function readPersistedLayout(): Partial<PersistedBroadcasterLayout> | null {
+  try {
+    const raw = localStorage.getItem(BROADCASTER_LAYOUT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PersistedBroadcasterLayout>;
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function PanKnob({
   value,
   onChange,
@@ -598,7 +632,6 @@ const Broadcaster = () => {
         mixer.disconnectSystemAudio();
         systemAudioStreamRef.current = null;
         setSystemAudioActive(false);
-        setSystemAudioVolume(100);
       }
     }
   }, [recorder.recording, micEffects, mixer, localStream, systemAudioActive]);
@@ -617,7 +650,6 @@ const Broadcaster = () => {
         mixer.disconnectSystemAudio();
         systemAudioStreamRef.current = null;
         setSystemAudioActive(false);
-        setSystemAudioVolume(100);
       }
     } else {
       recordingAfterBroadcastRef.current = true;
@@ -762,7 +794,6 @@ const Broadcaster = () => {
       mixer.disconnectSystemAudio();
       systemAudioStreamRef.current = null;
       setSystemAudioActive(false);
-      setSystemAudioVolume(100);
       // If we connected mic for prep (not on air), disconnect it
       if (!isOnAir) {
         micEffects.removeFromChain();
@@ -834,7 +865,6 @@ const Broadcaster = () => {
       audioTracks[0].addEventListener('ended', () => {
         systemAudioStreamRef.current = null;
         setSystemAudioActive(false);
-        setSystemAudioVolume(100);
         if (!isOnAirRef.current) {
           micEffects.removeFromChain();
           mixer.disconnectMic();
@@ -864,27 +894,15 @@ const Broadcaster = () => {
     onTriggerPad: (index: number) => soundboardTriggerRef.current?.(index),
   });
 
-  // Reset controls when going off air (keep logs and trackList until new broadcast)
+  // Reset volatile display state when going off air (keep persisted layout controls).
   useEffect(() => {
     if (!isOnAir) {
-      setMicVolume(100);
-      setMicMuted(false);
-      setMicSolo(false);
-      setMicPan(0);
       setListening(false);
       setCueMode(false);
-      setLimiterDb(0);
       setElapsedSeconds(0);
       setListenerCount(0);
       setNowPlaying('');
       setNowPlayingCover(undefined);
-      setSystemAudioMuted(false);
-      setSystemAudioSolo(false);
-      setSystemAudioPan(0);
-      setPadsVolume(100);
-      setPadsMuted(false);
-      setPadsSolo(false);
-      setPadsPan(0);
     }
   }, [isOnAir]);
 
@@ -915,6 +933,92 @@ const Broadcaster = () => {
   };
 
   const integrationInfo = selectedIntegration ? getIntegration(selectedIntegration.integrationId) : null;
+
+  const restoredLayoutRef = useRef(false);
+  useEffect(() => {
+    if (restoredLayoutRef.current) return;
+    restoredLayoutRef.current = true;
+    const saved = readPersistedLayout();
+    if (!saved) return;
+
+    if (saved.selectedDevice) setSelectedDevice(saved.selectedDevice);
+    if (saved.qualityMode) {
+      setQualityMode(saved.qualityMode);
+      webrtc.setAudioQuality(saved.qualityMode);
+    }
+    if (typeof saved.limiterDb === 'number') {
+      setLimiterDb(saved.limiterDb);
+      mixer.setLimiterThreshold(saved.limiterDb);
+    }
+    if (typeof saved.micVolume === 'number') setMicVolume(saved.micVolume);
+    if (typeof saved.micMuted === 'boolean') setMicMuted(saved.micMuted);
+    if (typeof saved.micSolo === 'boolean') setMicSolo(saved.micSolo);
+    if (typeof saved.micPan === 'number') setMicPan(saved.micPan);
+
+    if (typeof saved.systemAudioVolume === 'number') setSystemAudioVolume(saved.systemAudioVolume);
+    if (typeof saved.systemAudioMuted === 'boolean') setSystemAudioMuted(saved.systemAudioMuted);
+    if (typeof saved.systemAudioSolo === 'boolean') setSystemAudioSolo(saved.systemAudioSolo);
+    if (typeof saved.systemAudioPan === 'number') setSystemAudioPan(saved.systemAudioPan);
+
+    if (typeof saved.padsVolume === 'number') setPadsVolume(saved.padsVolume);
+    if (typeof saved.padsMuted === 'boolean') setPadsMuted(saved.padsMuted);
+    if (typeof saved.padsSolo === 'boolean') setPadsSolo(saved.padsSolo);
+    if (typeof saved.padsPan === 'number') setPadsPan(saved.padsPan);
+
+    if (typeof saved.boardExpanded === 'boolean') setBoardExpanded(saved.boardExpanded);
+    if (typeof saved.boardAccordion === 'string' && saved.boardAccordion) setBoardAccordion(saved.boardAccordion);
+
+    if (saved.effects) {
+      micEffects.replaceEffects(saved.effects);
+    }
+  }, [micEffects, mixer, webrtc]);
+
+  useEffect(() => {
+    const payload: PersistedBroadcasterLayout = {
+      qualityMode,
+      limiterDb,
+      micVolume,
+      micMuted,
+      micSolo,
+      micPan,
+      systemAudioVolume,
+      systemAudioMuted,
+      systemAudioSolo,
+      systemAudioPan,
+      padsVolume,
+      padsMuted,
+      padsSolo,
+      padsPan,
+      selectedDevice,
+      boardAccordion,
+      boardExpanded,
+      effects: micEffects.effects,
+    };
+    try {
+      localStorage.setItem(BROADCASTER_LAYOUT_STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      // Ignore quota errors and keep runtime behavior intact.
+    }
+  }, [
+    qualityMode,
+    limiterDb,
+    micVolume,
+    micMuted,
+    micSolo,
+    micPan,
+    systemAudioVolume,
+    systemAudioMuted,
+    systemAudioSolo,
+    systemAudioPan,
+    padsVolume,
+    padsMuted,
+    padsSolo,
+    padsPan,
+    selectedDevice,
+    boardAccordion,
+    boardExpanded,
+    micEffects.effects,
+  ]);
 
   return (
     <div className="min-h-[100dvh] bg-background flex flex-col">
@@ -1547,7 +1651,6 @@ const Broadcaster = () => {
                       mixer.disconnectSystemAudio();
                       systemAudioStreamRef.current = null;
                       setSystemAudioActive(false);
-                      setSystemAudioVolume(100);
                     }
                   }
                   await downloadBroadcastZip(logs, trackList, webrtc.roomId ?? undefined, mp3Blob);
