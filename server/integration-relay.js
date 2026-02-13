@@ -1,10 +1,68 @@
 import net from 'net';
 
+function toTrimmedString(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeMount(mountValue) {
+  let mount = toTrimmedString(mountValue);
+  if (!mount) return '';
+
+  // Accept pasted full URL and extract only the pathname.
+  if (mount.includes('://')) {
+    try {
+      const parsed = new URL(mount);
+      mount = parsed.pathname || '/';
+    } catch {
+      // Keep original if URL parsing fails.
+    }
+  }
+
+  const queryIndex = mount.indexOf('?');
+  if (queryIndex !== -1) mount = mount.slice(0, queryIndex);
+  const hashIndex = mount.indexOf('#');
+  if (hashIndex !== -1) mount = mount.slice(0, hashIndex);
+
+  if (!mount.startsWith('/')) mount = `/${mount}`;
+  mount = mount.replace(/\/{2,}/g, '/');
+  if (mount.length > 1 && mount.endsWith('/')) mount = mount.slice(0, -1);
+
+  return mount;
+}
+
+function normalizeIcecastCredentials({ host, port, mount, password, username }) {
+  let normalizedHost = toTrimmedString(host);
+  let normalizedPort = toTrimmedString(port);
+  let normalizedMount = normalizeMount(mount);
+
+  // Accept pasted full host URL and extract host/port/path.
+  if (normalizedHost.includes('://')) {
+    try {
+      const parsed = new URL(normalizedHost);
+      normalizedHost = parsed.hostname;
+      if (!normalizedPort && parsed.port) normalizedPort = parsed.port;
+      if (!normalizedMount || normalizedMount === '/') {
+        normalizedMount = normalizeMount(parsed.pathname || '/');
+      }
+    } catch {
+      // Keep original if URL parsing fails.
+    }
+  }
+
+  return {
+    host: normalizedHost,
+    port: normalizedPort,
+    mount: normalizedMount,
+    password: toTrimmedString(password),
+    username: toTrimmedString(username) || 'source',
+  };
+}
+
 /**
  * Connect to an Icecast server as a source client.
  *
  * Protocol:
- *   → SOURCE /mount ICE/1.0\r\n
+ *   → SOURCE /mount HTTP/1.0\r\n
  *   → content-type: audio/mpeg\r\n
  *   → Authorization: Basic base64(username:password)\r\n
  *   → ice-name: QuetalCast\r\n
@@ -16,28 +74,28 @@ import net from 'net';
  */
 export function connectIcecast({ host, port, mount, password, username }, logger) {
   return new Promise((resolve, reject) => {
-    const portNum = parseInt(port, 10);
-    if (!host || !portNum || !mount || !password) {
+    const normalized = normalizeIcecastCredentials({ host, port, mount, password, username });
+    const portNum = parseInt(normalized.port, 10);
+    if (!normalized.host || !portNum || !normalized.mount || !normalized.password) {
       return reject(new Error('Missing Icecast credentials'));
     }
 
-    // Ensure mount starts with /
-    const mountPath = mount.startsWith('/') ? mount : `/${mount}`;
+    const mountPath = normalized.mount;
+    const sourceUser = normalized.username;
 
-    // Source username defaults to 'source' (Icecast standard)
-    const sourceUser = username?.trim() || 'source';
-
-    const socket = net.createConnection(portNum, host);
+    const socket = net.createConnection(portNum, normalized.host);
+    let settled = false;
 
     const timeout = setTimeout(() => {
+      settled = true;
       socket.destroy();
       reject(new Error('Icecast connection timeout'));
     }, 10000);
 
     socket.once('connect', () => {
-      const authStr = Buffer.from(`${sourceUser}:${password}`).toString('base64');
+      const authStr = Buffer.from(`${sourceUser}:${normalized.password}`).toString('base64');
       const request = [
-        `SOURCE ${mountPath} ICE/1.0`,
+        `SOURCE ${mountPath} HTTP/1.0`,
         `content-type: audio/mpeg`,
         `Authorization: Basic ${authStr}`,
         `User-Agent: QuetalCast/1.0`,
@@ -50,22 +108,42 @@ export function connectIcecast({ host, port, mount, password, username }, logger
       socket.write(request);
     });
 
-    socket.once('data', (data) => {
+    let responseBuffer = '';
+    const onHandshakeData = (data) => {
+      if (settled) return;
+      responseBuffer += data.toString();
+
+      const hasHeaderEnd = responseBuffer.includes('\r\n\r\n');
+      if (!hasHeaderEnd && responseBuffer.length < 2048) return;
+
       clearTimeout(timeout);
-      const resp = data.toString();
-      if (resp.includes('200 OK')) {
-        logger?.info({ host, port: portNum, mount: mountPath }, 'Icecast source connected');
+      settled = true;
+      socket.off('data', onHandshakeData);
+
+      const statusLine = responseBuffer.split('\r\n')[0] || '';
+      const isSuccess = /\s2\d\d\s/.test(statusLine) || responseBuffer.includes('200 OK');
+      if (isSuccess) {
+        logger?.info({
+          host: normalized.host,
+          port: portNum,
+          mount: mountPath,
+          listenerUrl: `http://${normalized.host}:${portNum}${mountPath}`,
+        }, 'Icecast source connected');
         resolve(socket);
-      } else {
-        socket.destroy();
-        const reason = resp.includes('401') ? 'Authentication failed' :
-                       resp.includes('403') ? 'Mount point in use or forbidden' :
-                       `Server responded: ${resp.trim().slice(0, 100)}`;
-        reject(new Error(reason));
+        return;
       }
-    });
+
+      socket.destroy();
+      const reason = responseBuffer.includes('401') ? 'Authentication failed' :
+        responseBuffer.includes('403') ? 'Mount point in use or forbidden' :
+          `Server responded: ${statusLine || responseBuffer.trim().slice(0, 100)}`;
+      reject(new Error(reason));
+    };
+    socket.on('data', onHandshakeData);
 
     socket.once('error', (err) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timeout);
       reject(new Error(`Connection error: ${err.message}`));
     });
@@ -160,10 +238,13 @@ export function connectToServer(type, credentials, logger) {
  * Uses the admin endpoint: /admin/metadata?mount=/mount&mode=updinfo&song=...
  */
 export async function updateIcecastMetadata({ host, port, mount, password, username }, songTitle) {
-  const mountPath = mount.startsWith('/') ? mount : `/${mount}`;
-  const url = `http://${host}:${port}/admin/metadata?mount=${encodeURIComponent(mountPath)}&mode=updinfo&song=${encodeURIComponent(songTitle)}`;
-  const sourceUser = username?.trim() || 'source';
-  const authStr = Buffer.from(`${sourceUser}:${password}`).toString('base64');
+  const normalized = normalizeIcecastCredentials({ host, port, mount, password, username });
+  if (!normalized.host || !normalized.port || !normalized.mount || !normalized.password) {
+    return false;
+  }
+
+  const url = `http://${normalized.host}:${normalized.port}/admin/metadata?mount=${encodeURIComponent(normalized.mount)}&mode=updinfo&song=${encodeURIComponent(songTitle)}`;
+  const authStr = Buffer.from(`${normalized.username}:${normalized.password}`).toString('base64');
 
   try {
     const res = await fetch(url, {
