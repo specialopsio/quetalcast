@@ -54,6 +54,61 @@ const WS_URL = import.meta.env.VITE_WS_URL || (
     : `ws://${window.location.hostname}:3001`
 );
 
+function PanKnob({
+  value,
+  onChange,
+  disabled = false,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  disabled?: boolean;
+}) {
+  const clamped = Math.max(-100, Math.min(100, value));
+  const angle = (clamped / 100) * 135;
+  const label = clamped === 0 ? 'C' : clamped < 0 ? `L${Math.abs(clamped)}` : `R${clamped}`;
+
+  const nudge = (delta: number) => {
+    if (disabled) return;
+    onChange(Math.max(-100, Math.min(100, clamped + delta)));
+  };
+
+  return (
+    <div className={`flex items-center gap-2 ${disabled ? 'opacity-40' : ''}`}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => nudge(-5)}
+        className="h-6 w-6 rounded bg-secondary text-[10px] text-muted-foreground disabled:cursor-not-allowed"
+        aria-label="Pan left"
+      >
+        L
+      </button>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => nudge(5)}
+        className="h-6 w-6 rounded bg-secondary text-[10px] text-muted-foreground disabled:cursor-not-allowed"
+        aria-label="Pan right"
+      >
+        R
+      </button>
+      <div
+        className={`relative h-10 w-10 rounded-full border border-border/80 bg-gradient-to-b from-secondary to-background shadow-[inset_0_1px_4px_rgba(0,0,0,0.5)] ${disabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
+        onWheel={(e) => {
+          e.preventDefault();
+          nudge(e.deltaY > 0 ? -3 : 3);
+        }}
+      >
+        <div
+          className="absolute left-1/2 top-1/2 h-3.5 w-0.5 -translate-x-1/2 -translate-y-[88%] rounded bg-primary shadow-[0_0_6px_rgba(34,197,94,0.35)]"
+          style={{ transform: `translate(-50%, -88%) rotate(${angle}deg)`, transformOrigin: '50% 150%' }}
+        />
+      </div>
+      <span className="text-[10px] font-mono text-muted-foreground w-10 text-right">{label}</span>
+    </div>
+  );
+}
+
 const Broadcaster = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -924,7 +979,7 @@ const Broadcaster = () => {
                 <AccordionTrigger className="px-4 py-3 hover:no-underline">
                   <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                     <SlidersHorizontal className="h-3.5 w-3.5" />
-                    Mixer Controls
+                    Audio Controls
                   </span>
                 </AccordionTrigger>
                 <AccordionContent className="px-4 pb-4">
@@ -1022,7 +1077,7 @@ const Broadcaster = () => {
             </div>
 
             {/* System Audio */}
-            <div className="flex flex-col gap-3 mt-3 pt-3 border-t border-border">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mt-3 pt-3 border-t border-border">
               <div className="flex flex-col min-w-0">
                 <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                   <Monitor className="h-3 w-3" />
@@ -1034,7 +1089,7 @@ const Broadcaster = () => {
                     : 'Route desktop / app audio into your broadcast'}
                 </span>
               </div>
-              <div className="flex justify-end">
+              <div className="flex justify-end sm:justify-start">
                 <button
                   onClick={handleToggleSystemAudio}
                   disabled={!isOnAir && !previewStream}
@@ -1133,150 +1188,126 @@ const Broadcaster = () => {
             </div>
 
             {/* Channel mixer */}
-            <div className="mt-3 pt-3 border-t border-border space-y-3">
-              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mixer</div>
+            <div className="mt-3 pt-3 border-t border-border">
+              <Accordion type="single" collapsible defaultValue="mixer-board">
+                <AccordionItem value="mixer-board" className="border-b-0">
+                  <AccordionTrigger className="py-2 hover:no-underline">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mixer Board</span>
+                  </AccordionTrigger>
+                  <AccordionContent className="pt-2 space-y-3">
+                    {/* Mic strip */}
+                    <div className="rounded-md border border-border/70 p-2.5 space-y-2 bg-gradient-to-b from-background to-background/60">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-foreground">Mic</span>
+                        <span className="text-xs font-mono text-muted-foreground tabular-nums">{micMuted ? '—' : `${micVolume}%`}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Slider
+                          value={[micVolume]}
+                          onValueChange={([v]) => handleMicVolumeChange(v)}
+                          min={0}
+                          max={100}
+                          step={1}
+                          className="flex-1 min-w-0"
+                        />
+                        <button
+                          onClick={() => setMicMuted((v) => !v)}
+                          className={`px-2 py-1 rounded text-[10px] font-mono ${micMuted ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'}`}
+                          title="Mic mute"
+                        >
+                          M
+                        </button>
+                        <button
+                          onClick={() => setMicSolo((v) => !v)}
+                          className={`px-2 py-1 rounded text-[10px] font-mono ${micSolo ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'}`}
+                          title="Mic solo"
+                        >
+                          S
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono text-muted-foreground">PAN</span>
+                        <PanKnob value={micPan} onChange={setMicPan} />
+                      </div>
+                    </div>
 
-              {/* Mic strip */}
-              <div className="rounded-md border border-border/70 p-2.5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-foreground">Mic</span>
-                  <span className="text-xs font-mono text-muted-foreground tabular-nums">{micMuted ? '—' : `${micVolume}%`}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Slider
-                    value={[micVolume]}
-                    onValueChange={([v]) => handleMicVolumeChange(v)}
-                    min={0}
-                    max={100}
-                    step={1}
-                    className="flex-1 min-w-0"
-                  />
-                  <button
-                    onClick={() => setMicMuted((v) => !v)}
-                    className={`px-2 py-1 rounded text-[10px] font-mono ${micMuted ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'}`}
-                    title="Mic mute"
-                  >
-                    M
-                  </button>
-                  <button
-                    onClick={() => setMicSolo((v) => !v)}
-                    className={`px-2 py-1 rounded text-[10px] font-mono ${micSolo ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'}`}
-                    title="Mic solo"
-                  >
-                    S
-                  </button>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono text-muted-foreground w-8">PAN</span>
-                  <Slider
-                    value={[micPan]}
-                    onValueChange={([v]) => setMicPan(v)}
-                    min={-100}
-                    max={100}
-                    step={1}
-                    className="flex-1 min-w-0"
-                  />
-                  <span className="text-[10px] font-mono text-muted-foreground w-10 text-right">
-                    {micPan === 0 ? 'C' : micPan < 0 ? `L${Math.abs(micPan)}` : `R${micPan}`}
-                  </span>
-                </div>
-              </div>
+                    {/* System strip */}
+                    <div className={`rounded-md border p-2.5 space-y-2 bg-gradient-to-b from-background to-background/60 ${systemAudioActive ? 'border-border/70' : 'border-border/40 opacity-50'}`}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-foreground">System Audio</span>
+                        <span className="text-xs font-mono text-muted-foreground tabular-nums">{systemAudioActive ? `${systemAudioVolume}%` : 'OFF'}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Slider
+                          value={[systemAudioVolume]}
+                          onValueChange={([v]) => handleSystemAudioVolumeChange(v)}
+                          min={0}
+                          max={100}
+                          step={1}
+                          disabled={!systemAudioActive}
+                          className="flex-1 min-w-0"
+                        />
+                        <button
+                          onClick={() => setSystemAudioMuted((v) => !v)}
+                          disabled={!systemAudioActive}
+                          className={`px-2 py-1 rounded text-[10px] font-mono ${systemAudioMuted ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'} disabled:opacity-40`}
+                          title="System mute"
+                        >
+                          M
+                        </button>
+                        <button
+                          onClick={() => setSystemAudioSolo((v) => !v)}
+                          disabled={!systemAudioActive}
+                          className={`px-2 py-1 rounded text-[10px] font-mono ${systemAudioSolo ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'} disabled:opacity-40`}
+                          title="System solo"
+                        >
+                          S
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono text-muted-foreground">PAN</span>
+                        <PanKnob value={systemAudioPan} onChange={setSystemAudioPan} disabled={!systemAudioActive} />
+                      </div>
+                    </div>
 
-              {/* System strip */}
-              <div className={`rounded-md border p-2.5 space-y-2 ${systemAudioActive ? 'border-border/70' : 'border-border/40 opacity-50'}`}>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-foreground">System Audio</span>
-                  <span className="text-xs font-mono text-muted-foreground tabular-nums">{systemAudioActive ? `${systemAudioVolume}%` : 'OFF'}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Slider
-                    value={[systemAudioVolume]}
-                    onValueChange={([v]) => handleSystemAudioVolumeChange(v)}
-                    min={0}
-                    max={100}
-                    step={1}
-                    disabled={!systemAudioActive}
-                    className="flex-1 min-w-0"
-                  />
-                  <button
-                    onClick={() => setSystemAudioMuted((v) => !v)}
-                    disabled={!systemAudioActive}
-                    className={`px-2 py-1 rounded text-[10px] font-mono ${systemAudioMuted ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'} disabled:opacity-40`}
-                    title="System mute"
-                  >
-                    M
-                  </button>
-                  <button
-                    onClick={() => setSystemAudioSolo((v) => !v)}
-                    disabled={!systemAudioActive}
-                    className={`px-2 py-1 rounded text-[10px] font-mono ${systemAudioSolo ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'} disabled:opacity-40`}
-                    title="System solo"
-                  >
-                    S
-                  </button>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono text-muted-foreground w-8">PAN</span>
-                  <Slider
-                    value={[systemAudioPan]}
-                    onValueChange={([v]) => setSystemAudioPan(v)}
-                    min={-100}
-                    max={100}
-                    step={1}
-                    disabled={!systemAudioActive}
-                    className="flex-1 min-w-0"
-                  />
-                  <span className="text-[10px] font-mono text-muted-foreground w-10 text-right">
-                    {systemAudioPan === 0 ? 'C' : systemAudioPan < 0 ? `L${Math.abs(systemAudioPan)}` : `R${systemAudioPan}`}
-                  </span>
-                </div>
-              </div>
-
-              {/* Pads strip */}
-              <div className="rounded-md border border-border/70 p-2.5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-foreground">Pads</span>
-                  <span className="text-xs font-mono text-muted-foreground tabular-nums">{padsMuted ? '—' : `${padsVolume}%`}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Slider
-                    value={[padsVolume]}
-                    onValueChange={([v]) => setPadsVolume(v)}
-                    min={0}
-                    max={100}
-                    step={1}
-                    className="flex-1 min-w-0"
-                  />
-                  <button
-                    onClick={() => setPadsMuted((v) => !v)}
-                    className={`px-2 py-1 rounded text-[10px] font-mono ${padsMuted ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'}`}
-                    title="Pads mute"
-                  >
-                    M
-                  </button>
-                  <button
-                    onClick={() => setPadsSolo((v) => !v)}
-                    className={`px-2 py-1 rounded text-[10px] font-mono ${padsSolo ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'}`}
-                    title="Pads solo"
-                  >
-                    S
-                  </button>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono text-muted-foreground w-8">PAN</span>
-                  <Slider
-                    value={[padsPan]}
-                    onValueChange={([v]) => setPadsPan(v)}
-                    min={-100}
-                    max={100}
-                    step={1}
-                    className="flex-1 min-w-0"
-                  />
-                  <span className="text-[10px] font-mono text-muted-foreground w-10 text-right">
-                    {padsPan === 0 ? 'C' : padsPan < 0 ? `L${Math.abs(padsPan)}` : `R${padsPan}`}
-                  </span>
-                </div>
-              </div>
+                    {/* Pads strip */}
+                    <div className="rounded-md border border-border/70 p-2.5 space-y-2 bg-gradient-to-b from-background to-background/60">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-foreground">Pads</span>
+                        <span className="text-xs font-mono text-muted-foreground tabular-nums">{padsMuted ? '—' : `${padsVolume}%`}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Slider
+                          value={[padsVolume]}
+                          onValueChange={([v]) => setPadsVolume(v)}
+                          min={0}
+                          max={100}
+                          step={1}
+                          className="flex-1 min-w-0"
+                        />
+                        <button
+                          onClick={() => setPadsMuted((v) => !v)}
+                          className={`px-2 py-1 rounded text-[10px] font-mono ${padsMuted ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'}`}
+                          title="Pads mute"
+                        >
+                          M
+                        </button>
+                        <button
+                          onClick={() => setPadsSolo((v) => !v)}
+                          className={`px-2 py-1 rounded text-[10px] font-mono ${padsSolo ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'}`}
+                          title="Pads solo"
+                        >
+                          S
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono text-muted-foreground">PAN</span>
+                        <PanKnob value={padsPan} onChange={setPadsPan} />
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
             </div>
 
                 </AccordionContent>

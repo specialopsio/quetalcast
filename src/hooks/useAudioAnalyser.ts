@@ -49,8 +49,6 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
   const rightAnalyserRef = useRef<AnalyserNode | null>(null);
   const rafRef = useRef<number>(0);
   const monoMirrorRef = useRef(false);
-  const monoDetectFramesRef = useRef(0);
-  const monoReleaseFramesRef = useRef(0);
 
   // Per-channel peak state
   const leftPeakRef = useRef(MIN_DB);
@@ -81,37 +79,7 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
       }
     }
 
-    // Detect mono sources by observing a consistently silent right channel
-    // while left is active. This avoids relying on browser-reported channelCount.
-    const leftActive = left.rmsDb > -55;
-    const rightSilent = right.rmsDb <= MIN_DB + 0.5;
-    const rightActive = right.rmsDb > -52;
-
-    if (!monoMirrorRef.current) {
-      if (leftActive && rightSilent) {
-        monoDetectFramesRef.current++;
-        if (monoDetectFramesRef.current >= 20) {
-          monoMirrorRef.current = true;
-          monoReleaseFramesRef.current = 0;
-        }
-      } else {
-        monoDetectFramesRef.current = 0;
-      }
-    } else {
-      // If right channel consistently becomes active, exit mirror mode.
-      if (rightActive) {
-        monoReleaseFramesRef.current++;
-        if (monoReleaseFramesRef.current >= 8) {
-          monoMirrorRef.current = false;
-          monoDetectFramesRef.current = 0;
-          monoReleaseFramesRef.current = 0;
-        }
-      } else {
-        monoReleaseFramesRef.current = 0;
-      }
-    }
-
-    // Peak hold with decay — right (or mirror left for detected mono sources)
+    // Peak hold with decay — right (or mirror left for known mono sources)
     if (monoMirrorRef.current) {
       rightPeakRef.current = leftPeakRef.current;
       rightDecayRef.current = leftDecayRef.current;
@@ -140,8 +108,6 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
   useEffect(() => {
     if (!stream || stream.getTracks().length === 0) {
       monoMirrorRef.current = false;
-      monoDetectFramesRef.current = 0;
-      monoReleaseFramesRef.current = 0;
       setAnalysis(EMPTY_ANALYSIS);
       return;
     }
@@ -152,6 +118,11 @@ export function useAudioAnalyser(stream: MediaStream | null): AudioAnalysis {
     }
 
     const source = ctx.createMediaStreamSource(stream);
+    const track = stream.getAudioTracks()[0];
+    const channels = track?.getSettings?.().channelCount;
+    // Mirror only when the track explicitly reports mono.
+    // If unknown/undefined, treat as stereo to avoid false linked-mono display.
+    monoMirrorRef.current = channels === 1;
 
     const splitter = ctx.createChannelSplitter(2);
 
