@@ -1419,6 +1419,42 @@ const Broadcaster = () => {
                       </div>
                     </div>
 
+                    {/* Pads strip */}
+                    <div className="rounded-md border border-border/70 p-2.5 space-y-2 bg-gradient-to-b from-background to-background/60">
+                      <div className="flex items-center gap-2">
+                        <VolumeLeds level={channelLevels.pads} disabled={padsMuted} />
+                        <span className="text-xs font-semibold text-foreground">
+                          SOUND PADS <span className="font-mono text-muted-foreground tabular-nums">{padsMuted ? '—' : `${padsVolume}%`}</span>
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setPadsMuted((v) => !v)}
+                          className={`px-2 py-1 rounded text-[10px] font-mono ${padsMuted ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'}`}
+                          title="Pads mute"
+                        >
+                          M
+                        </button>
+                        <button
+                          onClick={() => setPadsSolo((v) => !v)}
+                          className={`px-2 py-1 rounded text-[10px] font-mono ${padsSolo ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'}`}
+                          title="Pads solo"
+                        >
+                          S
+                        </button>
+                        <Slider
+                          value={[padsVolume]}
+                          onValueChange={([v]) => setPadsVolume(v)}
+                          min={0}
+                          max={100}
+                          step={1}
+                          sliderVariant="mixer"
+                          className={MIXER_SLIDER_CLASS}
+                        />
+                        <PanKnob value={padsPan} onChange={setPadsPan} />
+                      </div>
+                    </div>
+
                     {/* System strip */}
                     <div className={`rounded-md border p-2.5 space-y-2 bg-gradient-to-b from-background to-background/60 ${systemAudioActive ? 'border-border/70' : 'border-border/40 opacity-50'}`}>
                       <div className="flex items-center gap-2">
@@ -1458,42 +1494,6 @@ const Broadcaster = () => {
                           className={MIXER_SLIDER_CLASS}
                         />
                         <PanKnob value={systemAudioPan} onChange={setSystemAudioPan} disabled={!systemAudioActive} />
-                      </div>
-                    </div>
-
-                    {/* Pads strip */}
-                    <div className="rounded-md border border-border/70 p-2.5 space-y-2 bg-gradient-to-b from-background to-background/60">
-                      <div className="flex items-center gap-2">
-                        <VolumeLeds level={channelLevels.pads} disabled={padsMuted} />
-                        <span className="text-xs font-semibold text-foreground">
-                          SOUND PADS <span className="font-mono text-muted-foreground tabular-nums">{padsMuted ? '—' : `${padsVolume}%`}</span>
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setPadsMuted((v) => !v)}
-                          className={`px-2 py-1 rounded text-[10px] font-mono ${padsMuted ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'}`}
-                          title="Pads mute"
-                        >
-                          M
-                        </button>
-                        <button
-                          onClick={() => setPadsSolo((v) => !v)}
-                          className={`px-2 py-1 rounded text-[10px] font-mono ${padsSolo ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'}`}
-                          title="Pads solo"
-                        >
-                          S
-                        </button>
-                        <Slider
-                          value={[padsVolume]}
-                          onValueChange={([v]) => setPadsVolume(v)}
-                          min={0}
-                          max={100}
-                          step={1}
-                          sliderVariant="mixer"
-                          className={MIXER_SLIDER_CLASS}
-                        />
-                        <PanKnob value={padsPan} onChange={setPadsPan} />
                       </div>
                     </div>
                   </AccordionContent>
