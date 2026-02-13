@@ -1385,8 +1385,7 @@ const Broadcaster = () => {
                   <AccordionContent className="pt-2 space-y-3">
                     {/* Mic strip */}
                     <div className="rounded-md border border-border/70 p-2.5 space-y-2 bg-gradient-to-b from-background to-background/60">
-                      <div className="flex items-center gap-2">
-                        <VolumeLeds level={channelLevels.mic} disabled={micMuted} />
+                      <div className="flex items-center">
                         <span className="text-xs font-semibold text-foreground">
                           Mic <span className="font-mono text-muted-foreground tabular-nums">{micMuted ? '—' : `${micVolume}%`}</span>
                         </span>
@@ -1406,6 +1405,7 @@ const Broadcaster = () => {
                         >
                           S
                         </button>
+                        <VolumeLeds level={channelLevels.mic} disabled={micMuted} />
                         <Slider
                           value={[micVolume]}
                           onValueChange={([v]) => handleMicVolumeChange(v)}
@@ -1421,8 +1421,7 @@ const Broadcaster = () => {
 
                     {/* Pads strip */}
                     <div className="rounded-md border border-border/70 p-2.5 space-y-2 bg-gradient-to-b from-background to-background/60">
-                      <div className="flex items-center gap-2">
-                        <VolumeLeds level={channelLevels.pads} disabled={padsMuted} />
+                      <div className="flex items-center">
                         <span className="text-xs font-semibold text-foreground">
                           SOUND PADS <span className="font-mono text-muted-foreground tabular-nums">{padsMuted ? '—' : `${padsVolume}%`}</span>
                         </span>
@@ -1442,6 +1441,7 @@ const Broadcaster = () => {
                         >
                           S
                         </button>
+                        <VolumeLeds level={channelLevels.pads} disabled={padsMuted} />
                         <Slider
                           value={[padsVolume]}
                           onValueChange={([v]) => setPadsVolume(v)}
@@ -1457,11 +1457,7 @@ const Broadcaster = () => {
 
                     {/* System strip */}
                     <div className={`rounded-md border p-2.5 space-y-2 bg-gradient-to-b from-background to-background/60 ${systemAudioActive ? 'border-border/70' : 'border-border/40 opacity-50'}`}>
-                      <div className="flex items-center gap-2">
-                        <VolumeLeds
-                          level={channelLevels.system}
-                          disabled={!systemAudioActive || systemAudioMuted}
-                        />
+                      <div className="flex items-center">
                         <span className="text-xs font-semibold text-foreground">
                           System Audio <span className="font-mono text-muted-foreground tabular-nums">{systemAudioActive ? `${systemAudioVolume}%` : 'OFF'}</span>
                         </span>
@@ -1483,6 +1479,10 @@ const Broadcaster = () => {
                         >
                           S
                         </button>
+                        <VolumeLeds
+                          level={channelLevels.system}
+                          disabled={!systemAudioActive || systemAudioMuted}
+                        />
                         <Slider
                           value={[systemAudioVolume]}
                           onValueChange={([v]) => handleSystemAudioVolumeChange(v)}
