@@ -19,6 +19,7 @@ export interface UseAudioMixerReturn {
   setListening: (on: boolean) => void;
   setCueMode: (on: boolean) => void;
   setLimiterThreshold: (db: LimiterThreshold) => void;
+  getChannelLevels: () => { mic: number; system: number; pads: number };
   getNodes: () => { ctx: AudioContext; micGain: GainNode; broadcastBus: GainNode; micVolumeGain: GainNode } | null;
 }
 
@@ -63,6 +64,12 @@ export function useAudioMixer(): UseAudioMixerReturn {
   const broadcastOutGainRef = useRef<GainNode | null>(null);
   const limiterRef = useRef<DynamicsCompressorNode | null>(null);
   const clipperRef = useRef<WaveShaperNode | null>(null);
+  const micAnalyserRef = useRef<AnalyserNode | null>(null);
+  const padsAnalyserRef = useRef<AnalyserNode | null>(null);
+  const systemAnalyserRef = useRef<AnalyserNode | null>(null);
+  const micAnalyserDataRef = useRef<Uint8Array | null>(null);
+  const padsAnalyserDataRef = useRef<Uint8Array | null>(null);
+  const systemAnalyserDataRef = useRef<Uint8Array | null>(null);
 
   // Track current mic volume for mute/unmute restore
   const micVolumeRef = useRef(1);
@@ -109,6 +116,12 @@ export function useAudioMixer(): UseAudioMixerReturn {
     const padsPan = ctx.createStereoPanner();
     const listenGain = ctx.createGain(); // broadcast → local speakers
     const broadcastOutGain = ctx.createGain(); // gates audio to WebRTC (0 in cue mode)
+    const micAnalyser = ctx.createAnalyser();
+    const padsAnalyser = ctx.createAnalyser();
+    micAnalyser.fftSize = 256;
+    micAnalyser.smoothingTimeConstant = 0.7;
+    padsAnalyser.fftSize = 256;
+    padsAnalyser.smoothingTimeConstant = 0.7;
 
     // Force broadcastBus to always process in stereo so a mono mic
     // is properly upmixed to both L and R channels before output.
@@ -145,6 +158,7 @@ export function useAudioMixer(): UseAudioMixerReturn {
     // micVolumeGain → micPan → broadcastBus (mic path always goes through volume + pan)
     micVolumeGain.connect(micPan);
     micPan.connect(broadcastBus);
+    micPan.connect(micAnalyser);
     // micGain → micVolumeGain (connected when mic is added)
     // soundboardBus → padsVolumeGain → padsPan → (broadcast + local)
     soundboardBus.connect(padsVolumeGain);
@@ -152,6 +166,7 @@ export function useAudioMixer(): UseAudioMixerReturn {
     // padsPan → sbToBroadcastGain → broadcastBus
     padsPan.connect(sbToBroadcastGain);
     sbToBroadcastGain.connect(broadcastBus);
+    padsPan.connect(padsAnalyser);
     // padsPan → sbLocalGain → ctx.destination
     padsPan.connect(sbLocalGain);
     sbLocalGain.connect(ctx.destination);
@@ -180,6 +195,10 @@ export function useAudioMixer(): UseAudioMixerReturn {
     broadcastOutGainRef.current = broadcastOutGain;
     limiterRef.current = limiter;
     clipperRef.current = clipper;
+    micAnalyserRef.current = micAnalyser;
+    padsAnalyserRef.current = padsAnalyser;
+    micAnalyserDataRef.current = new Uint8Array(micAnalyser.fftSize);
+    padsAnalyserDataRef.current = new Uint8Array(padsAnalyser.fftSize);
 
     setMixedStream(dest.stream);
 
@@ -230,15 +249,21 @@ export function useAudioMixer(): UseAudioMixerReturn {
       const source = ctx.createMediaStreamSource(stream);
       const gain = ctx.createGain();
       const pan = ctx.createStereoPanner();
+      const analyser = ctx.createAnalyser();
       gain.gain.value = 1;
       pan.pan.value = 0;
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.7;
       source.connect(gain);
       gain.connect(pan);
       pan.connect(broadcastBusRef.current!);
+      pan.connect(analyser);
 
       sysAudioSourceRef.current = source;
       sysAudioGainRef.current = gain;
       sysAudioPanRef.current = pan;
+      systemAnalyserRef.current = analyser;
+      systemAnalyserDataRef.current = new Uint8Array(analyser.fftSize);
       sysAudioStreamRef.current = stream;
 
       // If the system audio track ends (user stops sharing), clean up
@@ -262,6 +287,12 @@ export function useAudioMixer(): UseAudioMixerReturn {
     }
     if (sysAudioPanRef.current) {
       sysAudioPanRef.current = null;
+    }
+    if (systemAnalyserRef.current) {
+      systemAnalyserRef.current = null;
+    }
+    if (systemAnalyserDataRef.current) {
+      systemAnalyserDataRef.current = null;
     }
     if (sysAudioStreamRef.current) {
       sysAudioStreamRef.current.getTracks().forEach(t => t.stop());
@@ -379,6 +410,27 @@ export function useAudioMixer(): UseAudioMixerReturn {
     }
   }, [buildClipCurve]);
 
+  const analyserLevel = useCallback((analyser: AnalyserNode | null, data: Uint8Array | null): number => {
+    if (!analyser || !data) return 0;
+    analyser.getByteTimeDomainData(data);
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) {
+      const normalized = (data[i] - 128) / 128;
+      sum += normalized * normalized;
+    }
+    const rms = Math.sqrt(sum / data.length);
+    // Map low-level RMS into useful UI range
+    return Math.max(0, Math.min(1, rms * 3.2));
+  }, []);
+
+  const getChannelLevels = useCallback(() => {
+    return {
+      mic: analyserLevel(micAnalyserRef.current, micAnalyserDataRef.current),
+      system: analyserLevel(systemAnalyserRef.current, systemAnalyserDataRef.current),
+      pads: analyserLevel(padsAnalyserRef.current, padsAnalyserDataRef.current),
+    };
+  }, [analyserLevel]);
+
   /** Expose internal nodes so the effects chain can wire itself in */
   const getNodes = useCallback(() => {
     if (!ctxRef.current || !micGainRef.current || !micVolumeGainRef.current || !broadcastBusRef.current) return null;
@@ -419,6 +471,7 @@ export function useAudioMixer(): UseAudioMixerReturn {
     setListening,
     setCueMode,
     setLimiterThreshold,
+    getChannelLevels,
     getNodes,
   };
 }

@@ -170,15 +170,15 @@ function PanKnob({
 }
 
 function VolumeLeds({
-  value,
+  level,
   disabled = false,
 }: {
-  value: number;
+  level: number;
   disabled?: boolean;
 }) {
-  const clamped = Math.max(0, Math.min(100, value));
+  const clamped = Math.max(0, Math.min(1, level));
   const ledCount = 10;
-  const activeCount = disabled ? 0 : Math.round((clamped / 100) * ledCount);
+  const activeCount = disabled ? 0 : Math.round(clamped * ledCount);
 
   return (
     <div className={`inline-flex items-center gap-0.5 ${disabled ? 'opacity-30' : ''}`} aria-hidden>
@@ -253,6 +253,7 @@ const Broadcaster = () => {
   const [padsPan, setPadsPan] = useState(0);
   const [systemAudioInfoOpen, setSystemAudioInfoOpen] = useState(false);
   const systemAudioStreamRef = useRef<MediaStream | null>(null);
+  const [channelLevels, setChannelLevels] = useState({ mic: 0, system: 0, pads: 0 });
 
   /** Preview stream for level meter when not on air — so user can dial in before going live */
   const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
@@ -370,6 +371,26 @@ const Broadcaster = () => {
     mixer.connectMic,
     mixer.disconnectMic,
   ]);
+
+  useEffect(() => {
+    let raf = 0;
+    let last = 0;
+    const tick = (ts: number) => {
+      if (ts - last >= 80) {
+        last = ts;
+        const next = mixer.getChannelLevels();
+        setChannelLevels((prev) => {
+          const closeEnough = Math.abs(prev.mic - next.mic) < 0.015
+            && Math.abs(prev.system - next.system) < 0.015
+            && Math.abs(prev.pads - next.pads) < 0.015;
+          return closeEnough ? prev : next;
+        });
+      }
+      raf = window.requestAnimationFrame(tick);
+    };
+    raf = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(raf);
+  }, [mixer]);
 
   // Channel-strip mixer math: if any solo is active, only soloed channels pass.
   // Top mic mute still hard-mutes the mic channel.
@@ -1368,25 +1389,27 @@ const Broadcaster = () => {
                         <span className="text-xs font-semibold text-foreground">
                           Mic <span className="font-mono text-muted-foreground tabular-nums">{micMuted ? '—' : `${micVolume}%`}</span>
                         </span>
-                        <span className="ml-3">
-                          <VolumeLeds value={micMuted ? 0 : micVolume} disabled={micMuted} />
-                        </span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setMicMuted((v) => !v)}
-                          className={`px-2 py-1 rounded text-[10px] font-mono ${micMuted ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'}`}
-                          title="Mic mute"
-                        >
-                          M
-                        </button>
-                        <button
-                          onClick={() => setMicSolo((v) => !v)}
-                          className={`px-2 py-1 rounded text-[10px] font-mono ${micSolo ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'}`}
-                          title="Mic solo"
-                        >
-                          S
-                        </button>
+                        <div className="w-16 shrink-0 space-y-1">
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => setMicMuted((v) => !v)}
+                              className={`w-7 px-2.5 py-1 rounded text-[10px] font-mono ${micMuted ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'}`}
+                              title="Mic mute"
+                            >
+                              M
+                            </button>
+                            <button
+                              onClick={() => setMicSolo((v) => !v)}
+                              className={`w-7 px-2.5 py-1 rounded text-[10px] font-mono ${micSolo ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'}`}
+                              title="Mic solo"
+                            >
+                              S
+                            </button>
+                          </div>
+                          <VolumeLeds level={channelLevels.mic} disabled={micMuted} />
+                        </div>
                         <Slider
                           value={[micVolume]}
                           onValueChange={([v]) => handleMicVolumeChange(v)}
@@ -1406,30 +1429,32 @@ const Broadcaster = () => {
                         <span className="text-xs font-semibold text-foreground">
                           System Audio <span className="font-mono text-muted-foreground tabular-nums">{systemAudioActive ? `${systemAudioVolume}%` : 'OFF'}</span>
                         </span>
-                        <span className="ml-3">
-                          <VolumeLeds
-                            value={systemAudioActive && !systemAudioMuted ? systemAudioVolume : 0}
-                            disabled={!systemAudioActive || systemAudioMuted}
-                          />
-                        </span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setSystemAudioMuted((v) => !v)}
-                          disabled={!systemAudioActive}
-                          className={`px-2 py-1 rounded text-[10px] font-mono ${systemAudioMuted ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'} disabled:opacity-40`}
-                          title="System mute"
-                        >
-                          M
-                        </button>
-                        <button
-                          onClick={() => setSystemAudioSolo((v) => !v)}
-                          disabled={!systemAudioActive}
-                          className={`px-2 py-1 rounded text-[10px] font-mono ${systemAudioSolo ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'} disabled:opacity-40`}
-                          title="System solo"
-                        >
-                          S
-                        </button>
+                        <div className="w-16 shrink-0 space-y-1">
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => setSystemAudioMuted((v) => !v)}
+                              disabled={!systemAudioActive}
+                              className={`w-7 px-2.5 py-1 rounded text-[10px] font-mono ${systemAudioMuted ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'} disabled:opacity-40`}
+                              title="System mute"
+                            >
+                              M
+                            </button>
+                            <button
+                              onClick={() => setSystemAudioSolo((v) => !v)}
+                              disabled={!systemAudioActive}
+                              className={`w-7 px-2.5 py-1 rounded text-[10px] font-mono ${systemAudioSolo ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'} disabled:opacity-40`}
+                              title="System solo"
+                            >
+                              S
+                            </button>
+                          </div>
+                          <VolumeLeds
+                            level={channelLevels.system}
+                            disabled={!systemAudioActive || systemAudioMuted}
+                          />
+                        </div>
                         <Slider
                           value={[systemAudioVolume]}
                           onValueChange={([v]) => handleSystemAudioVolumeChange(v)}
@@ -1450,25 +1475,27 @@ const Broadcaster = () => {
                         <span className="text-xs font-semibold text-foreground">
                           SOUND PADS <span className="font-mono text-muted-foreground tabular-nums">{padsMuted ? '—' : `${padsVolume}%`}</span>
                         </span>
-                        <span className="ml-3">
-                          <VolumeLeds value={padsMuted ? 0 : padsVolume} disabled={padsMuted} />
-                        </span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setPadsMuted((v) => !v)}
-                          className={`px-2 py-1 rounded text-[10px] font-mono ${padsMuted ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'}`}
-                          title="Pads mute"
-                        >
-                          M
-                        </button>
-                        <button
-                          onClick={() => setPadsSolo((v) => !v)}
-                          className={`px-2 py-1 rounded text-[10px] font-mono ${padsSolo ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'}`}
-                          title="Pads solo"
-                        >
-                          S
-                        </button>
+                        <div className="w-16 shrink-0 space-y-1">
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => setPadsMuted((v) => !v)}
+                              className={`w-7 px-2.5 py-1 rounded text-[10px] font-mono ${padsMuted ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'}`}
+                              title="Pads mute"
+                            >
+                              M
+                            </button>
+                            <button
+                              onClick={() => setPadsSolo((v) => !v)}
+                              className={`w-7 px-2.5 py-1 rounded text-[10px] font-mono ${padsSolo ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'}`}
+                              title="Pads solo"
+                            >
+                              S
+                            </button>
+                          </div>
+                          <VolumeLeds level={channelLevels.pads} disabled={padsMuted} />
+                        </div>
                         <Slider
                           value={[padsVolume]}
                           onValueChange={([v]) => setPadsVolume(v)}
