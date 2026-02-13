@@ -52,11 +52,21 @@ export default function DocsBroadcaster() {
           </li>
           <li>
             <strong>Mixer Board</strong> — Collapsible section with channel strips for Mic, System Audio,
-            and Pads. Each strip has a level slider, Mute (M) and Solo (S) buttons, and a pan knob.
-            Drag the pan knob or use the mouse wheel to adjust stereo position. System Audio strip is
-            grayed when not connected.
+            and SOUND PADS. Each strip has a level slider, Mute (M) and Solo (S) buttons, and a pan knob.
+            Strip labels show the current level inline (for example, <code>Mic 100%</code>). Pan readouts
+            are always visible above each knob; drag or mouse-wheel to adjust stereo position, and
+            double-click to center. System Audio strip is grayed when not connected.
           </li>
         </ul>
+      </section>
+
+      <section>
+        <h2 className="text-lg font-semibold text-foreground mb-3">Saved layout</h2>
+        <p>
+          Broadcaster layout is saved to <code>localStorage</code> and restored on reload. This includes
+          sound pads, mixer strip values, effects state and parameters, quality mode, and selected input
+          device.
+        </p>
       </section>
 
       <section>

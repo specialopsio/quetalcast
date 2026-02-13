@@ -12,6 +12,7 @@ Real-time audio broadcasting application built with WebRTC, React, and Node.js. 
 - **Output limiter** — Selectable ceiling (0 dB, -3 dB, -6 dB, -12 dB)
 - **Broadcast timer** — Elapsed time display while on air
 - **Audio controls** — Collapsible panel with audio input selector, mute, listen mode, cue mode, and system audio. A collapsible Mixer Board below Record provides channel strips for Mic, System Audio, and Pads with level sliders, mute, solo, and pan knobs. Visible pre-broadcast so you can dial in before going live
+- **Layout persistence** — Broadcaster layout is saved to localStorage and restored on reload: sound pads, mixer strip settings, effects state/parameters, quality mode, and selected input device
 - **System audio** — Route desktop or application audio into the broadcast via screen share audio capture. Connect before going on air; level and pan control are in the Mixer Board
 - **Live chat** — Bidirectional chat via floating action button (full-screen on mobile, floating panel on desktop). Users provide a display name before chatting. Chat history is sent to new receivers on join. Join/leave system messages appear when someone joins or leaves the chat (with their name). Unread badge on FAB when chat is closed; browser tab title flashes when new messages arrive until viewed. Rate-limited to 1 message per second, max 280 characters
 - **Listener count** — Real-time count of connected listeners displayed in the Event Log header during broadcast
