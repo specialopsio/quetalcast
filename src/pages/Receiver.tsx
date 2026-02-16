@@ -32,6 +32,7 @@ const Receiver = () => {
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [streamUrlCopied, setStreamUrlCopied] = useState(false);
   const audioElRef = useRef<HTMLAudioElement | null>(null);
+  const playbackCtxRef = useRef<AudioContext | null>(null);
   const noAudioTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const addLog = useCallback((msg: string, level: LogEntry['level'] = 'info') => {
@@ -107,20 +108,35 @@ const Receiver = () => {
 
   const handleClickToListen = () => {
     if (webrtc.remoteStream) {
-      const audio = new Audio();
-      audio.srcObject = webrtc.remoteStream;
-      audio.play().then(() => {
+      // Use AudioContext for playback — preserves stereo on Safari
+      // (Safari dowmixes WebRTC audio to mono with plain <Audio> element)
+      const ctx = new AudioContext();
+      playbackCtxRef.current = ctx;
+      const source = ctx.createMediaStreamSource(webrtc.remoteStream);
+      source.connect(ctx.destination);
+      ctx.resume().then(() => {
         setAudioStarted(true);
         addLog('You\'re listening');
       }).catch(() => {
         addLog('Couldn\'t start playback — try tapping again', 'error');
       });
+
+      // Also set on an Audio element as fallback (some browsers need it)
+      const audio = new Audio();
+      audio.srcObject = webrtc.remoteStream;
+      audio.volume = 0; // muted — AudioContext handles actual playback
+      audio.play().catch(() => {});
       audioElRef.current = audio;
     }
   };
 
-  // Set remote stream on audio element when available
+  // Update playback source when remote stream changes
   useEffect(() => {
+    if (webrtc.remoteStream && playbackCtxRef.current) {
+      const ctx = playbackCtxRef.current;
+      const source = ctx.createMediaStreamSource(webrtc.remoteStream);
+      source.connect(ctx.destination);
+    }
     if (webrtc.remoteStream && audioElRef.current) {
       audioElRef.current.srcObject = webrtc.remoteStream;
     }

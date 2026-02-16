@@ -458,9 +458,15 @@ wss.on('connection', (ws, req) => {
 
   logger.info({ ip, authed: isAuthed }, 'WebSocket connected');
 
+  let binaryCount = 0;
   ws.on('message', (raw, isBinary) => {
     // Binary messages from broadcaster = relay MP3 data for /stream/:roomId
     if (isBinary && clientRoom && clientRole === 'broadcaster') {
+      binaryCount++;
+      if (binaryCount === 1 || binaryCount % 500 === 0) {
+        const listeners = rooms.getRelayListeners(clientRoom);
+        logger.info({ roomId: clientRoom.slice(0, 8), binaryCount, bytes: raw.length, listeners: listeners.size }, 'Relay binary data');
+      }
       const data = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
       const listeners = rooms.getRelayListeners(clientRoom);
       for (const res of listeners) {

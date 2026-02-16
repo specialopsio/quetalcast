@@ -736,18 +736,15 @@ const Broadcaster = () => {
   const relayStartedRef = useRef(false);
   useEffect(() => {
     if (isOnAir && mixer.mixedStream && webrtc.roomId && !relayStartedRef.current) {
-      const nodes = mixer.getNodes();
-      if (nodes) {
-        relayStartedRef.current = true;
-        relayStream.startRelay(mixer.mixedStream, webrtc.roomId, nodes.ctx).catch(() => {
-          // Non-fatal — WebRTC broadcast still works without the relay
-        });
-      }
+      relayStartedRef.current = true;
+      relayStream.startRelay(mixer.mixedStream, webrtc.roomId).catch(() => {
+        // Non-fatal — WebRTC broadcast still works without the relay
+      });
     }
     if (!isOnAir) {
       relayStartedRef.current = false;
     }
-  }, [isOnAir, mixer.mixedStream, webrtc.roomId, mixer.getNodes, relayStream]);
+  }, [isOnAir, mixer.mixedStream, webrtc.roomId, relayStream]);
 
   // Log relay/integration stream errors
   useEffect(() => {
@@ -819,8 +816,10 @@ const Broadcaster = () => {
   const handleToggleMute = () => {
     const newMuted = !micMuted;
     setMicMuted(newMuted);
+    setSystemAudioMuted(newMuted);
+    setPadsMuted(newMuted);
     mixer.setMicMuted(newMuted);
-    addLog(newMuted ? 'Mic muted' : 'Mic unmuted');
+    addLog(newMuted ? 'All channels muted' : 'All channels unmuted');
   };
 
   const handleToggleListen = () => {
@@ -1385,10 +1384,10 @@ const Broadcaster = () => {
                       ? 'bg-destructive/20 text-destructive'
                       : 'bg-secondary text-muted-foreground hover:text-foreground'
                   }`}
-                  title={micMuted ? 'Unmute mic' : 'Mute mic'}
+                  title={micMuted ? 'Unmute all channels' : 'Mute all channels'}
                 >
                   <MicOff className="h-3.5 w-3.5" />
-                  Mute
+                  {micMuted ? 'Muted' : 'Mute'}
                 </button>
                 <button
                   onClick={handleToggleListen}
