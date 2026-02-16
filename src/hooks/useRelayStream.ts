@@ -16,7 +16,7 @@ export interface UseRelayStreamReturn {
   active: boolean;
   error: string | null;
   streamUrl: string | null;
-  startRelay: (stream: MediaStream, roomId: string, ctx: AudioContext) => Promise<void>;
+  startRelay: (roomId: string, ctx: AudioContext, tapNode: AudioNode) => Promise<void>;
   stopRelay: () => void;
 }
 
@@ -25,9 +25,8 @@ export interface UseRelayStreamReturn {
  * as binary frames. The server routes them to HTTP listeners at /stream/:roomId
  * for VLC, RadioDJ, etc.
  *
- * MUST use the mixer's AudioContext — creating a separate AudioContext doesn't work
- * because MediaStreamAudioSourceNode in a different context from the stream's origin
- * never fires ScriptProcessorNode.onaudioprocess.
+ * Taps directly into the mixer's audio graph (clipper node) rather than going
+ * through a MediaStream round-trip, which causes ScriptProcessorNode to never fire.
  */
 export function useRelayStream(signaling: UseSignalingReturn): UseRelayStreamReturn {
   const [active, setActive] = useState(false);
@@ -35,7 +34,6 @@ export function useRelayStream(signaling: UseSignalingReturn): UseRelayStreamRet
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
 
   const processorRef = useRef<ScriptProcessorNode | null>(null);
-  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
 
   const stopRelay = useCallback(() => {
     if (processorRef.current) {
@@ -43,15 +41,11 @@ export function useRelayStream(signaling: UseSignalingReturn): UseRelayStreamRet
       processorRef.current.onaudioprocess = null;
       processorRef.current = null;
     }
-    if (sourceRef.current) {
-      sourceRef.current.disconnect();
-      sourceRef.current = null;
-    }
     setActive(false);
     setStreamUrl(null);
   }, []);
 
-  const startRelay = useCallback(async (stream: MediaStream, roomId: string, ctx: AudioContext) => {
+  const startRelay = useCallback(async (roomId: string, ctx: AudioContext, tapNode: AudioNode) => {
     setError(null);
     let step = 'init';
     try {
@@ -96,26 +90,21 @@ export function useRelayStream(signaling: UseSignalingReturn): UseRelayStreamRet
       const numChannels = quality.channels;
       const bitrate = quality.bitrate;
 
-      // Use the mixer's AudioContext — MUST be the same context that produced the stream,
-      // otherwise ScriptProcessorNode.onaudioprocess never fires
-      const source = ctx.createMediaStreamSource(stream);
-      sourceRef.current = source;
-
+      // Connect ScriptProcessorNode directly to the mixer's clipper output.
+      // This avoids going through MediaStream → MediaStreamAudioSourceNode
+      // which breaks onaudioprocess in same-context loops.
       const bufferSize = 4096;
       const processor = ctx.createScriptProcessor(bufferSize, numChannels, numChannels);
       processorRef.current = processor;
 
       const mp3Encoder = new lame.Mp3Encoder(numChannels, ctx.sampleRate, bitrate);
 
-      // Warmup frame
+      // Warmup frame so players detect the stream instantly
       const silence = new Int16Array(1152);
-      if (numChannels === 2) {
-        const warmup = mp3Encoder.encodeBuffer(silence, silence);
-        if (warmup.length > 0) signaling.sendBinary(warmup);
-      } else {
-        const warmup = mp3Encoder.encodeBuffer(silence);
-        if (warmup.length > 0) signaling.sendBinary(warmup);
-      }
+      const warmup = numChannels === 2
+        ? mp3Encoder.encodeBuffer(silence, silence)
+        : mp3Encoder.encodeBuffer(silence);
+      if (warmup.length > 0) signaling.sendBinary(warmup);
 
       const floatToInt16 = (input: Float32Array): Int16Array => {
         const samples = new Int16Array(input.length);
@@ -126,7 +115,6 @@ export function useRelayStream(signaling: UseSignalingReturn): UseRelayStreamRet
         return samples;
       };
 
-      // Capture sendBinary so the closure always references the stable callback
       const sendBin = signaling.sendBinary;
 
       processor.onaudioprocess = (e: AudioProcessingEvent) => {
@@ -148,7 +136,9 @@ export function useRelayStream(signaling: UseSignalingReturn): UseRelayStreamRet
       };
 
       step = 'connect';
-      source.connect(processor);
+      // Tap the clipper's output → processor → destination
+      // clipper is already connected to dest (WebRTC), this adds a parallel path
+      tapNode.connect(processor);
       processor.connect(ctx.destination);
 
       step = 'done';

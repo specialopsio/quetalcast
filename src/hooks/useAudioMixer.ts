@@ -20,7 +20,7 @@ export interface UseAudioMixerReturn {
   setCueMode: (on: boolean) => void;
   setLimiterThreshold: (db: LimiterThreshold) => void;
   getChannelLevels: () => { mic: number; system: number; pads: number };
-  getNodes: () => { ctx: AudioContext; micGain: GainNode; broadcastBus: GainNode; micVolumeGain: GainNode } | null;
+  getNodes: () => { ctx: AudioContext; micGain: GainNode; broadcastBus: GainNode; micVolumeGain: GainNode; clipper: WaveShaperNode } | null;
 }
 
 /**
@@ -465,12 +465,13 @@ export function useAudioMixer(): UseAudioMixerReturn {
 
   /** Expose internal nodes so the effects chain can wire itself in */
   const getNodes = useCallback(() => {
-    if (!ctxRef.current || !micGainRef.current || !micVolumeGainRef.current || !broadcastBusRef.current) return null;
+    if (!ctxRef.current || !micGainRef.current || !micVolumeGainRef.current || !broadcastBusRef.current || !clipperRef.current) return null;
     return {
       ctx: ctxRef.current,
       micGain: micGainRef.current,
       broadcastBus: broadcastBusRef.current,
       micVolumeGain: micVolumeGainRef.current,
+      clipper: clipperRef.current,
     };
   }, []);
 
