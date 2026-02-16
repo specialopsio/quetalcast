@@ -321,7 +321,7 @@ app.post('/api/identify-audio', requireAuth, identifyLimiter, express.raw({ type
 const staticPath = path.join(__dirname, '..', 'dist');
 app.use(express.static(staticPath));
 app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/api') || req.path.startsWith('/admin')) return next();
+  if (req.path.startsWith('/api') || req.path.startsWith('/admin') || req.path.startsWith('/stream/')) return next();
   res.sendFile(path.join(staticPath, 'index.html'));
 });
 
@@ -923,9 +923,12 @@ relayWss.on('connection', (ws, req) => {
         relayRoomId = roomId;
         initialized = true;
 
-        // Build the local stream URL
-        const protocol = req.headers['x-forwarded-proto'] || 'http';
-        const host = req.headers.host || `localhost:${PORT}`;
+        // Build the local stream URL — detect protocol from WebSocket upgrade or proxy headers
+        const isSecure = req.headers['x-forwarded-proto'] === 'https'
+          || req.headers.origin?.startsWith('https')
+          || req.socket.encrypted;
+        const protocol = isSecure ? 'https' : 'http';
+        const host = req.headers['x-forwarded-host'] || req.headers.host || `localhost:${PORT}`;
         const localStreamUrl = `${protocol}://${host}/stream/${roomId}`;
 
         // Store it so receivers joining later can get it
