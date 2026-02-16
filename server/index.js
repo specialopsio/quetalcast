@@ -164,21 +164,24 @@ app.get('/api/ice-config', async (req, res) => {
 // HTTP audio relay — serves MP3 audio as an Icecast-compatible stream
 app.get('/stream/:roomId', (req, res) => {
   const { roomId } = req.params;
+  const room = rooms.rooms.get(roomId);
 
-  if (!rooms.rooms.has(roomId)) {
+  if (!room) {
     return res.status(404).send('Room not found');
   }
 
-  // Icecast-compatible response headers so VLC, RadioDJ, etc. detect the stream
+  // Serve as WebM audio stream (MediaRecorder outputs WebM/Opus)
   res.writeHead(200, {
-    'Content-Type': 'audio/mpeg',
+    'Content-Type': 'audio/webm',
     'Connection': 'keep-alive',
     'Cache-Control': 'no-cache, no-store',
-    'icy-name': `QueTal Cast - ${roomId}`,
-    'icy-genre': 'Various',
-    'icy-br': '192',
     'Access-Control-Allow-Origin': '*',
   });
+
+  // Send the WebM initialization segment so the player can start decoding
+  if (room.relayHeader) {
+    res.write(room.relayHeader);
+  }
 
   const added = rooms.addRelayListener(roomId, res);
   if (!added) {
@@ -460,14 +463,23 @@ wss.on('connection', (ws, req) => {
 
   let binaryCount = 0;
   ws.on('message', (raw, isBinary) => {
-    // Binary messages from broadcaster = relay MP3 data for /stream/:roomId
+    // Binary messages from broadcaster = relay audio data for /stream/:roomId
     if (isBinary && clientRoom && clientRole === 'broadcaster') {
       binaryCount++;
+      const data = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
+
+      // Store the first chunk as the WebM initialization segment
+      const room = rooms.rooms.get(clientRoom);
+      if (room && binaryCount === 1) {
+        room.relayHeader = data;
+        logger.info({ roomId: clientRoom.slice(0, 8), headerBytes: data.length }, 'Relay: stored WebM header');
+      }
+
       if (binaryCount === 1 || binaryCount % 500 === 0) {
         const listeners = rooms.getRelayListeners(clientRoom);
-        logger.info({ roomId: clientRoom.slice(0, 8), binaryCount, bytes: raw.length, listeners: listeners.size }, 'Relay binary data');
+        logger.info({ roomId: clientRoom.slice(0, 8), binaryCount, bytes: data.length, listeners: listeners.size }, 'Relay binary data');
       }
-      const data = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
+
       const listeners = rooms.getRelayListeners(clientRoom);
       for (const res of listeners) {
         try { res.write(data); } catch { rooms.removeRelayListener(clientRoom, res); }

@@ -735,19 +735,16 @@ const Broadcaster = () => {
   // Start relay stream for built-in /stream/:roomId (always, for VLC/RadioDJ)
   const relayStartedRef = useRef(false);
   useEffect(() => {
-    if (isOnAir && webrtc.roomId && !relayStartedRef.current) {
-      const nodes = mixer.getNodes();
-      if (nodes) {
-        relayStartedRef.current = true;
-        relayStream.startRelay(webrtc.roomId, nodes.ctx, nodes.clipper).catch(() => {
-          // Non-fatal — WebRTC broadcast still works without the relay
-        });
-      }
+    if (isOnAir && mixer.mixedStream && webrtc.roomId && !relayStartedRef.current) {
+      relayStartedRef.current = true;
+      relayStream.startRelay(mixer.mixedStream, webrtc.roomId).catch(() => {
+        // Non-fatal — WebRTC broadcast still works without the relay
+      });
     }
     if (!isOnAir) {
       relayStartedRef.current = false;
     }
-  }, [isOnAir, webrtc.roomId, mixer.getNodes, relayStream]);
+  }, [isOnAir, mixer.mixedStream, webrtc.roomId, relayStream]);
 
   // Log relay/integration stream errors
   useEffect(() => {

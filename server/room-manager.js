@@ -64,6 +64,7 @@ export class RoomManager {
       chatParticipants: new Map(), // participantId (receiverId or 'broadcaster') → { name }
       integrationInfo: null, // { type, credentials } — active integration connection
       relayListeners: new Set(), // HTTP response objects listening to /stream/:roomId
+      relayHeader: null, // WebM init segment — sent to new listeners before live data
       createdAt: new Date().toISOString(),
       endedAt: null, // set when broadcaster leaves; room kept for 24h
     });
