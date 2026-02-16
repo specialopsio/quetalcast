@@ -746,7 +746,13 @@ const Broadcaster = () => {
     }
   }, [isOnAir, mixer.mixedStream, webrtc.roomId, relayStream]);
 
-  // Log integration stream errors
+  // Log relay/integration stream errors
+  useEffect(() => {
+    if (relayStream.error) {
+      addLog(`Stream relay: ${relayStream.error}`, 'warn');
+    }
+  }, [relayStream.error, addLog]);
+
   useEffect(() => {
     if (integrationStream.error) {
       addLog(integrationStream.error, 'error');

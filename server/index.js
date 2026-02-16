@@ -174,7 +174,7 @@ app.get('/stream/:roomId', (req, res) => {
     'Content-Type': 'audio/mpeg',
     'Connection': 'keep-alive',
     'Cache-Control': 'no-cache, no-store',
-    'icy-name': `QueTal Cast — ${roomId}`,
+    'icy-name': `QueTal Cast - ${roomId}`,
     'icy-genre': 'Various',
     'icy-br': '192',
     'Access-Control-Allow-Origin': '*',

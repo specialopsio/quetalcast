@@ -13,6 +13,7 @@ async function loadLame() {
 
 export interface UseRelayStreamReturn {
   active: boolean;
+  error: string | null;
   streamUrl: string | null;
   startRelay: (stream: MediaStream, roomId: string) => Promise<void>;
   stopRelay: () => void;
@@ -30,6 +31,7 @@ const WS_URL = import.meta.env.VITE_WS_URL || (
  */
 export function useRelayStream(): UseRelayStreamReturn {
   const [active, setActive] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -62,6 +64,7 @@ export function useRelayStream(): UseRelayStreamReturn {
   }, []);
 
   const startRelay = useCallback(async (stream: MediaStream, roomId: string) => {
+    setError(null);
     try {
       const lame = await loadLame();
 
@@ -72,7 +75,7 @@ export function useRelayStream(): UseRelayStreamReturn {
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error('Relay WebSocket timeout')), 10000);
         ws.onopen = () => { clearTimeout(timeout); resolve(); };
-        ws.onerror = () => { clearTimeout(timeout); reject(new Error('Relay WebSocket failed')); };
+        ws.onerror = () => { clearTimeout(timeout); reject(new Error('Relay WebSocket connection failed')); };
       });
 
       // Send room ID to initialize
@@ -93,10 +96,12 @@ export function useRelayStream(): UseRelayStreamReturn {
           } catch { /* ignore non-JSON */ }
         };
         ws.addEventListener('message', handler);
+        ws.addEventListener('close', () => resolve({ ok: false, error: 'Relay connection closed' }));
         setTimeout(() => resolve({ ok: false, error: 'Relay connection timeout' }), 10000);
       });
 
       if (!ack.ok) {
+        setError(ack.error || 'Relay stream failed');
         ws.close();
         wsRef.current = null;
         return;
@@ -154,13 +159,18 @@ export function useRelayStream(): UseRelayStreamReturn {
       processor.connect(ctx.destination);
 
       ws.onclose = () => stopRelay();
-      ws.onerror = () => stopRelay();
+      ws.onerror = () => {
+        setError('Relay stream disconnected');
+        stopRelay();
+      };
 
       setActive(true);
-    } catch {
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Relay stream failed';
+      setError(msg);
       stopRelay();
     }
   }, [stopRelay]);
 
-  return { active, streamUrl, startRelay, stopRelay };
+  return { active, error, streamUrl, startRelay, stopRelay };
 }
