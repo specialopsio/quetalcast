@@ -6,7 +6,7 @@ import rateLimit from 'express-rate-limit';
 import { createLogger } from './logger.js';
 import { RoomManager } from './room-manager.js';
 import { SessionManager } from './auth.js';
-import { testConnection, connectToServer, updateStreamMetadata } from './integration-relay.js';
+import { testConnection, connectToServer, updateStreamMetadata, buildListenerUrl } from './integration-relay.js';
 import { identifyAudio } from './audio-identify.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -504,6 +504,11 @@ wss.on('connection', (ws, req) => {
           if (chatHistory.length > 0) {
             ws.send(JSON.stringify({ type: 'chat-history', messages: chatHistory }));
           }
+          // Send stream URL if an integration is active
+          const integrationInfoForReceiver = rooms.getIntegrationInfo(roomId);
+          if (integrationInfoForReceiver?.listenerUrl) {
+            ws.send(JSON.stringify({ type: 'stream-url', url: integrationInfoForReceiver.listenerUrl }));
+          }
         } else {
           // Broadcaster joining an existing room
           ws.send(JSON.stringify({ type: 'joined', roomId, role }));
@@ -913,13 +918,24 @@ integrationWss.on('connection', (ws, req) => {
           }, 8000);
 
           // Store integration info on the room for metadata updates
+          const listenerUrl = buildListenerUrl(type, credentials);
           if (msgRoomId) {
             integrationRoomId = msgRoomId;
-            rooms.setIntegrationInfo(msgRoomId, { type, credentials });
+            rooms.setIntegrationInfo(msgRoomId, { type, credentials, listenerUrl });
+
+            // Broadcast stream URL to all connected receivers
+            if (listenerUrl) {
+              const streamUrlMsg = JSON.stringify({ type: 'stream-url', url: listenerUrl });
+              const receiverIds = rooms.getReceiverIds(msgRoomId);
+              for (const rid of receiverIds) {
+                const rws = rooms.getReceiver(msgRoomId, rid);
+                if (rws) rws.send(streamUrlMsg);
+              }
+            }
           }
 
           ws.send(JSON.stringify({ type: 'connected' }));
-          logger.info({ type, ip }, 'Integration stream: connected and relaying');
+          logger.info({ type, ip, listenerUrl }, 'Integration stream: connected and relaying');
         } catch (err) {
           logger.warn({ type, error: err.message }, 'Integration stream: connection failed');
           ws.send(JSON.stringify({ type: 'error', error: err.message }));

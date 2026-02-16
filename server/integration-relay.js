@@ -308,6 +308,27 @@ export function updateStreamMetadata(type, credentials, songTitle, logger) {
 }
 
 /**
+ * Build a listener URL from integration credentials.
+ * For Icecast/Radio.co: http://host:port/mount
+ * For Shoutcast: http://host:port (listeners use the base port + 1, but many setups proxy this)
+ */
+export function buildListenerUrl(type, credentials) {
+  if (type === 'icecast' || type === 'radio-co') {
+    const normalized = normalizeIcecastCredentials(credentials);
+    if (!normalized.host || !normalized.port || !normalized.mount) return null;
+    return `http://${normalized.host}:${normalized.port}${normalized.mount}`;
+  }
+  if (type === 'shoutcast') {
+    const host = toTrimmedString(credentials.host);
+    const port = toTrimmedString(credentials.port);
+    if (!host || !port) return null;
+    // Shoutcast listener port is typically the same as the configured port
+    return `http://${host}:${port}/`;
+  }
+  return null;
+}
+
+/**
  * Test connection to a streaming server.
  * Connects, verifies auth succeeds, then immediately disconnects.
  */

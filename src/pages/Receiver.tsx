@@ -8,7 +8,7 @@ import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
-import { Headphones, Radio, Volume2, ExternalLink, RefreshCw, Disc3 } from 'lucide-react';
+import { Headphones, Radio, Volume2, ExternalLink, RefreshCw, Disc3, Copy, Check } from 'lucide-react';
 import { Footer } from '@/components/Footer';
 import { ChatPanel } from '@/components/ChatPanel';
 import { TrackList, type Track } from '@/components/TrackList';
@@ -29,6 +29,8 @@ const Receiver = () => {
   const [nowPlaying, setNowPlaying] = useState('');
   const [nowPlayingCover, setNowPlayingCover] = useState<string | undefined>();
   const [trackList, setTrackList] = useState<Track[]>([]);
+  const [streamUrl, setStreamUrl] = useState<string | null>(null);
+  const [streamUrlCopied, setStreamUrlCopied] = useState(false);
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const noAudioTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -60,7 +62,7 @@ const Receiver = () => {
     if (signaling.connected) addLog('Connected to server');
   }, [signaling.connected]);
 
-  // Listen for metadata and track list updates
+  // Listen for metadata, track list updates, and stream URL
   useEffect(() => {
     const unsub = signaling.subscribe((msg) => {
       if (msg.type === 'metadata' && typeof msg.text === 'string') {
@@ -69,6 +71,9 @@ const Receiver = () => {
       }
       if (msg.type === 'track-list' && Array.isArray(msg.tracks)) {
         setTrackList(msg.tracks as Track[]);
+      }
+      if (msg.type === 'stream-url' && typeof msg.url === 'string') {
+        setStreamUrl(msg.url as string);
       }
     });
     return unsub;
@@ -240,6 +245,32 @@ const Receiver = () => {
             <p className="text-xs text-muted-foreground">
               Audio is being broadcast on an external platform. You can still use chat below.
             </p>
+          </div>
+        )}
+
+        {/* Stream URL — available when integration is active */}
+        {joined && streamUrl && (
+          <div className="flex items-center gap-2 px-3 py-2.5 bg-secondary/50 border border-border rounded-md">
+            <Radio className="h-4 w-4 text-muted-foreground shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-0.5">Stream URL</p>
+              <p className="text-xs font-mono text-foreground truncate" title={streamUrl}>{streamUrl}</p>
+            </div>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(streamUrl);
+                setStreamUrlCopied(true);
+                setTimeout(() => setStreamUrlCopied(false), 2000);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-mono text-muted-foreground hover:text-foreground bg-secondary transition-colors shrink-0"
+              title="Copy stream URL for RadioDJ, VLC, or any media player"
+            >
+              {streamUrlCopied ? (
+                <><Check className="h-3 w-3 text-primary" /> Copied</>
+              ) : (
+                <><Copy className="h-3 w-3" /> Copy</>
+              )}
+            </button>
           </div>
         )}
 
