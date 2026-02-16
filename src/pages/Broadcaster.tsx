@@ -28,6 +28,7 @@ import { Footer } from '@/components/Footer';
 import { ChatPanel } from '@/components/ChatPanel';
 import { IntegrationsSheet } from '@/components/IntegrationsSheet';
 import { useIntegrationStream } from '@/hooks/useIntegrationStream';
+import { useRelayStream } from '@/hooks/useRelayStream';
 import { getIntegration, type IntegrationConfig } from '@/lib/integrations';
 import { getPresets, savePreset, deletePreset, type Preset } from '@/lib/presets';
 import { type EffectName, CHAIN_ORDER } from '@/hooks/useMicEffects';
@@ -289,6 +290,7 @@ const Broadcaster = () => {
   const [selectedIntegration, setSelectedIntegration] = useState<IntegrationConfig | null>(null);
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
   const integrationStream = useIntegrationStream();
+  const relayStream = useRelayStream();
   const recorder = useRecorder();
   const soundboardTriggerRef = useRef<((index: number) => void) | null>(null);
 
@@ -730,6 +732,20 @@ const Broadcaster = () => {
     }
   }, [isOnAir, selectedIntegration, mixer.mixedStream, integrationStream, addLog]);
 
+  // Start relay stream for built-in /stream/:roomId (always, for VLC/RadioDJ)
+  const relayStartedRef = useRef(false);
+  useEffect(() => {
+    if (isOnAir && mixer.mixedStream && webrtc.roomId && !relayStartedRef.current) {
+      relayStartedRef.current = true;
+      relayStream.startRelay(mixer.mixedStream, webrtc.roomId).catch(() => {
+        // Non-fatal — WebRTC broadcast still works without the relay
+      });
+    }
+    if (!isOnAir) {
+      relayStartedRef.current = false;
+    }
+  }, [isOnAir, mixer.mixedStream, webrtc.roomId, relayStream]);
+
   // Log integration stream errors
   useEffect(() => {
     if (integrationStream.error) {
@@ -779,6 +795,7 @@ const Broadcaster = () => {
     if (selectedIntegration) {
       integrationStream.stopStream();
     }
+    relayStream.stopRelay();
 
     setIsOnAir(false);
     addLog('Off air');

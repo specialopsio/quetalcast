@@ -63,6 +63,7 @@ export class RoomManager {
       chatHistory: [], // { name, text, time, system? } — persisted chat messages
       chatParticipants: new Map(), // participantId (receiverId or 'broadcaster') → { name }
       integrationInfo: null, // { type, credentials } — active integration connection
+      relayListeners: new Set(), // HTTP response objects listening to /stream/:roomId
       createdAt: new Date().toISOString(),
       endedAt: null, // set when broadcaster leaves; room kept for 24h
     });
@@ -256,6 +257,23 @@ export class RoomManager {
   getIntegrationInfo(roomId) {
     const room = this.rooms.get(roomId);
     return room ? room.integrationInfo : null;
+  }
+
+  addRelayListener(roomId, res) {
+    const room = this.rooms.get(roomId);
+    if (!room) return false;
+    room.relayListeners.add(res);
+    return true;
+  }
+
+  removeRelayListener(roomId, res) {
+    const room = this.rooms.get(roomId);
+    if (room) room.relayListeners.delete(res);
+  }
+
+  getRelayListeners(roomId) {
+    const room = this.rooms.get(roomId);
+    return room ? room.relayListeners : new Set();
   }
 
   listRooms() {
