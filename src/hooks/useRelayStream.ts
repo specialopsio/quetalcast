@@ -16,7 +16,7 @@ export interface UseRelayStreamReturn {
   active: boolean;
   error: string | null;
   streamUrl: string | null;
-  startRelay: (stream: MediaStream, roomId: string) => Promise<void>;
+  startRelay: (stream: MediaStream, roomId: string, ctx: AudioContext) => Promise<void>;
   stopRelay: () => void;
 }
 
@@ -25,15 +25,15 @@ export interface UseRelayStreamReturn {
  * as binary frames. The server routes them to HTTP listeners at /stream/:roomId
  * for VLC, RadioDJ, etc.
  *
- * Uses its own AudioContext (like the integration stream) to avoid conflicts
- * with the mixer's audio graph.
+ * MUST use the mixer's AudioContext — creating a separate AudioContext doesn't work
+ * because MediaStreamAudioSourceNode in a different context from the stream's origin
+ * never fires ScriptProcessorNode.onaudioprocess.
  */
 export function useRelayStream(signaling: UseSignalingReturn): UseRelayStreamReturn {
   const [active, setActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
 
-  const ctxRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
 
@@ -47,15 +47,11 @@ export function useRelayStream(signaling: UseSignalingReturn): UseRelayStreamRet
       sourceRef.current.disconnect();
       sourceRef.current = null;
     }
-    if (ctxRef.current) {
-      ctxRef.current.close().catch(() => {});
-      ctxRef.current = null;
-    }
     setActive(false);
     setStreamUrl(null);
   }, []);
 
-  const startRelay = useCallback(async (stream: MediaStream, roomId: string) => {
+  const startRelay = useCallback(async (stream: MediaStream, roomId: string, ctx: AudioContext) => {
     setError(null);
     let step = 'init';
     try {
@@ -95,19 +91,13 @@ export function useRelayStream(signaling: UseSignalingReturn): UseRelayStreamRet
       step = 'setUrl';
       if (ack.url) setStreamUrl(ack.url);
 
-      // Diagnostic: send a test binary frame to verify the plumbing works
-      signaling.sendBinary(new Uint8Array([0xFF, 0xFB, 0x90, 0x00]));
-
-      step = 'audioCtx';
+      step = 'encoder';
       const quality = DEFAULT_STREAM_QUALITY;
       const numChannels = quality.channels;
       const bitrate = quality.bitrate;
 
-      // Own AudioContext at 44.1kHz — matches the integration stream pattern
-      const ctx = new AudioContext({ sampleRate: 44100 });
-      ctxRef.current = ctx;
-      await ctx.resume();
-
+      // Use the mixer's AudioContext — MUST be the same context that produced the stream,
+      // otherwise ScriptProcessorNode.onaudioprocess never fires
       const source = ctx.createMediaStreamSource(stream);
       sourceRef.current = source;
 
@@ -115,10 +105,9 @@ export function useRelayStream(signaling: UseSignalingReturn): UseRelayStreamRet
       const processor = ctx.createScriptProcessor(bufferSize, numChannels, numChannels);
       processorRef.current = processor;
 
-      step = 'encoder';
-      const mp3Encoder = new lame.Mp3Encoder(numChannels, 44100, bitrate);
+      const mp3Encoder = new lame.Mp3Encoder(numChannels, ctx.sampleRate, bitrate);
 
-      // Send a warmup frame so the stream is detected immediately
+      // Warmup frame
       const silence = new Int16Array(1152);
       if (numChannels === 2) {
         const warmup = mp3Encoder.encodeBuffer(silence, silence);
@@ -137,13 +126,10 @@ export function useRelayStream(signaling: UseSignalingReturn): UseRelayStreamRet
         return samples;
       };
 
-      // Capture sendBinary in a local variable so the closure always works
+      // Capture sendBinary so the closure always references the stable callback
       const sendBin = signaling.sendBinary;
-      let frameCount = 0;
 
       processor.onaudioprocess = (e: AudioProcessingEvent) => {
-        frameCount++;
-
         let mp3buf: Uint8Array;
         if (numChannels === 2) {
           const left = floatToInt16(e.inputBuffer.getChannelData(0));
@@ -158,11 +144,6 @@ export function useRelayStream(signaling: UseSignalingReturn): UseRelayStreamRet
 
         if (mp3buf.length > 0) {
           sendBin(mp3buf);
-        }
-
-        // Report diagnostics every ~5s (at ~10 frames/sec for 4096 buffer @ 44.1kHz)
-        if (frameCount === 1 || frameCount % 50 === 0) {
-          signaling.send({ type: 'relay-diag', frameCount, lastMp3Len: mp3buf.length, ctxState: ctx.state });
         }
       };
 
