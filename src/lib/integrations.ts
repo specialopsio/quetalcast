@@ -25,10 +25,24 @@ export interface IntegrationCredentials {
   [key: string]: string;
 }
 
+export type StreamBitrate = 128 | 192 | 256 | 320;
+export type StreamChannels = 1 | 2;
+
+export interface StreamQuality {
+  bitrate: StreamBitrate;
+  channels: StreamChannels;
+}
+
+export const DEFAULT_STREAM_QUALITY: StreamQuality = {
+  bitrate: 192,
+  channels: 2,
+};
+
 export interface IntegrationConfig {
   integrationId: string;
   credentials: IntegrationCredentials;
   rememberCredentials: boolean;
+  streamQuality?: StreamQuality;
 }
 
 // ---------------------------------------------------------------------------
@@ -45,7 +59,7 @@ export const INTEGRATIONS: Integration[] = [
       { key: 'host', label: 'Server Host', placeholder: 'uk3.internet-radio.com', type: 'text', required: true, hint: 'From your Centova Cast dashboard' },
       { key: 'port', label: 'Port', placeholder: '8000', type: 'number', required: true, hint: 'Found in Settings > Stream' },
       { key: 'username', label: 'Source Username', placeholder: 'source', type: 'text', required: false, hint: 'Usually "source" unless customized per mount point' },
-      { key: 'mount', label: 'Mount Point', placeholder: '/stream', type: 'text', required: true, hint: 'Default is /stream — check Settings > Mount Points' },
+      { key: 'mount', label: 'Mount Point', placeholder: '/stream.mp3', type: 'text', required: true, hint: 'Use .mp3 extension (e.g. /stream.mp3) for best compatibility with RadioDJ, VLC, and other players' },
       { key: 'password', label: 'Source Password', placeholder: '', type: 'password', required: true, hint: 'The source/admin password from Settings > Stream' },
     ],
   },
@@ -68,7 +82,7 @@ export const INTEGRATIONS: Integration[] = [
       { key: 'host', label: 'DJ Host', placeholder: 'dj.radio.co', type: 'text', required: true },
       { key: 'port', label: 'Port', placeholder: '80', type: 'number', required: true },
       { key: 'username', label: 'Source Username', placeholder: 'source', type: 'text', required: false },
-      { key: 'mount', label: 'Mount Point', placeholder: '/stream', type: 'text', required: true },
+      { key: 'mount', label: 'Mount Point', placeholder: '/stream.mp3', type: 'text', required: true },
       { key: 'password', label: 'DJ Password', placeholder: '', type: 'password', required: true },
     ],
   },

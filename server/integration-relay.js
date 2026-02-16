@@ -72,7 +72,7 @@ function normalizeIcecastCredentials({ host, port, mount, password, username }) 
  *
  * Returns a writable net.Socket on success.
  */
-export function connectIcecast({ host, port, mount, password, username }, logger) {
+export function connectIcecast({ host, port, mount, password, username }, logger, streamQuality) {
   return new Promise((resolve, reject) => {
     const normalized = normalizeIcecastCredentials({ host, port, mount, password, username });
     const portNum = parseInt(normalized.port, 10);
@@ -82,6 +82,9 @@ export function connectIcecast({ host, port, mount, password, username }, logger
 
     const mountPath = normalized.mount;
     const sourceUser = normalized.username;
+    const bitrate = streamQuality?.bitrate || 192;
+    const channels = streamQuality?.channels || 2;
+    const sampleRate = 44100;
 
     const socket = net.createConnection(portNum, normalized.host);
     let settled = false;
@@ -101,6 +104,10 @@ export function connectIcecast({ host, port, mount, password, username }, logger
         `User-Agent: QuetalCast/1.0`,
         `ice-name: QuetalCast`,
         `ice-public: 0`,
+        `ice-bitrate: ${bitrate}`,
+        `ice-channels: ${channels}`,
+        `ice-samplerate: ${sampleRate}`,
+        `ice-audio-info: ice-bitrate=${bitrate};ice-channels=${channels};ice-samplerate=${sampleRate}`,
         ``,
         ``,
       ].join('\r\n');
@@ -161,12 +168,16 @@ export function connectIcecast({ host, port, mount, password, username }, logger
  *   → \r\n
  *   Then stream MP3 data.
  */
-export function connectShoutcast({ host, port, password, streamId }, logger) {
+export function connectShoutcast({ host, port, password, streamId }, logger, streamQuality) {
   return new Promise((resolve, reject) => {
     const portNum = parseInt(port, 10);
     if (!host || !portNum || !password) {
       return reject(new Error('Missing Shoutcast credentials'));
     }
+
+    const bitrate = streamQuality?.bitrate || 192;
+    const channels = streamQuality?.channels || 2;
+    const sampleRate = 44100;
 
     const socket = net.createConnection(portNum, host);
 
@@ -194,6 +205,9 @@ export function connectShoutcast({ host, port, password, streamId }, logger) {
           `content-type: audio/mpeg`,
           `icy-name: QuetalCast`,
           `icy-pub: 0`,
+          `icy-br: ${bitrate}`,
+          `icy-sr: ${sampleRate}`,
+          `icy-channels: ${channels}`,
           ``,
           ``,
         ].join('\r\n');
@@ -221,13 +235,13 @@ export function connectShoutcast({ host, port, password, streamId }, logger) {
  * Connect to a streaming server based on integration type.
  * Radio.co uses the Icecast protocol.
  */
-export function connectToServer(type, credentials, logger) {
+export function connectToServer(type, credentials, logger, streamQuality) {
   switch (type) {
     case 'icecast':
     case 'radio-co':
-      return connectIcecast(credentials, logger);
+      return connectIcecast(credentials, logger, streamQuality);
     case 'shoutcast':
-      return connectShoutcast(credentials, logger);
+      return connectShoutcast(credentials, logger, streamQuality);
     default:
       return Promise.reject(new Error(`Unknown integration type: ${type}`));
   }

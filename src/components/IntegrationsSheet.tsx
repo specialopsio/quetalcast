@@ -12,9 +12,13 @@ import {
   loadIntegrationConfig,
   saveIntegrationConfig,
   clearIntegrationConfig,
+  DEFAULT_STREAM_QUALITY,
   type Integration,
   type IntegrationConfig,
   type IntegrationCredentials,
+  type StreamBitrate,
+  type StreamChannels,
+  type StreamQuality,
 } from '@/lib/integrations';
 import { Radio, ChevronLeft, Loader2, CheckCircle2, XCircle, Trash2 } from 'lucide-react';
 
@@ -36,6 +40,7 @@ export function IntegrationsSheet({
   const [remember, setRemember] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; error?: string } | null>(null);
+  const [streamQuality, setStreamQuality] = useState<StreamQuality>({ ...DEFAULT_STREAM_QUALITY });
 
   // When opening a specific integration, load saved creds if any
   const openIntegrationForm = (integration: Integration) => {
@@ -46,6 +51,7 @@ export function IntegrationsSheet({
     if (saved) {
       setCredentials(saved.credentials);
       setRemember(saved.rememberCredentials);
+      setStreamQuality(saved.streamQuality || { ...DEFAULT_STREAM_QUALITY });
     } else {
       // Pre-fill defaults from placeholders
       const defaults: IntegrationCredentials = {};
@@ -54,6 +60,7 @@ export function IntegrationsSheet({
       });
       setCredentials(defaults);
       setRemember(false);
+      setStreamQuality({ ...DEFAULT_STREAM_QUALITY });
     }
   };
 
@@ -108,6 +115,7 @@ export function IntegrationsSheet({
       integrationId: activeIntegration.id,
       credentials,
       rememberCredentials: remember,
+      streamQuality,
     };
 
     saveIntegrationConfig(config);
@@ -215,6 +223,40 @@ export function IntegrationsSheet({
               )}
             </div>
           ))}
+        </div>
+
+        {/* Stream quality */}
+        <div className="space-y-2 pt-2 border-t border-border">
+          <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground block">Stream Quality</span>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] text-muted-foreground/70 mb-1 block">Bitrate</label>
+              <select
+                value={streamQuality.bitrate}
+                onChange={(e) => setStreamQuality((q) => ({ ...q, bitrate: Number(e.target.value) as StreamBitrate }))}
+                className="w-full bg-input border border-border rounded-md px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <option value={128}>128 kbps</option>
+                <option value={192}>192 kbps</option>
+                <option value={256}>256 kbps</option>
+                <option value={320}>320 kbps</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[11px] text-muted-foreground/70 mb-1 block">Channels</label>
+              <select
+                value={streamQuality.channels}
+                onChange={(e) => setStreamQuality((q) => ({ ...q, channels: Number(e.target.value) as StreamChannels }))}
+                className="w-full bg-input border border-border rounded-md px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <option value={2}>Stereo</option>
+                <option value={1}>Mono</option>
+              </select>
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground/60">
+            Stereo at 192+ kbps recommended for best compatibility with RadioDJ, VLC, and other players
+          </p>
         </div>
 
         {/* Remember credentials */}

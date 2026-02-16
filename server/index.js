@@ -872,7 +872,7 @@ integrationWss.on('connection', (ws, req) => {
     if (!initialized) {
       try {
         const msg = JSON.parse(raw.toString());
-        const { type, credentials, roomId: msgRoomId } = msg;
+        const { type, credentials, roomId: msgRoomId, streamQuality } = msg;
 
         if (!type || !credentials) {
           ws.send(JSON.stringify({ type: 'error', error: 'Missing type or credentials' }));
@@ -880,10 +880,10 @@ integrationWss.on('connection', (ws, req) => {
           return;
         }
 
-        logger.info({ type, ip }, 'Integration stream: connecting to server');
+        logger.info({ type, ip, bitrate: streamQuality?.bitrate, channels: streamQuality?.channels }, 'Integration stream: connecting to server');
 
         try {
-          sourceSocket = await connectToServer(type, credentials, logger);
+          sourceSocket = await connectToServer(type, credentials, logger, streamQuality);
 
           // Handle source socket errors/close
           sourceSocket.on('error', (err) => {

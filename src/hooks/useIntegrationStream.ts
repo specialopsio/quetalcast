@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import type { IntegrationConfig } from '@/lib/integrations';
-import { getIntegration } from '@/lib/integrations';
+import { getIntegration, DEFAULT_STREAM_QUALITY } from '@/lib/integrations';
 
 // lamejs is loaded as a global UMD script or dynamic import.
 // We'll use dynamic import so it works with Vite bundling.
@@ -96,11 +96,14 @@ export function useIntegrationStream(): UseIntegrationStreamReturn {
         ws.onopen = () => { clearTimeout(timeout); resolve(); };
       });
 
-      // Send integration config as first message (include roomId for metadata updates)
+      const quality = config.streamQuality || DEFAULT_STREAM_QUALITY;
+
+      // Send integration config as first message (include roomId for metadata updates + stream quality for headers)
       ws.send(JSON.stringify({
         type: integration.type,
         credentials: config.credentials,
         roomId: roomId || undefined,
+        streamQuality: quality,
       }));
 
       // Wait for server ack
@@ -127,6 +130,8 @@ export function useIntegrationStream(): UseIntegrationStreamReturn {
       }
 
       // Set up MP3 encoding pipeline
+      const numChannels = quality.channels;
+      const bitrate = quality.bitrate;
       const ctx = new AudioContext({ sampleRate: 44100 });
       ctxRef.current = ctx;
       await ctx.resume();
@@ -137,34 +142,54 @@ export function useIntegrationStream(): UseIntegrationStreamReturn {
       const source = ctx.createMediaStreamSource(stream);
       sourceRef.current = source;
 
-      // ScriptProcessor for PCM capture (4096 buffer, mono input, mono output)
+      // ScriptProcessor: match channel count to encoding mode
       const bufferSize = 4096;
-      const processor = ctx.createScriptProcessor(bufferSize, 1, 1);
+      const processor = ctx.createScriptProcessor(bufferSize, numChannels, numChannels);
       processorRef.current = processor;
 
-      // lamejs MP3 encoder: 1 channel, 44100 Hz, 128 kbps
-      const mp3Encoder = new lame.Mp3Encoder(1, 44100, 128);
+      // lamejs MP3 encoder
+      const mp3Encoder = new lame.Mp3Encoder(numChannels, 44100, bitrate);
       chunkCountRef.current = 0;
 
       // Send a short silent warmup frame so source dashboards detect an active stream quickly.
-      const warmup = mp3Encoder.encodeBuffer(new Int16Array(1152));
-      if (warmup.length > 0 && wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(warmup);
+      if (numChannels === 2) {
+        const silence = new Int16Array(1152);
+        const warmup = mp3Encoder.encodeBuffer(silence, silence);
+        if (warmup.length > 0 && wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(warmup);
+        }
+      } else {
+        const warmup = mp3Encoder.encodeBuffer(new Int16Array(1152));
+        if (warmup.length > 0 && wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(warmup);
+        }
       }
+
+      /** Convert Float32 [-1,1] to Int16 */
+      const floatToInt16 = (input: Float32Array): Int16Array => {
+        const samples = new Int16Array(input.length);
+        for (let i = 0; i < input.length; i++) {
+          const s = Math.max(-1, Math.min(1, input[i]));
+          samples[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+        return samples;
+      };
 
       processor.onaudioprocess = (e: AudioProcessingEvent) => {
         if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
 
-        const inputData = e.inputBuffer.getChannelData(0);
-
-        // Convert Float32 [-1,1] to Int16
-        const samples = new Int16Array(inputData.length);
-        for (let i = 0; i < inputData.length; i++) {
-          const s = Math.max(-1, Math.min(1, inputData[i]));
-          samples[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        let mp3buf: Uint8Array;
+        if (numChannels === 2) {
+          const left = floatToInt16(e.inputBuffer.getChannelData(0));
+          const right = e.inputBuffer.numberOfChannels >= 2
+            ? floatToInt16(e.inputBuffer.getChannelData(1))
+            : left;
+          mp3buf = mp3Encoder.encodeBuffer(left, right);
+        } else {
+          const samples = floatToInt16(e.inputBuffer.getChannelData(0));
+          mp3buf = mp3Encoder.encodeBuffer(samples);
         }
 
-        const mp3buf = mp3Encoder.encodeBuffer(samples);
         if (mp3buf.length > 0) {
           wsRef.current.send(mp3buf);
           chunkCountRef.current += 1;
