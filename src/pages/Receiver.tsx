@@ -249,7 +249,7 @@ const Receiver = () => {
         )}
 
         {/* Share URLs — always show receive link when joined; show stream URL when integration active */}
-        {joined && (audioStarted || externalStream) && (
+        {joined && (
           <div className="space-y-2">
             {/* Receive page URL — always available */}
             <div className="flex items-center gap-2 px-3 py-2.5 bg-secondary/50 border border-border rounded-md">
