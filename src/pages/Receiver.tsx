@@ -8,7 +8,7 @@ import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
-import { Headphones, Radio, Volume2, ExternalLink, RefreshCw, Disc3, Copy, Check } from 'lucide-react';
+import { Headphones, Radio, Volume2, ExternalLink, RefreshCw, Disc3, Copy, Check, Globe } from 'lucide-react';
 import { Footer } from '@/components/Footer';
 import { ChatPanel } from '@/components/ChatPanel';
 import { TrackList, type Track } from '@/components/TrackList';
@@ -30,6 +30,7 @@ const Receiver = () => {
   const [nowPlayingCover, setNowPlayingCover] = useState<string | undefined>();
   const [trackList, setTrackList] = useState<Track[]>([]);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
+  const [receiveLinkCopied, setReceiveLinkCopied] = useState(false);
   const [streamUrlCopied, setStreamUrlCopied] = useState(false);
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const noAudioTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -251,11 +252,13 @@ const Receiver = () => {
         {/* Share URLs — always show receive link when joined; show stream URL when integration active */}
         {joined && (
           <div className="space-y-2">
-            {/* Receive page URL — always available */}
+            {/* Receive page URL — browser only */}
             <div className="flex items-center gap-2 px-3 py-2.5 bg-secondary/50 border border-border rounded-md">
-              <Headphones className="h-4 w-4 text-muted-foreground shrink-0" />
+              <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-0.5">Receive Link</p>
+                <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-0.5">
+                  Receive Link <span className="font-normal ml-1">— open in browser</span>
+                </p>
                 <p className="text-xs font-mono text-foreground truncate" title={`${window.location.origin}/receive/${roomInput || paramRoomId || ''}`}>
                   {window.location.origin}/receive/{roomInput || paramRoomId || ''}
                 </p>
@@ -264,13 +267,13 @@ const Receiver = () => {
                 onClick={() => {
                   const url = `${window.location.origin}/receive/${roomInput || paramRoomId || ''}`;
                   navigator.clipboard.writeText(url);
-                  setStreamUrlCopied(true);
-                  setTimeout(() => setStreamUrlCopied(false), 2000);
+                  setReceiveLinkCopied(true);
+                  setTimeout(() => setReceiveLinkCopied(false), 2000);
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-mono text-muted-foreground hover:text-foreground bg-secondary transition-colors shrink-0"
-                title="Copy link to share with others"
+                title="Copy link to share — opens in a web browser"
               >
-                {streamUrlCopied && !streamUrl ? (
+                {receiveLinkCopied ? (
                   <><Check className="h-3 w-3 text-primary" /> Copied</>
                 ) : (
                   <><Copy className="h-3 w-3" /> Copy</>
@@ -278,12 +281,14 @@ const Receiver = () => {
               </button>
             </div>
 
-            {/* Icecast/Shoutcast stream URL — only when integration is active */}
+            {/* Icecast/Shoutcast stream URL — for media players, only when integration active */}
             {streamUrl && (
               <div className="flex items-center gap-2 px-3 py-2.5 bg-primary/5 border border-primary/20 rounded-md">
                 <Radio className="h-4 w-4 text-primary shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-[10px] text-primary/60 uppercase tracking-wider font-semibold mb-0.5">Stream URL</p>
+                  <p className="text-[10px] text-primary/60 uppercase tracking-wider font-semibold mb-0.5">
+                    Stream URL <span className="font-normal ml-1">— VLC, RadioDJ, media players</span>
+                  </p>
                   <p className="text-xs font-mono text-foreground truncate" title={streamUrl}>{streamUrl}</p>
                 </div>
                 <button
@@ -295,7 +300,7 @@ const Receiver = () => {
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-mono text-muted-foreground hover:text-foreground bg-secondary transition-colors shrink-0"
                   title="Copy stream URL for RadioDJ, VLC, or any media player"
                 >
-                  {streamUrlCopied && streamUrl ? (
+                  {streamUrlCopied ? (
                     <><Check className="h-3 w-3 text-primary" /> Copied</>
                   ) : (
                     <><Copy className="h-3 w-3" /> Copy</>
