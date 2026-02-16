@@ -22,8 +22,38 @@ export class RoomManager {
     }
   }
 
-  create() {
-    const roomId = crypto.randomBytes(4).toString('hex').slice(0, 7);
+  /**
+   * Validate a custom room slug.
+   * Allowed: lowercase letters, digits, hyphens. 3–40 chars. No leading/trailing hyphens.
+   * Returns null if valid, or an error string if invalid.
+   */
+  static validateCustomId(id) {
+    if (typeof id !== 'string') return 'Room ID must be a string';
+    if (id.length < 3 || id.length > 40) return 'Room ID must be 3–40 characters';
+    if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(id) && id.length >= 3) return 'Only lowercase letters, numbers, and hyphens allowed (no leading/trailing hyphens)';
+    if (/--/.test(id)) return 'No consecutive hyphens';
+    return null;
+  }
+
+  create(customId) {
+    // If a custom ID is provided, validate and check uniqueness
+    if (customId) {
+      const error = RoomManager.validateCustomId(customId);
+      if (error) return { ok: false, error, code: 'INVALID_ROOM_ID' };
+      if (this.rooms.has(customId)) {
+        // If the existing room's broadcast ended and no one is connected, reclaim it
+        const existing = this.rooms.get(customId);
+        const hasActiveUsers = (existing.broadcaster && existing.broadcaster.readyState === 1)
+          || existing.receivers.size > 0;
+        if (hasActiveUsers) {
+          return { ok: false, error: 'Room ID already in use', code: 'ROOM_ID_TAKEN' };
+        }
+        // Reclaim: delete old room so broadcaster can reuse the slug
+        this.rooms.delete(customId);
+      }
+    }
+
+    const roomId = customId || crypto.randomBytes(4).toString('hex').slice(0, 7);
     this.rooms.set(roomId, {
       roomId,
       broadcaster: null,
@@ -36,7 +66,7 @@ export class RoomManager {
       createdAt: new Date().toISOString(),
       endedAt: null, // set when broadcaster leaves; room kept for 24h
     });
-    return roomId;
+    return { ok: true, roomId };
   }
 
   join(roomId, role, ws) {

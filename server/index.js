@@ -440,14 +440,20 @@ wss.on('connection', (ws, req) => {
           logger.warn({ ip }, 'Unauthenticated create-room attempt');
           break;
         }
-        const roomId = rooms.create();
+        const customId = typeof msg.customId === 'string' ? msg.customId.toLowerCase().trim() : undefined;
+        const createResult = rooms.create(customId || undefined);
+        if (!createResult.ok) {
+          ws.send(JSON.stringify({ type: 'error', message: createResult.error, code: createResult.code }));
+          break;
+        }
+        const roomId = createResult.roomId;
         clientRoom = roomId;
         clientRole = 'broadcaster';
         rooms.join(roomId, 'broadcaster', ws);
         ws.send(JSON.stringify({ type: 'room-created', roomId }));
         ws.send(JSON.stringify({ type: 'joined', roomId, role: 'broadcaster' }));
         ws.send(JSON.stringify({ type: 'listener-count', count: 0 }));
-        logger.info({ roomId: roomId.slice(0, 8), ip }, 'Room created');
+        logger.info({ roomId: roomId.slice(0, 8), ip, custom: !!customId }, 'Room created');
         break;
       }
 

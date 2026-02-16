@@ -8,7 +8,7 @@ import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
-import { Copy, Mic, MicOff, Radio, Headphones, Music, Sparkles, Zap, Plug2, Circle, Square, Keyboard, Monitor, MonitorOff, Download, SlidersHorizontal } from 'lucide-react';
+import { Copy, Mic, MicOff, Radio, Headphones, Music, Sparkles, Zap, Plug2, Circle, Square, Keyboard, Monitor, MonitorOff, Download, SlidersHorizontal, Link, X, Clock } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
 import { Slider } from '@/components/ui/slider';
 import {
@@ -55,6 +55,50 @@ const WS_URL = import.meta.env.VITE_WS_URL || (
 );
 
 const BROADCASTER_LAYOUT_STORAGE_KEY = 'quetalcast:broadcaster-layout:v1';
+const CUSTOM_URLS_STORAGE_KEY = 'quetalcast:custom-urls:v1';
+const CUSTOM_URL_PATTERN = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/;
+const MAX_SAVED_URLS = 20;
+
+function readSavedCustomUrls(): string[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_URLS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((s: unknown) => typeof s === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomUrl(slug: string) {
+  const existing = readSavedCustomUrls();
+  const filtered = existing.filter((s) => s !== slug);
+  const updated = [slug, ...filtered].slice(0, MAX_SAVED_URLS);
+  try {
+    localStorage.setItem(CUSTOM_URLS_STORAGE_KEY, JSON.stringify(updated));
+  } catch {
+    // Ignore quota errors
+  }
+}
+
+function removeCustomUrl(slug: string) {
+  const existing = readSavedCustomUrls();
+  const updated = existing.filter((s) => s !== slug);
+  try {
+    localStorage.setItem(CUSTOM_URLS_STORAGE_KEY, JSON.stringify(updated));
+  } catch {
+    // Ignore quota errors
+  }
+}
+
+function validateCustomUrl(value: string): string | null {
+  if (!value) return null; // empty = auto-generate
+  if (value.length < 3) return 'At least 3 characters';
+  if (value.length > 40) return '40 characters max';
+  if (/--/.test(value)) return 'No consecutive hyphens';
+  if (!CUSTOM_URL_PATTERN.test(value)) return 'Lowercase letters, numbers, hyphens only';
+  return null;
+}
 
 type PersistedBroadcasterLayout = {
   qualityMode: AudioQuality;
@@ -233,6 +277,13 @@ const Broadcaster = () => {
   const [newPresetName, setNewPresetName] = useState('');
   const [qualityMode, setQualityMode] = useState<AudioQuality>('auto');
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  // Custom URL state
+  const [customUrl, setCustomUrl] = useState('');
+  const [customUrlError, setCustomUrlError] = useState<string | null>(null);
+  const [savedUrls, setSavedUrls] = useState<string[]>(() => readSavedCustomUrls());
+  const [showUrlSuggestions, setShowUrlSuggestions] = useState(false);
+  const urlInputRef = useRef<HTMLInputElement>(null);
 
   // Integration state
   const [selectedIntegration, setSelectedIntegration] = useState<IntegrationConfig | null>(null);
@@ -451,12 +502,19 @@ const Broadcaster = () => {
   }, [signaling.connected]);
 
   // Handle auth errors from signaling — redirect to login
+  // Handle room creation errors (custom URL conflicts, validation)
   useEffect(() => {
     const unsub = signaling.subscribe((msg) => {
       if (msg.type === 'error' && msg.code === 'AUTH_REQUIRED') {
         addLog('Session expired — please log in again', 'warn');
         localStorage.removeItem('webrtc-bridge-auth');
         setTimeout(() => navigate('/login'), 500);
+      }
+      if (msg.type === 'error' && (msg.code === 'INVALID_ROOM_ID' || msg.code === 'ROOM_ID_TAKEN')) {
+        const errMsg = typeof msg.message === 'string' ? msg.message : 'Invalid room ID';
+        setCustomUrlError(errMsg);
+        addLog(errMsg, 'error');
+        setIsOnAir(false);
       }
     });
     return unsub;
@@ -546,8 +604,24 @@ const Broadcaster = () => {
 
       addLog('Mic connected');
 
+      // Validate custom URL before creating room
+      const slug = customUrl.trim().toLowerCase();
+      if (slug) {
+        const validationError = validateCustomUrl(slug);
+        if (validationError) {
+          setCustomUrlError(validationError);
+          addLog(validationError, 'error');
+          setIsOnAir(false);
+          return;
+        }
+      }
+
       // Always create a new room for each broadcast
-      webrtc.createRoom();
+      webrtc.createRoom(slug || undefined);
+      if (slug) {
+        saveCustomUrl(slug);
+        setSavedUrls(readSavedCustomUrls());
+      }
       addLog('Setting up room…');
       broadcastStartedRef.current = false;
 
@@ -560,7 +634,7 @@ const Broadcaster = () => {
     } catch (e) {
       addLog('Couldn\'t start broadcast — check mic permissions', 'error');
     }
-  }, [mixer, micEffects, webrtc, selectedIntegration, addLog, micVolume, micMuted, recorder, isOnAir]);
+  }, [mixer, micEffects, webrtc, selectedIntegration, addLog, micVolume, micMuted, recorder, isOnAir, customUrl]);
 
   const handleGoOnAir = useCallback(async () => {
     // Only show dialog when there's actual broadcast content from a previous session,
@@ -1131,6 +1205,107 @@ const Broadcaster = () => {
           right={audioAnalysis.right}
           label="Input Level"
         />
+
+        {/* Custom Receive URL — only before going on air */}
+        {!isOnAir && (
+          <div className="panel !py-3 !px-4 space-y-2">
+            <div className="flex items-center gap-1.5">
+              <Link className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Receive URL</span>
+            </div>
+            <div className="relative">
+              <div className="flex items-center gap-0 rounded-md border border-border bg-input overflow-hidden focus-within:ring-1 focus-within:ring-ring">
+                <span className="text-xs font-mono text-muted-foreground/60 pl-3 shrink-0 select-none whitespace-nowrap">
+                  /receive/
+                </span>
+                <input
+                  ref={urlInputRef}
+                  value={customUrl}
+                  onChange={(e) => {
+                    const v = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
+                    setCustomUrl(v);
+                    setCustomUrlError(null);
+                  }}
+                  onFocus={() => setShowUrlSuggestions(true)}
+                  onBlur={() => {
+                    // Delay to allow clicks on suggestions
+                    setTimeout(() => setShowUrlSuggestions(false), 200);
+                  }}
+                  placeholder="auto-generated"
+                  maxLength={40}
+                  spellCheck={false}
+                  autoComplete="off"
+                  className="flex-1 min-w-0 bg-transparent py-2 pr-2 text-sm font-mono text-foreground focus:outline-none placeholder:text-muted-foreground/40"
+                />
+                {customUrl && (
+                  <button
+                    onClick={() => {
+                      setCustomUrl('');
+                      setCustomUrlError(null);
+                    }}
+                    className="pr-2 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                    title="Clear"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Suggestions dropdown */}
+              {showUrlSuggestions && savedUrls.length > 0 && !customUrl && (
+                <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-popover border border-border rounded-md shadow-lg overflow-hidden">
+                  <div className="px-3 py-1.5 border-b border-border">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">Recently used</span>
+                  </div>
+                  {savedUrls.map((url) => (
+                    <div
+                      key={url}
+                      className="flex items-center justify-between px-3 py-1.5 hover:bg-secondary/80 cursor-pointer group"
+                    >
+                      <button
+                        className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setCustomUrl(url);
+                          setShowUrlSuggestions(false);
+                        }}
+                      >
+                        <Clock className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+                        <span className="text-xs font-mono text-foreground truncate">{url}</span>
+                      </button>
+                      <button
+                        className="opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-all shrink-0 ml-2"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          removeCustomUrl(url);
+                          setSavedUrls(readSavedCustomUrls());
+                        }}
+                        title="Remove"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {customUrlError && (
+              <p className="text-[11px] text-destructive">{customUrlError}</p>
+            )}
+            {customUrl && !customUrlError && (
+              <p className="text-[10px] text-muted-foreground/60 font-mono truncate">
+                Listeners join at: {window.location.origin}/receive/{customUrl}
+              </p>
+            )}
+            {!customUrl && (
+              <p className="text-[10px] text-muted-foreground/60">
+                Leave blank for an auto-generated ID, or type a custom slug like <span className="font-mono">elpasorocks</span> or <span className="font-mono">farmers-market</span>
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Controls */}
         <div className="flex gap-3">
