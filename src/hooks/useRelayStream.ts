@@ -12,6 +12,64 @@ async function loadLame() {
   return lamejs;
 }
 
+/**
+ * AudioWorklet processor code — runs in the audio thread.
+ * Collects PCM samples into buffers and posts them to the main thread.
+ */
+const workletCode = `
+class RelayProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this._bufferSize = 4096;
+    this._left = new Float32Array(this._bufferSize);
+    this._right = new Float32Array(this._bufferSize);
+    this._pos = 0;
+    this._active = true;
+    this.port.onmessage = (e) => {
+      if (e.data === 'stop') this._active = false;
+    };
+  }
+
+  process(inputs) {
+    if (!this._active) return false;
+    const input = inputs[0];
+    if (!input || input.length === 0) return true;
+
+    const left = input[0];
+    const right = input.length >= 2 ? input[1] : input[0];
+    if (!left) return true;
+
+    for (let i = 0; i < left.length; i++) {
+      this._left[this._pos] = left[i];
+      this._right[this._pos] = right ? right[i] : left[i];
+      this._pos++;
+
+      if (this._pos >= this._bufferSize) {
+        this.port.postMessage({
+          left: this._left.slice(),
+          right: this._right.slice(),
+        });
+        this._pos = 0;
+      }
+    }
+    return true;
+  }
+}
+
+registerProcessor('relay-processor', RelayProcessor);
+`;
+
+let workletRegistered = new WeakSet<AudioContext>();
+
+async function ensureWorklet(ctx: AudioContext) {
+  if (workletRegistered.has(ctx)) return;
+  const blob = new Blob([workletCode], { type: 'application/javascript' });
+  const url = URL.createObjectURL(blob);
+  await ctx.audioWorklet.addModule(url);
+  URL.revokeObjectURL(url);
+  workletRegistered.add(ctx);
+}
+
 export interface UseRelayStreamReturn {
   active: boolean;
   error: string | null;
@@ -22,24 +80,21 @@ export interface UseRelayStreamReturn {
 
 /**
  * Encodes the broadcast audio to MP3 and sends it over the signaling WebSocket
- * as binary frames. The server routes them to HTTP listeners at /stream/:roomId
- * for VLC, RadioDJ, etc.
- *
- * Taps directly into the mixer's audio graph (clipper node) rather than going
- * through a MediaStream round-trip, which causes ScriptProcessorNode to never fire.
+ * as binary frames. Uses AudioWorklet to reliably capture PCM from the mixer's
+ * audio graph, then encodes to MP3 with lamejs on the main thread.
  */
 export function useRelayStream(signaling: UseSignalingReturn): UseRelayStreamReturn {
   const [active, setActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
 
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
 
   const stopRelay = useCallback(() => {
-    if (processorRef.current) {
-      processorRef.current.disconnect();
-      processorRef.current.onaudioprocess = null;
-      processorRef.current = null;
+    if (workletNodeRef.current) {
+      workletNodeRef.current.port.postMessage('stop');
+      workletNodeRef.current.disconnect();
+      workletNodeRef.current = null;
     }
     setActive(false);
     setStreamUrl(null);
@@ -85,18 +140,12 @@ export function useRelayStream(signaling: UseSignalingReturn): UseRelayStreamRet
       step = 'setUrl';
       if (ack.url) setStreamUrl(ack.url);
 
-      step = 'encoder';
+      step = 'worklet';
+      await ensureWorklet(ctx);
+
       const quality = DEFAULT_STREAM_QUALITY;
       const numChannels = quality.channels;
       const bitrate = quality.bitrate;
-
-      // Connect ScriptProcessorNode directly to the mixer's clipper output.
-      // This avoids going through MediaStream → MediaStreamAudioSourceNode
-      // which breaks onaudioprocess in same-context loops.
-      const bufferSize = 4096;
-      const processor = ctx.createScriptProcessor(bufferSize, numChannels, numChannels);
-      processorRef.current = processor;
-
       const mp3Encoder = new lame.Mp3Encoder(numChannels, ctx.sampleRate, bitrate);
 
       // Warmup frame so players detect the stream instantly
@@ -105,6 +154,8 @@ export function useRelayStream(signaling: UseSignalingReturn): UseRelayStreamRet
         ? mp3Encoder.encodeBuffer(silence, silence)
         : mp3Encoder.encodeBuffer(silence);
       if (warmup.length > 0) signaling.sendBinary(warmup);
+
+      const sendBin = signaling.sendBinary;
 
       const floatToInt16 = (input: Float32Array): Int16Array => {
         const samples = new Int16Array(input.length);
@@ -115,19 +166,25 @@ export function useRelayStream(signaling: UseSignalingReturn): UseRelayStreamRet
         return samples;
       };
 
-      const sendBin = signaling.sendBinary;
+      step = 'connect';
+      const workletNode = new AudioWorkletNode(ctx, 'relay-processor', {
+        numberOfInputs: 1,
+        numberOfOutputs: 0,
+        channelCount: numChannels,
+        channelCountMode: 'explicit',
+      });
+      workletNodeRef.current = workletNode;
 
-      processor.onaudioprocess = (e: AudioProcessingEvent) => {
+      workletNode.port.onmessage = (e: MessageEvent) => {
+        const { left, right } = e.data;
+        const leftI16 = floatToInt16(left);
+
         let mp3buf: Uint8Array;
         if (numChannels === 2) {
-          const left = floatToInt16(e.inputBuffer.getChannelData(0));
-          const right = e.inputBuffer.numberOfChannels >= 2
-            ? floatToInt16(e.inputBuffer.getChannelData(1))
-            : left;
-          mp3buf = mp3Encoder.encodeBuffer(left, right);
+          const rightI16 = floatToInt16(right);
+          mp3buf = mp3Encoder.encodeBuffer(leftI16, rightI16);
         } else {
-          const samples = floatToInt16(e.inputBuffer.getChannelData(0));
-          mp3buf = mp3Encoder.encodeBuffer(samples);
+          mp3buf = mp3Encoder.encodeBuffer(leftI16);
         }
 
         if (mp3buf.length > 0) {
@@ -135,11 +192,8 @@ export function useRelayStream(signaling: UseSignalingReturn): UseRelayStreamRet
         }
       };
 
-      step = 'connect';
-      // Tap the clipper's output → processor → destination
-      // clipper is already connected to dest (WebRTC), this adds a parallel path
-      tapNode.connect(processor);
-      processor.connect(ctx.destination);
+      // Tap the clipper → worklet node (sink, no output)
+      tapNode.connect(workletNode);
 
       step = 'done';
       setActive(true);
