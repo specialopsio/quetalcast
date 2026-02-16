@@ -21,7 +21,9 @@ Real-time audio broadcasting application built with WebRTC, React, and Node.js. 
 <!-- Auto-identify (temporarily disabled): Automatic song identification using AcoustID/Chromaprint. Ear icon toggle during broadcast. Code remains in useAutoIdentify.ts and audio-identify.js for future re-enable. -->
 - **Local recording** — Record your broadcast as a 320 kbps stereo MP3, auto-downloaded when you stop. Start recording before going on air to capture from the moment you hit record. If you end the broadcast while recording, recording continues until you stop it or click Download ZIP in the modal. Recording also continues when you start a new broadcast — use the Record button or Download ZIP to stop and save. Uses AudioWorklet + Web Worker for energy-efficient encoding
 - **Keyboard shortcuts** — Space (mute), R (record), L (listen), C (cue), 1–0 (sound pads), ? (help). Active while on air, disabled when typing in inputs
-- **Integrations** — Stream to external platforms (Icecast, Shoutcast, Radio.co) via server-side relay. Test connection, remember credentials in localStorage. Room is still created for chat and metadata. Now Playing metadata is automatically pushed to the external server's admin API. For internet-radio.com (Centova Cast), use mount point `/stream` and stop AutoDJ before going live if needed — see docs for details
+- **Custom receive URLs** — Set a custom slug for your receive URL (e.g. `/receive/elpasorocks` or `/receive/farmers-market`) instead of an auto-generated hex ID. Lowercase letters, numbers, and hyphens, 3–40 characters. Previously used slugs are saved to localStorage and shown as suggestions. Stale rooms with the same slug are automatically reclaimed so you can reuse the same URL across sessions
+- **Integrations** — Stream to external platforms (Icecast, Shoutcast, Radio.co) via server-side relay. Configurable stream quality: bitrate (128/192/256/320 kbps) and channels (stereo/mono), defaulting to stereo 192 kbps. Test connection, remember credentials + quality settings in localStorage. Room is still created for chat and metadata. Now Playing metadata is automatically pushed to the external server's admin API. Mount points should use `.mp3` extension for best compatibility with RadioDJ, VLC, and other players. Proper Icecast headers (`ice-audio-info`, `ice-bitrate`, `ice-channels`, `ice-samplerate`) are sent for reliable format detection. For internet-radio.com (Centova Cast), use mount point `/stream.mp3` and stop AutoDJ before going live if needed — see docs for details
+- **Stream URL sharing** — Receivers see a copyable Receive Link for sharing. When an integration is active, an additional Stream URL is shown — the direct Icecast/Shoutcast listener URL that can be pasted into RadioDJ, VLC, or any media player
 - **Multi-receiver** — Up to 4 concurrent listeners per room
 - **TURN relay** — Dynamic credential fetching via Metered.ca (or static config)
 - **Auto-reconnect** — Receivers automatically reconnect on connection drops with exponential backoff (up to 5 attempts). Manual retry available after max attempts
@@ -100,8 +102,9 @@ pnpm run dev
 
 1. Open `http://localhost:5173` and log in with your configured password
 2. Expand **Audio Controls** and select your audio input device — the level meter at top shows input immediately so you can dial in
-3. Click **Go On Air** — a room ID is generated and appended to the URL (`?room=...`)
-4. Share the receiver link (Copy Receiver Link); listeners open it and click **Join**
+3. Optionally set a **custom receive URL** (e.g. `elpasorocks`) in the Receive URL panel — leave blank for an auto-generated ID
+4. Click **Go On Air** — a room ID is generated and appended to the URL (`?room=...`)
+5. Share the receiver link (Copy Receiver Link); listeners open it and click **Join**
 
 ## Deployment (Fly.io)
 

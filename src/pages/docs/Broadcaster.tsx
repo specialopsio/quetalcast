@@ -72,6 +72,25 @@ export default function DocsBroadcaster() {
       </section>
 
       <section>
+        <h2 className="text-lg font-semibold text-foreground mb-3">Custom receive URL</h2>
+        <p>
+          Before going on air, the <strong>Receive URL</strong> panel lets you set a custom slug for
+          your receive link. For example, type <code>elpasorocks</code> and listeners can go to{" "}
+          <code>/receive/elpasorocks</code>. Leave it blank to auto-generate a random ID.
+        </p>
+        <p className="mt-2">
+          Rules: lowercase letters, numbers, and hyphens only. 3–40 characters. No leading or
+          trailing hyphens, no consecutive hyphens.
+        </p>
+        <p className="mt-2">
+          Previously used slugs are saved and shown as suggestions when you focus the input. You
+          can remove saved slugs with the X button. If a previous broadcast used the same slug and
+          it's no longer active, the room is reclaimed automatically — so you can reuse the same
+          URL for a recurring show.
+        </p>
+      </section>
+
+      <section>
         <h2 className="text-lg font-semibold text-foreground mb-3">Going on air</h2>
         <p>
           Press <strong>Go On Air</strong> to start. A timer shows how long you've been live. The

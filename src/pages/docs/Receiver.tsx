@@ -43,6 +43,21 @@ export default function DocsReceiver() {
       </section>
 
       <section>
+        <h2 className="text-lg font-semibold text-foreground mb-3">Share links</h2>
+        <p>
+          Once connected, you'll see a <strong>Receive Link</strong> bar with a Copy button — this
+          is the URL for sharing with others so they can tune into the same broadcast.
+        </p>
+        <p className="mt-2">
+          If the broadcaster is using an integration (Icecast, Shoutcast, Radio.co), an additional{" "}
+          <strong>Stream URL</strong> appears. This is the direct Icecast/Shoutcast listener URL
+          that can be pasted into <strong>RadioDJ</strong> (Options → Track Import → Internet
+          Stream), <strong>VLC</strong> (Media → Open Network Stream), or any other media player
+          that accepts standard audio streams.
+        </p>
+      </section>
+
+      <section>
         <h2 className="text-lg font-semibold text-foreground mb-3">Now Playing</h2>
         <p>
           When the broadcaster sets stream metadata, you'll see a "Now Playing" bar with a

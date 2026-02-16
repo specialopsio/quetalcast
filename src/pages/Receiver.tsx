@@ -248,29 +248,61 @@ const Receiver = () => {
           </div>
         )}
 
-        {/* Stream URL — available when integration is active */}
-        {joined && streamUrl && (
-          <div className="flex items-center gap-2 px-3 py-2.5 bg-secondary/50 border border-border rounded-md">
-            <Radio className="h-4 w-4 text-muted-foreground shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-0.5">Stream URL</p>
-              <p className="text-xs font-mono text-foreground truncate" title={streamUrl}>{streamUrl}</p>
+        {/* Share URLs — always show receive link when joined; show stream URL when integration active */}
+        {joined && (audioStarted || externalStream) && (
+          <div className="space-y-2">
+            {/* Receive page URL — always available */}
+            <div className="flex items-center gap-2 px-3 py-2.5 bg-secondary/50 border border-border rounded-md">
+              <Headphones className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-semibold mb-0.5">Receive Link</p>
+                <p className="text-xs font-mono text-foreground truncate" title={`${window.location.origin}/receive/${roomInput || paramRoomId || ''}`}>
+                  {window.location.origin}/receive/{roomInput || paramRoomId || ''}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  const url = `${window.location.origin}/receive/${roomInput || paramRoomId || ''}`;
+                  navigator.clipboard.writeText(url);
+                  setStreamUrlCopied(true);
+                  setTimeout(() => setStreamUrlCopied(false), 2000);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-mono text-muted-foreground hover:text-foreground bg-secondary transition-colors shrink-0"
+                title="Copy link to share with others"
+              >
+                {streamUrlCopied && !streamUrl ? (
+                  <><Check className="h-3 w-3 text-primary" /> Copied</>
+                ) : (
+                  <><Copy className="h-3 w-3" /> Copy</>
+                )}
+              </button>
             </div>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(streamUrl);
-                setStreamUrlCopied(true);
-                setTimeout(() => setStreamUrlCopied(false), 2000);
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-mono text-muted-foreground hover:text-foreground bg-secondary transition-colors shrink-0"
-              title="Copy stream URL for RadioDJ, VLC, or any media player"
-            >
-              {streamUrlCopied ? (
-                <><Check className="h-3 w-3 text-primary" /> Copied</>
-              ) : (
-                <><Copy className="h-3 w-3" /> Copy</>
-              )}
-            </button>
+
+            {/* Icecast/Shoutcast stream URL — only when integration is active */}
+            {streamUrl && (
+              <div className="flex items-center gap-2 px-3 py-2.5 bg-primary/5 border border-primary/20 rounded-md">
+                <Radio className="h-4 w-4 text-primary shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] text-primary/60 uppercase tracking-wider font-semibold mb-0.5">Stream URL</p>
+                  <p className="text-xs font-mono text-foreground truncate" title={streamUrl}>{streamUrl}</p>
+                </div>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(streamUrl);
+                    setStreamUrlCopied(true);
+                    setTimeout(() => setStreamUrlCopied(false), 2000);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-mono text-muted-foreground hover:text-foreground bg-secondary transition-colors shrink-0"
+                  title="Copy stream URL for RadioDJ, VLC, or any media player"
+                >
+                  {streamUrlCopied && streamUrl ? (
+                    <><Check className="h-3 w-3 text-primary" /> Copied</>
+                  ) : (
+                    <><Copy className="h-3 w-3" /> Copy</>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         )}
 
