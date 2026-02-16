@@ -736,15 +736,18 @@ const Broadcaster = () => {
   const relayStartedRef = useRef(false);
   useEffect(() => {
     if (isOnAir && mixer.mixedStream && webrtc.roomId && !relayStartedRef.current) {
-      relayStartedRef.current = true;
-      relayStream.startRelay(mixer.mixedStream, webrtc.roomId).catch(() => {
-        // Non-fatal — WebRTC broadcast still works without the relay
-      });
+      const nodes = mixer.getNodes();
+      if (nodes) {
+        relayStartedRef.current = true;
+        relayStream.startRelay(mixer.mixedStream, webrtc.roomId, nodes.ctx).catch(() => {
+          // Non-fatal — WebRTC broadcast still works without the relay
+        });
+      }
     }
     if (!isOnAir) {
       relayStartedRef.current = false;
     }
-  }, [isOnAir, mixer.mixedStream, webrtc.roomId, relayStream]);
+  }, [isOnAir, mixer.mixedStream, webrtc.roomId, mixer.getNodes, relayStream]);
 
   // Log relay/integration stream errors
   useEffect(() => {

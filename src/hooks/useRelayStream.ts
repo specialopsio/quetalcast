@@ -15,7 +15,7 @@ export interface UseRelayStreamReturn {
   active: boolean;
   error: string | null;
   streamUrl: string | null;
-  startRelay: (stream: MediaStream, roomId: string) => Promise<void>;
+  startRelay: (stream: MediaStream, roomId: string, ctx: AudioContext) => Promise<void>;
   stopRelay: () => void;
 }
 
@@ -28,6 +28,7 @@ const WS_URL = import.meta.env.VITE_WS_URL || (
 /**
  * Encodes the broadcast audio to MP3 and sends it to the server via WebSocket.
  * The server serves it as an HTTP stream at /stream/:roomId for VLC, RadioDJ, etc.
+ * Reuses the broadcaster's AudioContext to avoid browser limits on concurrent contexts.
  */
 export function useRelayStream(): UseRelayStreamReturn {
   const [active, setActive] = useState(false);
@@ -35,7 +36,6 @@ export function useRelayStream(): UseRelayStreamReturn {
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
-  const ctxRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
 
@@ -49,10 +49,6 @@ export function useRelayStream(): UseRelayStreamReturn {
       sourceRef.current.disconnect();
       sourceRef.current = null;
     }
-    if (ctxRef.current && ctxRef.current.state !== 'closed') {
-      ctxRef.current.close().catch(() => {});
-      ctxRef.current = null;
-    }
     if (wsRef.current) {
       if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
         wsRef.current.close(1000, 'relay-ended');
@@ -63,7 +59,7 @@ export function useRelayStream(): UseRelayStreamReturn {
     setStreamUrl(null);
   }, []);
 
-  const startRelay = useCallback(async (stream: MediaStream, roomId: string) => {
+  const startRelay = useCallback(async (stream: MediaStream, roomId: string, ctx: AudioContext) => {
     setError(null);
     try {
       const lame = await loadLame();
@@ -109,13 +105,10 @@ export function useRelayStream(): UseRelayStreamReturn {
 
       if (ack.url) setStreamUrl(ack.url);
 
-      // Set up MP3 encoding
+      // Use the broadcaster's existing AudioContext — no new context needed
       const quality = DEFAULT_STREAM_QUALITY;
       const numChannels = quality.channels;
       const bitrate = quality.bitrate;
-      const ctx = new AudioContext({ sampleRate: 44100 });
-      ctxRef.current = ctx;
-      await ctx.resume();
 
       const source = ctx.createMediaStreamSource(stream);
       sourceRef.current = source;
@@ -124,7 +117,7 @@ export function useRelayStream(): UseRelayStreamReturn {
       const processor = ctx.createScriptProcessor(bufferSize, numChannels, numChannels);
       processorRef.current = processor;
 
-      const mp3Encoder = new lame.Mp3Encoder(numChannels, 44100, bitrate);
+      const mp3Encoder = new lame.Mp3Encoder(numChannels, ctx.sampleRate, bitrate);
 
       const floatToInt16 = (input: Float32Array): Int16Array => {
         const samples = new Int16Array(input.length);
