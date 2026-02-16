@@ -290,7 +290,6 @@ const Broadcaster = () => {
   const [selectedIntegration, setSelectedIntegration] = useState<IntegrationConfig | null>(null);
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
   const integrationStream = useIntegrationStream();
-  const relayStream = useRelayStream(signaling);
   const recorder = useRecorder();
   const soundboardTriggerRef = useRef<((index: number) => void) | null>(null);
 
@@ -325,6 +324,7 @@ const Broadcaster = () => {
   }, []);
 
   const signaling = useSignaling(WS_URL);
+  const relayStream = useRelayStream(signaling);
   const webrtc = useWebRTC(signaling, 'broadcaster');
   const mixer = useAudioMixer();
   const micEffects = useMicEffects();
