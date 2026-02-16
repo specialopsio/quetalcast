@@ -116,6 +116,9 @@ type PersistedBroadcasterLayout = {
   padsMuted: boolean;
   padsSolo: boolean;
   padsPan: number;
+  micMonitor: boolean;
+  systemMonitor: boolean;
+  padsMonitor: boolean;
   selectedDevice: string;
   boardAccordion: string;
   boardExpanded: boolean;
@@ -303,6 +306,9 @@ const Broadcaster = () => {
   const [padsMuted, setPadsMuted] = useState(false);
   const [padsSolo, setPadsSolo] = useState(false);
   const [padsPan, setPadsPan] = useState(0);
+  const [micMonitor, setMicMonitor] = useState(false);
+  const [systemMonitor, setSystemMonitor] = useState(false);
+  const [padsMonitor, setPadsMonitor] = useState(true);
   const [systemAudioInfoOpen, setSystemAudioInfoOpen] = useState(false);
   const systemAudioStreamRef = useRef<MediaStream | null>(null);
   const [channelLevels, setChannelLevels] = useState({ mic: 0, system: 0, pads: 0 });
@@ -482,6 +488,19 @@ const Broadcaster = () => {
     padsPan,
     mixer,
   ]);
+
+  // Sync per-channel headphone monitor state to the mixer
+  useEffect(() => {
+    mixer.setMicMonitor(micMonitor);
+  }, [micMonitor, mixer]);
+
+  useEffect(() => {
+    mixer.setSystemMonitor(systemMonitor);
+  }, [systemMonitor, mixer]);
+
+  useEffect(() => {
+    mixer.setPadsMonitor(padsMonitor);
+  }, [padsMonitor, mixer]);
 
   const statusLabels: Record<ConnectionStatus, string> = {
     idle: 'Ready',
@@ -1109,6 +1128,10 @@ const Broadcaster = () => {
     if (typeof saved.padsSolo === 'boolean') setPadsSolo(saved.padsSolo);
     if (typeof saved.padsPan === 'number') setPadsPan(saved.padsPan);
 
+    if (typeof saved.micMonitor === 'boolean') setMicMonitor(saved.micMonitor);
+    if (typeof saved.systemMonitor === 'boolean') setSystemMonitor(saved.systemMonitor);
+    if (typeof saved.padsMonitor === 'boolean') setPadsMonitor(saved.padsMonitor);
+
     if (typeof saved.boardExpanded === 'boolean') setBoardExpanded(saved.boardExpanded);
     if (typeof saved.boardAccordion === 'string' && saved.boardAccordion) setBoardAccordion(saved.boardAccordion);
 
@@ -1133,6 +1156,9 @@ const Broadcaster = () => {
       padsMuted,
       padsSolo,
       padsPan,
+      micMonitor,
+      systemMonitor,
+      padsMonitor,
       selectedDevice,
       boardAccordion,
       boardExpanded,
@@ -1158,6 +1184,9 @@ const Broadcaster = () => {
     padsMuted,
     padsSolo,
     padsPan,
+    micMonitor,
+    systemMonitor,
+    padsMonitor,
     selectedDevice,
     boardAccordion,
     boardExpanded,
@@ -1607,6 +1636,13 @@ const Broadcaster = () => {
                               >
                                 S
                               </button>
+                              <button
+                                onClick={() => setMicMonitor((v) => !v)}
+                                className={`px-1.5 py-1 rounded text-[10px] ${micMonitor ? 'bg-emerald-500/20 text-emerald-400' : 'bg-secondary text-muted-foreground'}`}
+                                title={micMonitor ? 'Disable mic monitor' : 'Monitor mic locally'}
+                              >
+                                <Headphones className="h-3 w-3" />
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -1646,6 +1682,13 @@ const Broadcaster = () => {
                                 title="Pads solo"
                               >
                                 S
+                              </button>
+                              <button
+                                onClick={() => setPadsMonitor((v) => !v)}
+                                className={`px-1.5 py-1 rounded text-[10px] ${padsMonitor ? 'bg-emerald-500/20 text-emerald-400' : 'bg-secondary text-muted-foreground'}`}
+                                title={padsMonitor ? 'Disable pads monitor' : 'Monitor pads locally'}
+                              >
+                                <Headphones className="h-3 w-3" />
                               </button>
                             </div>
                           </div>
@@ -1691,6 +1734,14 @@ const Broadcaster = () => {
                                 title="System solo"
                               >
                                 S
+                              </button>
+                              <button
+                                onClick={() => setSystemMonitor((v) => !v)}
+                                disabled={!systemAudioActive}
+                                className={`px-1.5 py-1 rounded text-[10px] ${systemMonitor ? 'bg-emerald-500/20 text-emerald-400' : 'bg-secondary text-muted-foreground'} disabled:opacity-40`}
+                                title={systemMonitor ? 'Disable system monitor' : 'Monitor system audio locally'}
+                              >
+                                <Headphones className="h-3 w-3" />
                               </button>
                             </div>
                           </div>

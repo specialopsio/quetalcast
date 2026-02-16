@@ -19,6 +19,9 @@ export interface UseAudioMixerReturn {
   setListening: (on: boolean) => void;
   setCueMode: (on: boolean) => void;
   setLimiterThreshold: (db: LimiterThreshold) => void;
+  setMicMonitor: (on: boolean) => void;
+  setSystemMonitor: (on: boolean) => void;
+  setPadsMonitor: (on: boolean) => void;
   getChannelLevels: () => { mic: number; system: number; pads: number };
   getNodes: () => { ctx: AudioContext; micGain: GainNode; broadcastBus: GainNode; micVolumeGain: GainNode; clipper: WaveShaperNode } | null;
 }
@@ -26,17 +29,21 @@ export interface UseAudioMixerReturn {
 /**
  * Audio routing graph:
  *
- *   micSource → micGain (mute) → [effects] → micVolumeGain (volume) → broadcastBus
- *   sysAudioSource → sysAudioGain → broadcastBus
- *   soundboardBus → sbToBroadcastGain → broadcastBus
- *   soundboardBus → sbLocalGain → ctx.destination
+ *   micSource → micGain (mute) → [effects] → micVolumeGain (volume) → micPan → broadcastBus
+ *   micPan → micMonitorGain → ctx.destination        (per-channel headphone monitor)
+ *   sysAudioSource → sysAudioGain → sysAudioPan → broadcastBus
+ *   sysAudioPan → sysMonitorGain → ctx.destination   (per-channel headphone monitor)
+ *   soundboardBus → padsVolumeGain → padsPan → sbToBroadcastGain → broadcastBus
+ *   padsPan → sbLocalGain → ctx.destination           (per-channel headphone monitor for pads)
  *   broadcastBus → broadcastOutGain → limiter → clipper → dest (→ mixedStream → WebRTC)
- *   broadcastBus → listenGain → ctx.destination
+ *   broadcastBus → listenGain → ctx.destination       (global listen / full-mix monitor)
  *
  * Gain state table:
- *   Default  (listen OFF, cue OFF): micGain=vol, broadcastOutGain=1, sbToBroadcast=1, sbLocal=1, listen=0
- *   Listen ON (cue OFF):            micGain=vol, broadcastOutGain=1, sbToBroadcast=1, sbLocal=0, listen=1
- *   Cue ON:                         micGain=vol, broadcastOutGain=0, sbToBroadcast=0, sbLocal=1, listen=1
+ *   Default  (listen OFF, cue OFF): broadcastOutGain=1, sbToBroadcast=1, listen=0
+ *                                   per-channel monitors: mic=off, pads=on, sys=off (defaults)
+ *   Listen ON (cue OFF):            broadcastOutGain=1, sbToBroadcast=1, listen=1
+ *                                   per-channel monitors muted (heard through listen path)
+ *   Cue ON:                         broadcastOutGain=0, sbToBroadcast=0, listen=1, sbLocal=1
  *                                   (nothing reaches receiver; soundboard + mic/effects play locally)
  */
 export function useAudioMixer(): UseAudioMixerReturn {
@@ -72,6 +79,16 @@ export function useAudioMixer(): UseAudioMixerReturn {
   const micAnalyserDataRef = useRef<Uint8Array | null>(null);
   const padsAnalyserDataRef = useRef<Uint8Array | null>(null);
   const systemAnalyserDataRef = useRef<Uint8Array | null>(null);
+
+  // Per-channel monitor gain nodes (headphone buttons)
+  const micMonitorGainRef = useRef<GainNode | null>(null);
+  const sysMonitorGainRef = useRef<GainNode | null>(null);
+  // Pads monitor uses sbLocalGainRef
+
+  // Track per-channel monitor desired state for listen/cue restore
+  const micMonitorOnRef = useRef(false);
+  const sysMonitorOnRef = useRef(false);
+  const padsMonitorOnRef = useRef(true); // pads heard locally by default
 
   // Track current mic volume for mute/unmute restore
   const micVolumeRef = useRef(1);
@@ -158,11 +175,18 @@ export function useAudioMixer(): UseAudioMixerReturn {
     clipper.curve = buildClipCurve(0);
     clipper.oversample = '4x'; // reduce aliasing from clipping
 
+    // Per-channel monitor gain nodes
+    const micMonitorGain = ctx.createGain();
+    micMonitorGain.gain.value = 0; // mic monitor off by default
+
     // Wire the graph
     // micVolumeGain → micPan → broadcastBus (mic path always goes through volume + pan)
     micVolumeGain.connect(micPan);
     micPan.connect(broadcastBus);
     micPan.connect(micAnalyser);
+    // micPan → micMonitorGain → ctx.destination (per-channel headphone monitor)
+    micPan.connect(micMonitorGain);
+    micMonitorGain.connect(ctx.destination);
     // micGain → micVolumeGain (connected when mic is added)
     // soundboardBus → padsVolumeGain → padsPan → (broadcast + local)
     soundboardBus.connect(padsVolumeGain);
@@ -199,6 +223,7 @@ export function useAudioMixer(): UseAudioMixerReturn {
     broadcastOutGainRef.current = broadcastOutGain;
     limiterRef.current = limiter;
     clipperRef.current = clipper;
+    micMonitorGainRef.current = micMonitorGain;
     micAnalyserRef.current = micAnalyser;
     padsAnalyserRef.current = padsAnalyser;
     micAnalyserDataRef.current = new Uint8Array(micAnalyser.fftSize);
@@ -284,14 +309,21 @@ export function useAudioMixer(): UseAudioMixerReturn {
       pan.pan.value = 0;
       analyser.fftSize = 256;
       analyser.smoothingTimeConstant = 0.7;
+      const sysMonitorGain = ctx.createGain();
+      sysMonitorGain.gain.value = sysMonitorOnRef.current ? 1 : 0;
+
       source.connect(gain);
       gain.connect(pan);
       pan.connect(broadcastBusRef.current!);
       pan.connect(analyser);
+      // Per-channel headphone monitor for system audio
+      pan.connect(sysMonitorGain);
+      sysMonitorGain.connect(ctx.destination);
 
       sysAudioSourceRef.current = source;
       sysAudioGainRef.current = gain;
       sysAudioPanRef.current = pan;
+      sysMonitorGainRef.current = sysMonitorGain;
       systemAnalyserRef.current = analyser;
       systemAnalyserDataRef.current = new Uint8Array(analyser.fftSize);
       sysAudioStreamRef.current = stream;
@@ -401,12 +433,17 @@ export function useAudioMixer(): UseAudioMixerReturn {
     if (listenGainRef.current) {
       listenGainRef.current.gain.value = on ? 1 : 0;
     }
-    // sbLocalGain rule: on when (cueMode || !listening)
-    // Since we don't track cueMode here, Broadcaster.tsx will call
-    // both setListening and setCueMode to keep gains in sync.
-    // For standalone listen toggle (no cue): sbLocal = inverse of listen
+    // When listen is ON, mute per-channel monitors to avoid doubling
+    // (the full mix is already heard through the listen path).
+    // When listen is OFF, restore each monitor to its saved state.
     if (sbLocalGainRef.current) {
-      sbLocalGainRef.current.gain.value = on ? 0 : 1;
+      sbLocalGainRef.current.gain.value = on ? 0 : (padsMonitorOnRef.current ? 1 : 0);
+    }
+    if (micMonitorGainRef.current) {
+      micMonitorGainRef.current.gain.value = on ? 0 : (micMonitorOnRef.current ? 1 : 0);
+    }
+    if (sysMonitorGainRef.current) {
+      sysMonitorGainRef.current.gain.value = on ? 0 : (sysMonitorOnRef.current ? 1 : 0);
     }
   }, []);
 
@@ -427,8 +464,36 @@ export function useAudioMixer(): UseAudioMixerReturn {
       if (sbLocalGainRef.current) {
         sbLocalGainRef.current.gain.value = 1;
       }
+      // Mute per-channel monitors in cue mode (heard through listen path)
+      if (micMonitorGainRef.current) {
+        micMonitorGainRef.current.gain.value = 0;
+      }
+      if (sysMonitorGainRef.current) {
+        sysMonitorGainRef.current.gain.value = 0;
+      }
     }
     // When cue off: defer to the listen state set by setListening
+  }, []);
+
+  const setMicMonitor = useCallback((on: boolean) => {
+    micMonitorOnRef.current = on;
+    if (micMonitorGainRef.current) {
+      micMonitorGainRef.current.gain.value = on ? 1 : 0;
+    }
+  }, []);
+
+  const setSystemMonitor = useCallback((on: boolean) => {
+    sysMonitorOnRef.current = on;
+    if (sysMonitorGainRef.current) {
+      sysMonitorGainRef.current.gain.value = on ? 1 : 0;
+    }
+  }, []);
+
+  const setPadsMonitor = useCallback((on: boolean) => {
+    padsMonitorOnRef.current = on;
+    if (sbLocalGainRef.current) {
+      sbLocalGainRef.current.gain.value = on ? 1 : 0;
+    }
   }, []);
 
   const setLimiterThreshold = useCallback((db: LimiterThreshold) => {
@@ -504,6 +569,9 @@ export function useAudioMixer(): UseAudioMixerReturn {
     setListening,
     setCueMode,
     setLimiterThreshold,
+    setMicMonitor,
+    setSystemMonitor,
+    setPadsMonitor,
     getChannelLevels,
     getNodes,
   };

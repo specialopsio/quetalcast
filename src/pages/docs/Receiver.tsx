@@ -49,11 +49,12 @@ export default function DocsReceiver() {
           is the URL for sharing with others so they can tune into the same broadcast.
         </p>
         <p className="mt-2">
-          If the broadcaster is using an integration (Icecast, Shoutcast, Radio.co), an additional{" "}
-          <strong>Stream URL</strong> appears. This is the direct Icecast/Shoutcast listener URL
-          that can be pasted into <strong>RadioDJ</strong> (Options → Track Import → Internet
-          Stream), <strong>VLC</strong> (Media → Open Network Stream), or any other media player
-          that accepts standard audio streams.
+          A <strong>Stream URL</strong> is shown for every broadcast — both integration-based and
+          standard WebRTC streams. This is a direct audio URL that can be pasted into{" "}
+          <strong>RadioDJ</strong> (Options → Track Import → Internet Stream),{" "}
+          <strong>VLC</strong> (Media → Open Network Stream), or any other media player
+          that accepts standard audio streams. Integration streams use the external Icecast/Shoutcast
+          URL; non-integration streams use the built-in WebM/Opus relay.
         </p>
       </section>
 

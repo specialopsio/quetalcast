@@ -52,12 +52,16 @@ export default function DocsBroadcaster() {
           </li>
           <li>
             <strong>Mixer Board</strong> — Collapsible section with channel strips in this order: Mic,
-            SOUND PADS, then System Audio. Each strip has a level slider, Mute (M) and Solo (S)
-            buttons, and a pan knob. A vertical LED signal meter (live audio level, not slider value)
+            SOUND PADS, then System Audio. Each strip has a level slider, Mute (M), Solo (S), and
+            Headphone Monitor buttons, plus a pan knob. The headphone button (green when active)
+            toggles local monitoring for that channel — hear it through your speakers/headphones
+            without affecting the broadcast. Pads monitor is on by default; Mic and System are off.
+            Use the pads monitor toggle to play soundboard clips to listeners without hearing them
+            yourself. A vertical LED signal meter (live audio level, not slider value)
             appears at the left of each strip label. Strip labels also show the current level inline
             (for example, <code>Mic 100%</code>). Pan readouts are always visible above each knob; drag
             or mouse-wheel to adjust stereo position, and double-click to center. System Audio strip
-            is grayed when not connected.
+            is grayed when not connected. Monitor states are persisted to localStorage.
           </li>
         </ul>
       </section>
@@ -66,8 +70,8 @@ export default function DocsBroadcaster() {
         <h2 className="text-lg font-semibold text-foreground mb-3">Saved layout</h2>
         <p>
           Broadcaster layout is saved to <code>localStorage</code> and restored on reload. This includes
-          sound pads, mixer strip values, effects state and parameters, quality mode, and selected input
-          device.
+          sound pads, mixer strip values (volume, mute, solo, pan, monitor), effects state and
+          parameters, quality mode, and selected input device.
         </p>
       </section>
 
