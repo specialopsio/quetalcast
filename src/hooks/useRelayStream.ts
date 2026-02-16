@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { DEFAULT_STREAM_QUALITY } from '@/lib/integrations';
+import type { SignalingMessage, UseSignalingReturn } from './useSignaling';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let lamejs: any = null;
@@ -19,25 +20,19 @@ export interface UseRelayStreamReturn {
   stopRelay: () => void;
 }
 
-const WS_URL = import.meta.env.VITE_WS_URL || (
-  window.location.protocol === 'https:'
-    ? `wss://${window.location.host}`
-    : `ws://${window.location.hostname}:3001`
-);
-
 /**
- * Encodes the broadcast audio to MP3 and sends it to the server via WebSocket.
- * The server serves it as an HTTP stream at /stream/:roomId for VLC, RadioDJ, etc.
- * Reuses the broadcaster's AudioContext to avoid browser limits on concurrent contexts.
+ * Encodes the broadcast audio to MP3 and sends it over the signaling WebSocket
+ * as binary frames. The server routes them to HTTP listeners at /stream/:roomId
+ * for VLC, RadioDJ, etc. No separate WebSocket connection needed.
  */
-export function useRelayStream(): UseRelayStreamReturn {
+export function useRelayStream(signaling: UseSignalingReturn): UseRelayStreamReturn {
   const [active, setActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
 
-  const wsRef = useRef<WebSocket | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const unsubRef = useRef<(() => void) | null>(null);
 
   const stopRelay = useCallback(() => {
     if (processorRef.current) {
@@ -49,11 +44,9 @@ export function useRelayStream(): UseRelayStreamReturn {
       sourceRef.current.disconnect();
       sourceRef.current = null;
     }
-    if (wsRef.current) {
-      if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
-        wsRef.current.close(1000, 'relay-ended');
-      }
-      wsRef.current = null;
+    if (unsubRef.current) {
+      unsubRef.current();
+      unsubRef.current = null;
     }
     setActive(false);
     setStreamUrl(null);
@@ -61,51 +54,47 @@ export function useRelayStream(): UseRelayStreamReturn {
 
   const startRelay = useCallback(async (stream: MediaStream, roomId: string, ctx: AudioContext) => {
     setError(null);
+    let step = 'init';
     try {
+      step = 'loadLame';
       const lame = await loadLame();
 
-      const wsUrl = `${WS_URL}/relay-stream`;
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+      if (!signaling.connected) {
+        setError('Signaling not connected');
+        return;
+      }
 
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('Relay WebSocket timeout')), 10000);
-        ws.onopen = () => { clearTimeout(timeout); resolve(); };
-        ws.onerror = () => { clearTimeout(timeout); reject(new Error('Relay WebSocket connection failed')); };
-      });
+      step = 'startRelay';
+      // Ask the server to set up the /stream/:roomId endpoint
+      signaling.send({ type: 'start-relay' });
 
-      // Send room ID to initialize
-      ws.send(JSON.stringify({ roomId }));
-
-      // Wait for server ack with the stream URL
+      // Wait for the server's ack with the stream URL
+      step = 'waitAck';
       const ack = await new Promise<{ ok: boolean; url?: string; error?: string }>((resolve) => {
-        const handler = (ev: MessageEvent) => {
-          try {
-            const msg = JSON.parse(ev.data as string);
-            if (msg.type === 'connected') {
-              ws.removeEventListener('message', handler);
-              resolve({ ok: true, url: msg.url });
-            } else if (msg.type === 'error') {
-              ws.removeEventListener('message', handler);
-              resolve({ ok: false, error: msg.error });
-            }
-          } catch { /* ignore non-JSON */ }
-        };
-        ws.addEventListener('message', handler);
-        ws.addEventListener('close', () => resolve({ ok: false, error: 'Relay connection closed' }));
-        setTimeout(() => resolve({ ok: false, error: 'Relay connection timeout' }), 10000);
+        const unsub = signaling.subscribe((msg: SignalingMessage) => {
+          if (msg.type === 'relay-started') {
+            unsub();
+            resolve({ ok: true, url: msg.url as string | undefined });
+          } else if (msg.type === 'error' && typeof msg.message === 'string' && msg.message.includes('relay')) {
+            unsub();
+            resolve({ ok: false, error: msg.message as string });
+          }
+        });
+        setTimeout(() => {
+          unsub();
+          resolve({ ok: false, error: 'Relay start timeout' });
+        }, 10000);
       });
 
       if (!ack.ok) {
         setError(ack.error || 'Relay stream failed');
-        ws.close();
-        wsRef.current = null;
         return;
       }
 
+      step = 'setUrl';
       if (ack.url) setStreamUrl(ack.url);
 
-      // Use the broadcaster's existing AudioContext — no new context needed
+      step = 'encoder';
       const quality = DEFAULT_STREAM_QUALITY;
       const numChannels = quality.channels;
       const bitrate = quality.bitrate;
@@ -129,7 +118,7 @@ export function useRelayStream(): UseRelayStreamReturn {
       };
 
       processor.onaudioprocess = (e: AudioProcessingEvent) => {
-        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+        if (!signaling.connected) return;
 
         let mp3buf: Uint8Array;
         if (numChannels === 2) {
@@ -144,26 +133,22 @@ export function useRelayStream(): UseRelayStreamReturn {
         }
 
         if (mp3buf.length > 0) {
-          wsRef.current.send(mp3buf);
+          signaling.sendBinary(mp3buf);
         }
       };
 
+      step = 'connect';
       source.connect(processor);
       processor.connect(ctx.destination);
 
-      ws.onclose = () => stopRelay();
-      ws.onerror = () => {
-        setError('Relay stream disconnected');
-        stopRelay();
-      };
-
+      step = 'done';
       setActive(true);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Relay stream failed';
-      setError(msg);
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(`Relay failed at ${step}: ${msg}`);
       stopRelay();
     }
-  }, [stopRelay]);
+  }, [stopRelay, signaling]);
 
   return { active, error, streamUrl, startRelay, stopRelay };
 }

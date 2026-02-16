@@ -330,14 +330,11 @@ const server = http.createServer(app);
 
 // Fix #6: Set maxPayload to prevent memory exhaustion
 // Signaling WSS — handles room/peer signaling
-const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 }); // 64KB max
+const wss = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 }); // 256KB — carries binary MP3 relay data
 
 // Integration stream WSS — handles MP3 relay to Icecast/Shoutcast/Radio.co
 // Higher maxPayload to accommodate MP3 chunks
 const integrationWss = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
-
-// Relay stream WSS — handles built-in MP3 relay for HTTP /stream/:roomId
-const relayWss = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
 
 // Route WebSocket upgrades by URL path
 server.on('upgrade', (request, socket, head) => {
@@ -347,12 +344,8 @@ server.on('upgrade', (request, socket, head) => {
     integrationWss.handleUpgrade(request, socket, head, (ws) => {
       integrationWss.emit('connection', ws, request);
     });
-  } else if (pathname === '/relay-stream') {
-    relayWss.handleUpgrade(request, socket, head, (ws) => {
-      relayWss.emit('connection', ws, request);
-    });
   } else {
-    // Default: signaling WebSocket
+    // Default: signaling WebSocket (also carries binary relay MP3 data)
     wss.handleUpgrade(request, socket, head, (ws) => {
       wss.emit('connection', ws, request);
     });
@@ -465,7 +458,17 @@ wss.on('connection', (ws, req) => {
 
   logger.info({ ip, authed: isAuthed }, 'WebSocket connected');
 
-  ws.on('message', (raw) => {
+  ws.on('message', (raw, isBinary) => {
+    // Binary messages from broadcaster = relay MP3 data for /stream/:roomId
+    if (isBinary && clientRoom && clientRole === 'broadcaster') {
+      const data = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
+      const listeners = rooms.getRelayListeners(clientRoom);
+      for (const res of listeners) {
+        try { res.write(data); } catch { rooms.removeRelayListener(clientRoom, res); }
+      }
+      return;
+    }
+
     let msg;
     try {
       msg = JSON.parse(raw.toString());
@@ -494,6 +497,35 @@ wss.on('connection', (ws, req) => {
         ws.send(JSON.stringify({ type: 'joined', roomId, role: 'broadcaster' }));
         ws.send(JSON.stringify({ type: 'listener-count', count: 0 }));
         logger.info({ roomId: roomId.slice(0, 8), ip, custom: !!customId }, 'Room created');
+        break;
+      }
+
+      case 'start-relay': {
+        // Broadcaster requests relay stream setup — audio will be sent as binary frames
+        if (!clientRoom || clientRole !== 'broadcaster') break;
+        const isSecure = req.headers['x-forwarded-proto'] === 'https'
+          || req.headers.origin?.startsWith('https')
+          || req.socket.encrypted;
+        const protocol = isSecure ? 'https' : 'http';
+        const host = req.headers['x-forwarded-host'] || req.headers.host || `localhost:${PORT}`;
+        const localStreamUrl = `${protocol}://${host}/stream/${clientRoom}`;
+
+        // Store so receivers joining later can get it
+        rooms.setIntegrationInfo(clientRoom, {
+          ...(rooms.getIntegrationInfo(clientRoom) || {}),
+          localStreamUrl,
+        });
+
+        // Broadcast stream URL to all connected receivers
+        const streamUrlMsg = JSON.stringify({ type: 'stream-url', url: localStreamUrl });
+        const relayReceiverIds = rooms.getReceiverIds(clientRoom);
+        for (const rid of relayReceiverIds) {
+          const rws = rooms.getReceiver(clientRoom, rid);
+          if (rws) rws.send(streamUrlMsg);
+        }
+
+        ws.send(JSON.stringify({ type: 'relay-started', url: localStreamUrl }));
+        logger.info({ roomId: clientRoom.slice(0, 8), localStreamUrl }, 'Relay stream: active via signaling WS');
         break;
       }
 
@@ -841,6 +873,21 @@ wss.on('connection', (ws, req) => {
   ws.on('close', (code, reason) => {
     if (clientRoom && clientRole) {
       if (clientRole === 'broadcaster') {
+        // Clean up relay stream listeners
+        const relayListeners = rooms.getRelayListeners(clientRoom);
+        for (const res of relayListeners) {
+          try { res.end(); } catch { /* ignore */ }
+        }
+        // Clear local stream URL from integration info
+        const relayInfo = rooms.getIntegrationInfo(clientRoom);
+        if (relayInfo && relayInfo.localStreamUrl) {
+          if (relayInfo.type) {
+            delete relayInfo.localStreamUrl;
+          } else {
+            rooms.setIntegrationInfo(clientRoom, null);
+          }
+        }
+
         const receiverIds = rooms.getReceiverIds(clientRoom);
         for (const rid of receiverIds) {
           const rws = rooms.getReceiver(clientRoom, rid);
@@ -883,112 +930,6 @@ wss.on('connection', (ws, req) => {
 
   ws.on('error', (err) => {
     logger.error({ ip, error: err.message }, 'WebSocket error');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Relay stream WebSocket — broadcaster sends MP3 here for built-in /stream/:roomId
-// ---------------------------------------------------------------------------
-relayWss.on('connection', (ws, req) => {
-  const ip = req.socket.remoteAddress || 'unknown';
-
-  // Authenticate via session cookie
-  const cookies = parseCookies(req.headers.cookie);
-  const sessionToken = cookies.session;
-  if (!sessionToken || !sessions.validate(sessionToken)) {
-    logger.warn({ ip }, 'Relay stream: auth rejected');
-    ws.close(4001, 'Authentication required');
-    return;
-  }
-
-  ws.isAlive = true;
-  ws.on('pong', () => { ws.isAlive = true; });
-
-  let relayRoomId = null;
-  let initialized = false;
-
-  logger.info({ ip }, 'Relay stream WebSocket connected');
-
-  ws.on('message', (raw, isBinary) => {
-    // First message: JSON with { roomId }
-    if (!initialized) {
-      try {
-        const msg = JSON.parse(raw.toString());
-        const { roomId } = msg;
-        if (!roomId || !rooms.rooms.has(roomId)) {
-          ws.send(JSON.stringify({ type: 'error', error: 'Invalid or missing roomId' }));
-          ws.close();
-          return;
-        }
-        relayRoomId = roomId;
-        initialized = true;
-
-        // Build the local stream URL — detect protocol from WebSocket upgrade or proxy headers
-        const isSecure = req.headers['x-forwarded-proto'] === 'https'
-          || req.headers.origin?.startsWith('https')
-          || req.socket.encrypted;
-        const protocol = isSecure ? 'https' : 'http';
-        const host = req.headers['x-forwarded-host'] || req.headers.host || `localhost:${PORT}`;
-        const localStreamUrl = `${protocol}://${host}/stream/${roomId}`;
-
-        // Store it so receivers joining later can get it
-        rooms.setIntegrationInfo(roomId, {
-          ...(rooms.getIntegrationInfo(roomId) || {}),
-          localStreamUrl,
-        });
-
-        // Broadcast stream URL to all connected receivers
-        const streamUrlMsg = JSON.stringify({ type: 'stream-url', url: localStreamUrl });
-        const receiverIds = rooms.getReceiverIds(roomId);
-        for (const rid of receiverIds) {
-          const rws = rooms.getReceiver(roomId, rid);
-          if (rws) rws.send(streamUrlMsg);
-        }
-
-        ws.send(JSON.stringify({ type: 'connected', url: localStreamUrl }));
-        logger.info({ roomId: roomId.slice(0, 8), localStreamUrl }, 'Relay stream: active');
-      } catch {
-        return;
-      }
-      return;
-    }
-
-    // After init: relay binary MP3 data to all HTTP listeners
-    if (relayRoomId) {
-      const data = isBinary ? raw : Buffer.from(raw);
-      const listeners = rooms.getRelayListeners(relayRoomId);
-      for (const res of listeners) {
-        try {
-          res.write(data);
-        } catch {
-          rooms.removeRelayListener(relayRoomId, res);
-        }
-      }
-    }
-  });
-
-  ws.on('close', () => {
-    if (relayRoomId) {
-      // End all HTTP listener connections
-      const listeners = rooms.getRelayListeners(relayRoomId);
-      for (const res of listeners) {
-        try { res.end(); } catch { /* ignore */ }
-      }
-      // Clear local stream URL from integration info (keep external integration info if any)
-      const info = rooms.getIntegrationInfo(relayRoomId);
-      if (info && info.localStreamUrl) {
-        if (info.type) {
-          delete info.localStreamUrl;
-        } else {
-          rooms.setIntegrationInfo(relayRoomId, null);
-        }
-      }
-    }
-    logger.info({ ip }, 'Relay stream WebSocket closed');
-  });
-
-  ws.on('error', (err) => {
-    logger.error({ ip, error: err.message }, 'Relay stream WebSocket error');
   });
 });
 

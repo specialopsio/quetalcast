@@ -9,6 +9,7 @@ export interface SignalingMessage {
 export interface UseSignalingReturn {
   connected: boolean;
   send: (msg: SignalingMessage) => void;
+  sendBinary: (data: ArrayBuffer | Uint8Array) => void;
   lastMessage: SignalingMessage | null;
   subscribe: (handler: (msg: SignalingMessage) => void) => () => void;
   connect: () => void;
@@ -91,6 +92,12 @@ export function useSignaling(url: string): UseSignalingReturn {
     }
   }, []);
 
+  const sendBinary = useCallback((data: ArrayBuffer | Uint8Array) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(data);
+    }
+  }, []);
+
   const subscribe = useCallback((handler: (msg: SignalingMessage) => void) => {
     handlersRef.current.add(handler);
     return () => {
@@ -106,5 +113,5 @@ export function useSignaling(url: string): UseSignalingReturn {
     };
   }, []);
 
-  return { connected, send, lastMessage, subscribe, connect, disconnect };
+  return { connected, send, sendBinary, lastMessage, subscribe, connect, disconnect };
 }
