@@ -56,9 +56,11 @@ interface SoundBoardProps {
   connectElement: (audio: HTMLAudioElement) => GainNode | null;
   /** Ref that receives a triggerPad function for keyboard shortcuts */
   triggerRef?: React.MutableRefObject<((index: number) => void) | null>;
+  /** Called when a pad starts or stops playing */
+  onPadPlayback?: (padTitle: string, playing: boolean) => void;
 }
 
-export function SoundBoard({ connectElement, triggerRef }: SoundBoardProps) {
+export function SoundBoard({ connectElement, triggerRef, onPadPlayback }: SoundBoardProps) {
   const [pads, setPads] = useState<PadState[]>(() =>
     Array.from({ length: PAD_COUNT }, () => ({ ...EMPTY_PAD })),
   );
@@ -202,12 +204,14 @@ export function SoundBoard({ connectElement, triggerRef }: SoundBoardProps) {
       pad.audioEl.pause();
       pad.audioEl.currentTime = 0;
       updatePad(index, { isPlaying: false });
+      onPadPlayback?.(pad.title, false);
     } else {
       pad.audioEl.currentTime = 0;
       pad.audioEl.play().catch(() => {
         // Autoplay blocked — ignore
       });
       updatePad(index, { isPlaying: true });
+      onPadPlayback?.(pad.title, true);
     }
   };
 
@@ -273,8 +277,8 @@ export function SoundBoard({ connectElement, triggerRef }: SoundBoardProps) {
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         {pads.map((pad, i) => (
           <div key={i} className="relative aspect-square">
-            {pad.file ? (
-              /* Loaded pad */
+            {pad.audioEl ? (
+              /* Loaded pad (from file picker or restored from localStorage) */
               <button
                 onClick={() => handlePlayStop(i)}
                 className={`w-full h-full rounded-md border flex flex-col items-center justify-between pt-[40%] pb-6 transition-all ${
@@ -303,7 +307,7 @@ export function SoundBoard({ connectElement, triggerRef }: SoundBoardProps) {
             )}
 
             {/* Loop toggle — top-right */}
-            {pad.file && (
+            {pad.audioEl && (
               <button
                 onClick={(e) => handleToggleLoop(i, e)}
                 className={`absolute top-0.5 right-0.5 p-0.5 rounded transition-colors ${
@@ -318,7 +322,7 @@ export function SoundBoard({ connectElement, triggerRef }: SoundBoardProps) {
             )}
 
             {/* Remove — top-left */}
-            {pad.file && !pad.isPlaying && (
+            {pad.audioEl && !pad.isPlaying && (
               <button
                 onClick={(e) => handleRemove(i, e)}
                 className="absolute top-0.5 left-0.5 p-0.5 rounded text-muted-foreground/40 hover:text-destructive transition-colors"
@@ -329,7 +333,7 @@ export function SoundBoard({ connectElement, triggerRef }: SoundBoardProps) {
             )}
 
             {/* Edit — bottom-right */}
-            {pad.file && (
+            {pad.audioEl && (
               <button
                 onClick={(e) => openEditModal(i, e)}
                 className="absolute bottom-0.5 right-0.5 p-0.5 rounded text-muted-foreground/40 hover:text-foreground transition-colors"

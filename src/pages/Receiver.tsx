@@ -264,7 +264,7 @@ const Receiver = () => {
           </div>
         )}
 
-        {/* Stream URL — for VLC, RadioDJ, media players; only when integration active */}
+        {/* Stream URL — for VLC, RadioDJ, media players */}
         {joined && streamUrl && (
           <div className="flex items-center gap-2 px-3 py-2.5 bg-primary/5 border border-primary/20 rounded-md">
             <Radio className="h-4 w-4 text-primary shrink-0" />

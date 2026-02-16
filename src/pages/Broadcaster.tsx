@@ -1851,7 +1851,11 @@ const Broadcaster = () => {
                     onPresetsChange={() => setPresets(getPresets())}
                   />
                 ) : (
-                  <SoundBoard connectElement={mixer.connectElement} triggerRef={soundboardTriggerRef} />
+                  <SoundBoard
+                    connectElement={mixer.connectElement}
+                    triggerRef={soundboardTriggerRef}
+                    onPadPlayback={(title, playing) => addLog(playing ? `▶ ${title}` : `■ ${title}`)}
+                  />
                 )}
               </AccordionContent>
             </AccordionItem>
