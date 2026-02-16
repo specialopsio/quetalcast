@@ -871,6 +871,11 @@ wss.on('connection', (ws, req) => {
         break;
       }
 
+      case 'relay-diag': {
+        logger.info({ roomId: clientRoom?.slice(0, 8), frameCount: msg.frameCount, lastMp3Len: msg.lastMp3Len, ctxState: msg.ctxState }, 'Relay diag from client');
+        break;
+      }
+
       default:
         logger.debug({ type: msg.type }, 'Unknown message type');
     }

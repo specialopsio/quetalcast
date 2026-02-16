@@ -95,6 +95,9 @@ export function useRelayStream(signaling: UseSignalingReturn): UseRelayStreamRet
       step = 'setUrl';
       if (ack.url) setStreamUrl(ack.url);
 
+      // Diagnostic: send a test binary frame to verify the plumbing works
+      signaling.sendBinary(new Uint8Array([0xFF, 0xFB, 0x90, 0x00]));
+
       step = 'audioCtx';
       const quality = DEFAULT_STREAM_QUALITY;
       const numChannels = quality.channels;
@@ -136,8 +139,11 @@ export function useRelayStream(signaling: UseSignalingReturn): UseRelayStreamRet
 
       // Capture sendBinary in a local variable so the closure always works
       const sendBin = signaling.sendBinary;
+      let frameCount = 0;
 
       processor.onaudioprocess = (e: AudioProcessingEvent) => {
+        frameCount++;
+
         let mp3buf: Uint8Array;
         if (numChannels === 2) {
           const left = floatToInt16(e.inputBuffer.getChannelData(0));
@@ -152,6 +158,11 @@ export function useRelayStream(signaling: UseSignalingReturn): UseRelayStreamRet
 
         if (mp3buf.length > 0) {
           sendBin(mp3buf);
+        }
+
+        // Report diagnostics every ~5s (at ~10 frames/sec for 4096 buffer @ 44.1kHz)
+        if (frameCount === 1 || frameCount % 50 === 0) {
+          signaling.send({ type: 'relay-diag', frameCount, lastMp3Len: mp3buf.length, ctxState: ctx.state });
         }
       };
 
