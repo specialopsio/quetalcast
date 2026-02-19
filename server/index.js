@@ -285,6 +285,18 @@ app.get('/admin/rooms', requireAuth, (req, res) => {
   res.json({ rooms: rooms.listRooms() });
 });
 
+// Room slug history — saved custom room IDs with live status
+app.get('/api/room-slugs', requireAuth, (req, res) => {
+  res.json({ slugs: rooms.getSlugHistory() });
+});
+
+app.delete('/api/room-slugs/:slug', requireAuth, (req, res) => {
+  const { slug } = req.params;
+  if (!slug) return res.status(400).json({ ok: false });
+  rooms.removeSlug(slug);
+  res.json({ ok: true });
+});
+
 // Integration test — verify streaming credentials without starting a stream
 const integrationTestLimiter = rateLimit({ windowMs: 60000, max: 10, message: { error: 'Too many test attempts' } });
 

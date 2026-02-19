@@ -56,44 +56,40 @@ const WS_URL = import.meta.env.VITE_WS_URL || (
 );
 
 const BROADCASTER_LAYOUT_STORAGE_KEY = 'quetalcast:broadcaster-layout:v1';
-const CUSTOM_URLS_STORAGE_KEY = 'quetalcast:custom-urls:v1';
 const CUSTOM_URL_PATTERN = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/;
-const MAX_SAVED_URLS = 20;
 
-function readSavedCustomUrls(): string[] {
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
+interface SavedSlug {
+  slug: string;
+  lastUsed: string;
+  live: boolean;
+}
+
+async function fetchSavedSlugs(): Promise<SavedSlug[]> {
   try {
-    const raw = localStorage.getItem(CUSTOM_URLS_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((s: unknown) => typeof s === 'string') : [];
+    const res = await fetch(`${API_BASE}/api/room-slugs`, { credentials: 'include' });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data.slugs) ? data.slugs : [];
   } catch {
     return [];
   }
 }
 
-function saveCustomUrl(slug: string) {
-  const existing = readSavedCustomUrls();
-  const filtered = existing.filter((s) => s !== slug);
-  const updated = [slug, ...filtered].slice(0, MAX_SAVED_URLS);
+async function deleteServerSlug(slug: string): Promise<void> {
   try {
-    localStorage.setItem(CUSTOM_URLS_STORAGE_KEY, JSON.stringify(updated));
+    await fetch(`${API_BASE}/api/room-slugs/${encodeURIComponent(slug)}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
   } catch {
-    // Ignore quota errors
-  }
-}
-
-function removeCustomUrl(slug: string) {
-  const existing = readSavedCustomUrls();
-  const updated = existing.filter((s) => s !== slug);
-  try {
-    localStorage.setItem(CUSTOM_URLS_STORAGE_KEY, JSON.stringify(updated));
-  } catch {
-    // Ignore quota errors
+    // best-effort
   }
 }
 
 function validateCustomUrl(value: string): string | null {
-  if (!value) return null; // empty = auto-generate
+  if (!value) return null;
   if (value.length < 3) return 'At least 3 characters';
   if (value.length > 40) return '40 characters max';
   if (/--/.test(value)) return 'No consecutive hyphens';
@@ -285,7 +281,7 @@ const Broadcaster = () => {
   // Custom URL state
   const [customUrl, setCustomUrl] = useState('');
   const [customUrlError, setCustomUrlError] = useState<string | null>(null);
-  const [savedUrls, setSavedUrls] = useState<string[]>(() => readSavedCustomUrls());
+  const [savedSlugs, setSavedSlugs] = useState<SavedSlug[]>([]);
   const [showUrlSuggestions, setShowUrlSuggestions] = useState(false);
   const urlInputRef = useRef<HTMLInputElement>(null);
 
@@ -348,6 +344,15 @@ const Broadcaster = () => {
       if (!valid) navigate('/login');
     });
   }, [navigate]);
+
+  // Fetch saved room slugs from server
+  const refreshSlugs = useCallback(() => {
+    fetchSavedSlugs().then(setSavedSlugs);
+  }, []);
+
+  useEffect(() => {
+    refreshSlugs();
+  }, [refreshSlugs]);
 
   // Enumerate devices
   useEffect(() => {
@@ -640,8 +645,8 @@ const Broadcaster = () => {
       // Always create a new room for each broadcast
       webrtc.createRoom(slug || undefined);
       if (slug) {
-        saveCustomUrl(slug);
-        setSavedUrls(readSavedCustomUrls());
+        // Server records the slug automatically; refresh the list
+        setTimeout(refreshSlugs, 1000);
       }
       addLog('Setting up room…');
       broadcastStartedRef.current = false;
@@ -1280,7 +1285,7 @@ const Broadcaster = () => {
                     setCustomUrl(v);
                     setCustomUrlError(null);
                   }}
-                  onFocus={() => setShowUrlSuggestions(true)}
+                  onFocus={() => { refreshSlugs(); setShowUrlSuggestions(true); }}
                   onBlur={() => {
                     // Delay to allow clicks on suggestions
                     setTimeout(() => setShowUrlSuggestions(false), 200);
@@ -1306,39 +1311,50 @@ const Broadcaster = () => {
               </div>
 
               {/* Suggestions dropdown */}
-              {showUrlSuggestions && savedUrls.length > 0 && !customUrl && (
+              {showUrlSuggestions && savedSlugs.length > 0 && !customUrl && (
                 <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-popover border border-border rounded-md shadow-lg overflow-hidden">
                   <div className="px-3 py-1.5 border-b border-border">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">Recently used</span>
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">Previously used</span>
                   </div>
-                  {savedUrls.map((url) => (
+                  {savedSlugs.map(({ slug, live }) => (
                     <div
-                      key={url}
-                      className="flex items-center justify-between px-3 py-1.5 hover:bg-secondary/80 cursor-pointer group"
+                      key={slug}
+                      className={`flex items-center justify-between px-3 py-1.5 group ${live ? 'opacity-50' : 'hover:bg-secondary/80 cursor-pointer'}`}
                     >
                       <button
                         className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                        disabled={live}
                         onMouseDown={(e) => {
                           e.preventDefault();
-                          setCustomUrl(url);
-                          setShowUrlSuggestions(false);
+                          if (!live) {
+                            setCustomUrl(slug);
+                            setShowUrlSuggestions(false);
+                          }
                         }}
                       >
-                        <Clock className="h-3 w-3 text-muted-foreground/40 shrink-0" />
-                        <span className="text-xs font-mono text-foreground truncate">{url}</span>
+                        {live ? (
+                          <Radio className="h-3 w-3 text-destructive shrink-0 animate-pulse" />
+                        ) : (
+                          <Clock className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+                        )}
+                        <span className="text-xs font-mono text-foreground truncate">{slug}</span>
+                        {live && (
+                          <span className="text-[10px] font-semibold text-destructive uppercase shrink-0">Live</span>
+                        )}
                       </button>
-                      <button
-                        className="opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-all shrink-0 ml-2"
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          removeCustomUrl(url);
-                          setSavedUrls(readSavedCustomUrls());
-                        }}
-                        title="Remove"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
+                      {!live && (
+                        <button
+                          className="opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-all shrink-0 ml-2"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            deleteServerSlug(slug).then(refreshSlugs);
+                          }}
+                          title="Remove"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>

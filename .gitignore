@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Runtime data
+data/
+
 # Environment variables
 .env
 .env.local

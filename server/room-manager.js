@@ -1,15 +1,77 @@
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { createStatsLogger } from './logger.js';
 
 const MAX_RECEIVERS = 4;
 const ROOM_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const SLUGS_FILE = path.join(__dirname, '..', 'data', 'room-slugs.json');
 
 export class RoomManager {
   constructor(logger) {
     this.rooms = new Map();
     this.logger = logger;
     this.statsLogger = createStatsLogger();
+    this.slugHistory = this._loadSlugHistory();
     this.cleanupInterval = setInterval(() => this.cleanupExpiredRooms(), 15 * 60 * 1000); // every 15 min
+  }
+
+  _loadSlugHistory() {
+    try {
+      const raw = fs.readFileSync(SLUGS_FILE, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .filter((e) => e && typeof e.slug === 'string')
+          .map((e) => ({ slug: e.slug, lastUsed: e.lastUsed || new Date().toISOString() }));
+      }
+    } catch {
+      // File doesn't exist or is corrupt — start fresh
+    }
+    return [];
+  }
+
+  _saveSlugHistory() {
+    try {
+      const dir = path.dirname(SLUGS_FILE);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(SLUGS_FILE, JSON.stringify(this.slugHistory, null, 2));
+    } catch (err) {
+      this.logger.warn({ error: err.message }, 'Failed to persist slug history');
+    }
+  }
+
+  _recordSlug(slug) {
+    const existing = this.slugHistory.find((e) => e.slug === slug);
+    if (existing) {
+      existing.lastUsed = new Date().toISOString();
+    } else {
+      this.slugHistory.unshift({ slug, lastUsed: new Date().toISOString() });
+    }
+    // Sort most-recently-used first and cap at 50
+    this.slugHistory.sort((a, b) => b.lastUsed.localeCompare(a.lastUsed));
+    if (this.slugHistory.length > 50) this.slugHistory.length = 50;
+    this._saveSlugHistory();
+  }
+
+  removeSlug(slug) {
+    this.slugHistory = this.slugHistory.filter((e) => e.slug !== slug);
+    this._saveSlugHistory();
+  }
+
+  /**
+   * Returns saved custom room slugs with their current live status.
+   * Live slugs have an active broadcaster and cannot be reused simultaneously.
+   */
+  getSlugHistory() {
+    return this.slugHistory.map((e) => {
+      const room = this.rooms.get(e.slug);
+      const live = !!(room && room.broadcaster && room.broadcaster.readyState === 1);
+      return { slug: e.slug, lastUsed: e.lastUsed, live };
+    });
   }
 
   cleanupExpiredRooms() {
@@ -41,14 +103,12 @@ export class RoomManager {
       const error = RoomManager.validateCustomId(customId);
       if (error) return { ok: false, error, code: 'INVALID_ROOM_ID' };
       if (this.rooms.has(customId)) {
-        // If the existing room's broadcast ended and no one is connected, reclaim it
         const existing = this.rooms.get(customId);
-        const hasActiveUsers = (existing.broadcaster && existing.broadcaster.readyState === 1)
-          || existing.receivers.size > 0;
-        if (hasActiveUsers) {
-          return { ok: false, error: 'Room ID already in use', code: 'ROOM_ID_TAKEN' };
+        const isLive = existing.broadcaster && existing.broadcaster.readyState === 1;
+        if (isLive) {
+          return { ok: false, error: 'That room is currently live — try again when it ends', code: 'ROOM_ID_TAKEN' };
         }
-        // Reclaim: delete old room so broadcaster can reuse the slug
+        // Room exists but isn't live — reclaim it for reuse
         this.rooms.delete(customId);
       }
     }
@@ -57,16 +117,21 @@ export class RoomManager {
     this.rooms.set(roomId, {
       roomId,
       broadcaster: null,
-      receivers: new Map(), // receiverId → ws
-      metadata: null, // now-playing text
-      trackList: [],  // { title, time } — chronological track list
-      chatHistory: [], // { name, text, time, system? } — persisted chat messages
-      chatParticipants: new Map(), // participantId (receiverId or 'broadcaster') → { name }
-      integrationInfo: null, // { type, credentials } — active integration connection
-      relayListeners: new Set(), // IcyWriter objects listening to /stream/:roomId
+      receivers: new Map(),
+      metadata: null,
+      trackList: [],
+      chatHistory: [],
+      chatParticipants: new Map(),
+      integrationInfo: null,
+      relayListeners: new Set(),
       createdAt: new Date().toISOString(),
-      endedAt: null, // set when broadcaster leaves; room kept for 24h
+      endedAt: null,
     });
+
+    if (customId) {
+      this._recordSlug(customId);
+    }
+
     return { ok: true, roomId };
   }
 
