@@ -1,6 +1,16 @@
 import { useCallback, useRef, useState } from 'react';
 import type { SignalingMessage, UseSignalingReturn } from './useSignaling';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let lamejs: any = null;
+
+async function loadLame() {
+  if (!lamejs) {
+    lamejs = await import('lamejs');
+  }
+  return lamejs;
+}
+
 export interface UseRelayStreamReturn {
   active: boolean;
   error: string | null;
@@ -10,27 +20,34 @@ export interface UseRelayStreamReturn {
 }
 
 /**
- * Records the broadcast audio using MediaRecorder (WebM/Opus) and sends
- * chunks over the signaling WebSocket as binary frames. The server stores
- * the WebM initialization segment and serves the stream at /stream/:roomId
- * for VLC, RadioDJ, etc.
- *
- * MediaRecorder reliably captures MediaStream output from
- * createMediaStreamDestination — unlike ScriptProcessorNode and
- * AudioWorklet which silently fail in this scenario.
+ * Encodes the broadcast audio as MP3 (via lamejs) and sends chunks over
+ * the signaling WebSocket as binary frames. The server serves the stream
+ * at /stream/:roomId with Icecast-compatible headers for RadioDJ,
+ * internet-radio.com, VLC, etc.
  */
 export function useRelayStream(signaling: UseSignalingReturn): UseRelayStreamReturn {
   const [active, setActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
 
-  const recorderRef = useRef<MediaRecorder | null>(null);
+  const ctxRef = useRef<AudioContext | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
 
   const stopRelay = useCallback(() => {
-    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
-      recorderRef.current.stop();
+    if (processorRef.current) {
+      processorRef.current.disconnect();
+      processorRef.current.onaudioprocess = null;
+      processorRef.current = null;
     }
-    recorderRef.current = null;
+    if (sourceRef.current) {
+      sourceRef.current.disconnect();
+      sourceRef.current = null;
+    }
+    if (ctxRef.current && ctxRef.current.state !== 'closed') {
+      ctxRef.current.close().catch(() => {});
+      ctxRef.current = null;
+    }
     setActive(false);
     setStreamUrl(null);
   }, []);
@@ -43,10 +60,10 @@ export function useRelayStream(signaling: UseSignalingReturn): UseRelayStreamRet
         return;
       }
 
-      // Ask the server to set up the /stream/:roomId endpoint
+      const lame = await loadLame();
+
       signaling.send({ type: 'start-relay' });
 
-      // Wait for the server's ack with the stream URL
       const ack = await new Promise<{ ok: boolean; url?: string; error?: string }>((resolve) => {
         const unsub = signaling.subscribe((msg: SignalingMessage) => {
           if (msg.type === 'relay-started') {
@@ -70,35 +87,57 @@ export function useRelayStream(signaling: UseSignalingReturn): UseRelayStreamRet
 
       if (ack.url) setStreamUrl(ack.url);
 
-      // Use MediaRecorder to capture the mixed audio stream
-      // WebM/Opus is the most reliable output format in Chrome
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : 'audio/webm';
+      const numChannels = 2;
+      const sampleRate = 44100;
+      const bitrate = 128;
 
-      const recorder = new MediaRecorder(stream, {
-        mimeType,
-        audioBitsPerSecond: 128000,
-      });
-      recorderRef.current = recorder;
+      const ctx = new AudioContext({ sampleRate });
+      ctxRef.current = ctx;
+      await ctx.resume();
+      if (ctx.state !== 'running') {
+        throw new Error('Audio engine is suspended — interact with the page and try again');
+      }
 
+      const source = ctx.createMediaStreamSource(stream);
+      sourceRef.current = source;
+
+      const bufferSize = 4096;
+      const processor = ctx.createScriptProcessor(bufferSize, numChannels, numChannels);
+      processorRef.current = processor;
+
+      const mp3Encoder = new lame.Mp3Encoder(numChannels, sampleRate, bitrate);
       const sendBin = signaling.sendBinary;
 
-      recorder.ondataavailable = (e: BlobEvent) => {
-        if (e.data.size > 0) {
-          e.data.arrayBuffer().then((buf) => {
-            sendBin(new Uint8Array(buf));
-          });
+      // Send a silent warmup frame so listeners detect the stream quickly
+      const silence = new Int16Array(1152);
+      const warmup = mp3Encoder.encodeBuffer(silence, silence);
+      if (warmup.length > 0) {
+        sendBin(new Uint8Array(warmup));
+      }
+
+      const floatToInt16 = (input: Float32Array): Int16Array => {
+        const samples = new Int16Array(input.length);
+        for (let i = 0; i < input.length; i++) {
+          const s = Math.max(-1, Math.min(1, input[i]));
+          samples[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+        return samples;
+      };
+
+      processor.onaudioprocess = (e: AudioProcessingEvent) => {
+        const left = floatToInt16(e.inputBuffer.getChannelData(0));
+        const right = e.inputBuffer.numberOfChannels >= 2
+          ? floatToInt16(e.inputBuffer.getChannelData(1))
+          : left;
+        const mp3buf = mp3Encoder.encodeBuffer(left, right);
+        if (mp3buf.length > 0) {
+          sendBin(new Uint8Array(mp3buf));
         }
       };
 
-      recorder.onerror = () => {
-        setError('MediaRecorder error');
-        stopRelay();
-      };
+      source.connect(processor);
+      processor.connect(ctx.destination);
 
-      // Start recording with 250ms timeslice for low-latency chunks
-      recorder.start(250);
       setActive(true);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

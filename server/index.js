@@ -161,6 +161,74 @@ app.get('/api/ice-config', async (req, res) => {
   res.json({ iceServers });
 });
 
+// ICY metadata constants for Icecast-compatible streaming
+const ICY_METAINT = 16384;
+
+/**
+ * Wraps an HTTP response to interleave ICY metadata blocks every
+ * ICY_METAINT bytes of audio data. Players that send "Icy-MetaData: 1"
+ * expect this framing; others receive raw MP3 without metadata blocks.
+ */
+class IcyWriter {
+  constructor(res, icyEnabled) {
+    this.res = res;
+    this.icyEnabled = icyEnabled;
+    this.byteCount = 0;
+    this.metaTitle = '';
+  }
+
+  setTitle(title) {
+    this.metaTitle = title || '';
+  }
+
+  write(data) {
+    if (!this.icyEnabled) {
+      return this.res.write(data);
+    }
+
+    let offset = 0;
+    while (offset < data.length) {
+      const bytesUntilMeta = ICY_METAINT - this.byteCount;
+      const end = Math.min(offset + bytesUntilMeta, data.length);
+      const chunk = data.slice(offset, end);
+      this.res.write(chunk);
+      this.byteCount += chunk.length;
+      offset = end;
+
+      if (this.byteCount >= ICY_METAINT) {
+        this._insertMetadata();
+        this.byteCount = 0;
+      }
+    }
+  }
+
+  _insertMetadata() {
+    if (!this.metaTitle) {
+      this.res.write(Buffer.from([0]));
+      return;
+    }
+    const metaStr = `StreamTitle='${this.metaTitle.replace(/'/g, "\\'")}';`;
+    const metaBuf = Buffer.from(metaStr, 'utf8');
+    const paddedLen = Math.ceil(metaBuf.length / 16) * 16;
+    const block = Buffer.alloc(1 + paddedLen);
+    block[0] = paddedLen / 16;
+    metaBuf.copy(block, 1);
+    this.res.write(block);
+  }
+
+  end() {
+    this.res.end();
+  }
+}
+
+/** Update ICY metadata title on all relay listeners for a room */
+function updateRelayMetadata(roomId, title) {
+  const listeners = rooms.getRelayListeners(roomId);
+  for (const writer of listeners) {
+    if (writer.setTitle) writer.setTitle(title);
+  }
+}
+
 // HTTP audio relay — serves MP3 audio as an Icecast-compatible stream
 app.get('/stream/:roomId', (req, res) => {
   const { roomId } = req.params;
@@ -170,29 +238,44 @@ app.get('/stream/:roomId', (req, res) => {
     return res.status(404).send('Room not found');
   }
 
-  // Serve as WebM audio stream (MediaRecorder outputs WebM/Opus)
-  res.writeHead(200, {
-    'Content-Type': 'audio/webm',
+  const wantsIcyMeta = req.headers['icy-metadata'] === '1';
+
+  const headers = {
+    'Content-Type': 'audio/mpeg',
     'Connection': 'keep-alive',
     'Cache-Control': 'no-cache, no-store',
     'Access-Control-Allow-Origin': '*',
-  });
+    'icy-name': 'QuetalCast',
+    'icy-genre': 'Various',
+    'icy-pub': '1',
+    'icy-br': '128',
+    'icy-sr': '44100',
+  };
 
-  // Send the WebM initialization segment so the player can start decoding
-  if (room.relayHeader) {
-    res.write(room.relayHeader);
+  if (wantsIcyMeta) {
+    headers['icy-metaint'] = String(ICY_METAINT);
   }
 
-  const added = rooms.addRelayListener(roomId, res);
+  res.writeHead(200, headers);
+
+  const writer = new IcyWriter(res, wantsIcyMeta);
+
+  // Set initial metadata if the room already has a "now playing" title
+  const meta = rooms.getMetadata(roomId);
+  if (meta?.text) {
+    writer.setTitle(meta.text);
+  }
+
+  const added = rooms.addRelayListener(roomId, writer);
   if (!added) {
     res.end();
     return;
   }
 
-  logger.info({ roomId: roomId.slice(0, 8) }, 'Relay listener connected');
+  logger.info({ roomId: roomId.slice(0, 8), icyMeta: wantsIcyMeta }, 'Relay listener connected');
 
   req.on('close', () => {
-    rooms.removeRelayListener(roomId, res);
+    rooms.removeRelayListener(roomId, writer);
     logger.info({ roomId: roomId.slice(0, 8) }, 'Relay listener disconnected');
   });
 });
@@ -463,26 +546,19 @@ wss.on('connection', (ws, req) => {
 
   let binaryCount = 0;
   ws.on('message', (raw, isBinary) => {
-    // Binary messages from broadcaster = relay audio data for /stream/:roomId
+    // Binary messages from broadcaster = relay MP3 audio data for /stream/:roomId
     if (isBinary && clientRoom && clientRole === 'broadcaster') {
       binaryCount++;
       const data = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
 
-      // Store the first chunk as the WebM initialization segment
-      const room = rooms.rooms.get(clientRoom);
-      if (room && binaryCount === 1) {
-        room.relayHeader = data;
-        logger.info({ roomId: clientRoom.slice(0, 8), headerBytes: data.length }, 'Relay: stored WebM header');
-      }
-
       if (binaryCount === 1 || binaryCount % 500 === 0) {
         const listeners = rooms.getRelayListeners(clientRoom);
-        logger.info({ roomId: clientRoom.slice(0, 8), binaryCount, bytes: data.length, listeners: listeners.size }, 'Relay binary data');
+        logger.info({ roomId: clientRoom.slice(0, 8), binaryCount, bytes: data.length, listeners: listeners.size }, 'Relay MP3 data');
       }
 
       const listeners = rooms.getRelayListeners(clientRoom);
-      for (const res of listeners) {
-        try { res.write(data); } catch { rooms.removeRelayListener(clientRoom, res); }
+      for (const writer of listeners) {
+        try { writer.write(data); } catch { rooms.removeRelayListener(clientRoom, writer); }
       }
       return;
     }
@@ -753,6 +829,9 @@ wss.on('connection', (ws, req) => {
           const rws = rooms.getReceiver(clientRoom, rid);
           if (rws) rws.send(metaMsg);
         }
+
+        // Update ICY metadata on relay stream listeners
+        updateRelayMetadata(clientRoom, metaText);
         break;
       }
 
@@ -816,19 +895,23 @@ wss.on('connection', (ws, req) => {
 
         // Push metadata to integration stream if active
         const integrationInfo = rooms.getIntegrationInfo(clientRoom);
-        if (integrationInfo) {
-          // Build rich song string: "Artist - Title [Album (Year)]"
-          let songStr = trackText;
-          if (trackMeta.artist && trackMeta.title) {
-            songStr = `${trackMeta.artist} - ${trackMeta.title}`;
-            const parts = [];
-            if (trackMeta.album) parts.push(trackMeta.album);
-            if (trackMeta.releaseDate) {
-              const yr = trackMeta.releaseDate.match(/^(\d{4})/);
-              if (yr) parts.push(yr[1]);
-            }
-            if (parts.length) songStr += ` [${parts.join(' · ')}]`;
+        // Build rich song string: "Artist - Title [Album (Year)]"
+        let songStr = trackText;
+        if (trackMeta.artist && trackMeta.title) {
+          songStr = `${trackMeta.artist} - ${trackMeta.title}`;
+          const parts = [];
+          if (trackMeta.album) parts.push(trackMeta.album);
+          if (trackMeta.releaseDate) {
+            const yr = trackMeta.releaseDate.match(/^(\d{4})/);
+            if (yr) parts.push(yr[1]);
           }
+          if (parts.length) songStr += ` [${parts.join(' · ')}]`;
+        }
+
+        // Update ICY metadata on relay stream listeners
+        updateRelayMetadata(clientRoom, songStr);
+
+        if (integrationInfo) {
           updateStreamMetadata(integrationInfo.type, integrationInfo.credentials, songStr, logger)
             .then((ok) => {
               if (ok) logger.debug({ roomId: clientRoom.slice(0, 8) }, 'Integration metadata updated');
@@ -896,10 +979,10 @@ wss.on('connection', (ws, req) => {
   ws.on('close', (code, reason) => {
     if (clientRoom && clientRole) {
       if (clientRole === 'broadcaster') {
-        // Clean up relay stream listeners
+        // Clean up relay stream listeners (IcyWriter wrappers)
         const relayListeners = rooms.getRelayListeners(clientRoom);
-        for (const res of relayListeners) {
-          try { res.end(); } catch { /* ignore */ }
+        for (const writer of relayListeners) {
+          try { writer.end(); } catch { /* ignore */ }
         }
         // Clear local stream URL from integration info
         const relayInfo = rooms.getIntegrationInfo(clientRoom);
