@@ -64,10 +64,11 @@ export default function DocsOverview() {
           integration relay
         </li>
         <li>
-          <strong>MediaRecorder</strong>
+          <strong>MediaRecorder + FFmpeg</strong>
           {' — '}
-          Built-in WebM/Opus relay stream for non-integration broadcasts, served at{' '}
-          <code>/stream/:roomId</code> for VLC, RadioDJ, and other media players
+          Built-in audio relay: browser captures WebM/Opus, server transcodes to MP3 via FFmpeg with
+          Icecast-compatible ICY headers, served at <code>/stream/:roomId</code> for VLC, RadioDJ,
+          and other media players
         </li>
         <li>
           <strong>lamejs</strong>

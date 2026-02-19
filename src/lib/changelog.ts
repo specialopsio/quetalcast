@@ -12,11 +12,13 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-02-19',
-    version: '0.9.0',
+    version: '0.10.0',
     items: [
-      'HTTP audio relay with server-side FFmpeg transcoding and Icecast-compatible headers',
-      'Room slug history with live status indicators',
+      'Stream URL now serves MP3 via server-side FFmpeg transcoding (WebM→MP3) with Icecast-compatible ICY headers',
+      'Room slug history stored server-side with file persistence; dropdown shows live/available status',
+      'Custom room IDs can be freely reused across broadcasts (blocked only while live)',
       'Headphones button matches mute/solo button size on mixer strips',
+      'Version number displayed in footer',
     ],
   },
   {

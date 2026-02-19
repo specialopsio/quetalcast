@@ -87,10 +87,10 @@ export default function DocsBroadcaster() {
           trailing hyphens, no consecutive hyphens.
         </p>
         <p className="mt-2">
-          Previously used slugs are saved and shown as suggestions when you focus the input. You
-          can remove saved slugs with the X button. If a previous broadcast used the same slug and
-          it's no longer active, the room is reclaimed automatically — so you can reuse the same
-          URL for a recurring show.
+          Previously used slugs are stored on the server and shown as suggestions when you focus
+          the input — each one displays a live/available status indicator. You can remove saved
+          slugs with the X button. Custom slugs can be freely reused across broadcasts; they are
+          only blocked while a room with that slug is currently live.
         </p>
       </section>
 

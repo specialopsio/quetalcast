@@ -21,10 +21,10 @@ Real-time audio broadcasting application built with WebRTC, React, and Node.js. 
 <!-- Auto-identify (temporarily disabled): Automatic song identification using AcoustID/Chromaprint. Ear icon toggle during broadcast. Code remains in useAutoIdentify.ts and audio-identify.js for future re-enable. -->
 - **Local recording** — Record your broadcast as a 320 kbps stereo MP3, auto-downloaded when you stop. Start recording before going on air to capture from the moment you hit record. If you end the broadcast while recording, recording continues until you stop it or click Download ZIP in the modal. Recording also continues when you start a new broadcast — use the Record button or Download ZIP to stop and save. Uses AudioWorklet + Web Worker for energy-efficient encoding
 - **Keyboard shortcuts** — Space (mute), R (record), L (listen), C (cue), 1–0 (sound pads), ? (help). Active while on air, disabled when typing in inputs
-- **Custom receive URLs** — Set a custom slug for your receive URL (e.g. `/receive/elpasorocks` or `/receive/farmers-market`) instead of an auto-generated hex ID. Lowercase letters, numbers, and hyphens, 3–40 characters. Previously used slugs are saved to localStorage and shown as suggestions. Stale rooms with the same slug are automatically reclaimed so you can reuse the same URL across sessions
+- **Custom receive URLs** — Set a custom slug for your receive URL (e.g. `/receive/elpasorocks` or `/receive/farmers-market`) instead of an auto-generated hex ID. Lowercase letters, numbers, and hyphens, 3–40 characters. Previously used slugs are stored server-side and shown as suggestions with live/available status indicators. Slugs can be freely reused across broadcasts (blocked only while a room with that slug is live)
 - **Integrations** — Stream to external platforms (Icecast, Shoutcast, Radio.co) via server-side relay. Configurable stream quality: bitrate (128/192/256/320 kbps) and channels (stereo/mono), defaulting to stereo 192 kbps. Test connection, remember credentials + quality settings in localStorage. Room is still created for chat and metadata. Now Playing metadata is automatically pushed to the external server's admin API. Mount points should use `.mp3` extension for best compatibility with RadioDJ, VLC, and other players. Proper Icecast headers (`ice-audio-info`, `ice-bitrate`, `ice-channels`, `ice-samplerate`) are sent for reliable format detection. For internet-radio.com (Centova Cast), use mount point `/stream.mp3` and stop AutoDJ before going live if needed — see docs for details
 - **Per-channel headphone monitor** — Each mixer channel strip has a headphone toggle that controls local monitoring independently. Hear or silence any channel (Mic, Pads, System Audio) through your speakers without affecting what listeners hear. Pads monitor is on by default; toggle it off to play soundboard clips to listeners without hearing them yourself. Monitor states are persisted to localStorage
-- **Stream URL sharing** — Every broadcast exposes a Stream URL on the receiver page — both integration-based (Icecast/Shoutcast) and standard WebRTC streams via a built-in WebM/Opus relay. The URL can be pasted into RadioDJ, VLC, or any media player that accepts standard audio streams
+- **Stream URL sharing** — Every broadcast exposes a Stream URL on the receiver page — both integration-based (Icecast/Shoutcast) and a built-in HTTP relay. The relay serves MP3 via server-side FFmpeg transcoding (WebM→MP3) with Icecast-compatible ICY headers, so the URL works in RadioDJ, VLC, internet-radio.com, and any media player that accepts standard HTTP audio streams
 - **Multi-receiver** — Up to 4 concurrent listeners per room
 - **TURN relay** — Dynamic credential fetching via Metered.ca (or static config)
 - **Auto-reconnect** — Receivers automatically reconnect on connection drops with exponential backoff (up to 5 attempts). Manual retry available after max attempts
@@ -70,6 +70,7 @@ System Audio ─► Gain ─► Pan ──────────────�
 
 - [Node.js](https://nodejs.org/) 18+
 - [pnpm](https://pnpm.io/)
+- [FFmpeg](https://ffmpeg.org/) — required for the built-in MP3 stream relay (installed automatically in the Docker image; install locally for dev)
 
 ### 1. Clone and install
 
@@ -180,7 +181,7 @@ fly deploy
 │   │   ├── useWebRTC.ts        # WebRTC peer connections + adaptive quality + auto-reconnect
 │   │   ├── useAudioMixer.ts    # Web Audio API mixing graph with per-channel monitors
 │   │   ├── useAudioAnalyser.ts # Audio level analysis
-│   │   ├── useRelayStream.ts   # Built-in WebM/Opus relay for non-integration streams
+│   │   ├── useRelayStream.ts   # Built-in audio relay (WebM capture → server FFmpeg → MP3)
 │   │   ├── useIntegrationStream.ts # MP3 encoding + WebSocket relay for integrations
 │   │   ├── useAutoIdentify.ts  # AcoustID-based auto song identification (temporarily disabled in UI)
 │   │   ├── useKeyboardShortcuts.ts # Keyboard shortcut bindings for broadcaster
@@ -211,6 +212,9 @@ fly deploy
 │   ├── recorder-processor.js   # AudioWorklet for energy-efficient PCM capture
 │   ├── pitch-shift-processor.js  # AudioWorklet for real-time pitch shifting
 │   └── noise-gate-processor.js   # AudioWorklet for noise gate (Enhance effect)
+├── data/                       # Persistent server data (gitignored)
+│   └── room-slugs.json        # Custom room slug history
+├── VERSION                     # Current version number (read by Vite + displayed in footer)
 ├── Dockerfile                  # Multi-stage production build
 ├── fly.toml                    # Fly.io deployment config
 └── docker-compose.yml          # Local Docker setup

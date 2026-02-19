@@ -70,6 +70,27 @@ export default function DocsIntegrations() {
       </section>
 
       <section>
+        <h2 className="text-lg font-semibold text-foreground mb-3">Built-in stream relay</h2>
+        <p>
+          Every broadcast (with or without an external integration) exposes a built-in stream URL
+          at <code>/stream/:roomId</code>. The server captures the WebM/Opus audio from the
+          broadcaster and transcodes it to MP3 in real time using FFmpeg, serving it with
+          Icecast-compatible ICY headers. This URL works in:
+        </p>
+        <ul className="list-disc list-inside mt-2 space-y-1 pl-1">
+          <li><strong>VLC</strong> — Media → Open Network Stream → paste the URL</li>
+          <li><strong>RadioDJ</strong> — Options → Track Import → Internet Stream → paste the URL</li>
+          <li><strong>internet-radio.com</strong> and other platforms that accept HTTP audio streams</li>
+          <li><strong>Any media player</strong> that supports MP3 over HTTP</li>
+        </ul>
+        <p className="mt-2">
+          The stream URL is shown on the receiver page. If FFmpeg is not available on the server,
+          the relay falls back to serving raw WebM/Opus (works in VLC and browsers but not
+          traditional radio software).
+        </p>
+      </section>
+
+      <section>
         <h2 className="text-lg font-semibold text-foreground mb-3">Keyboard shortcuts</h2>
         <p>
           While on air, use these keys for hands-free control (disabled when typing in text
