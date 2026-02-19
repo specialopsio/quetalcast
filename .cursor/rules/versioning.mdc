@@ -1,7 +1,17 @@
 ---
-description: Version numbering and changelog update guidance
+description: Version numbering, changelog, and documentation update guidance
 alwaysApply: true
 ---
+
+# Documentation Upkeep
+
+After any change that affects user-facing behavior, features, or setup, update the relevant docs:
+
+- **Changelog** (`src/lib/changelog.ts`) — add entries for meaningful releases
+- **README** — setup, features, usage, env vars
+- **Docs** (`src/pages/docs/`) — Broadcaster, Receiver, Integrations pages
+
+Do not leave docs stale when you change behavior they describe.
 
 # Version Numbering
 
