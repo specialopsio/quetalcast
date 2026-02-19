@@ -195,8 +195,8 @@ function startRoomTranscoder(room, roomId) {
   const args = [
     '-hide_banner', '-loglevel', 'warning',
     '-fflags', '+nobuffer+flush_packets',
-    '-probesize', '32',
-    '-analyzeduration', '0',
+    '-probesize', '32768',
+    '-analyzeduration', '500000',
     '-f', 'webm',
     '-i', 'pipe:0',
     '-f', 'mp3',
@@ -247,10 +247,26 @@ function stopRoomTranscoder(room) {
 // ICY metadata constants for Icecast-compatible streaming
 const ICY_METAINT = 16384;
 
+// User-Agent patterns for players that understand ICY metadata
+const ICY_CAPABLE_UA = /vlc|winamp|foobar|xmms|radio|icecast|mpv|mplayer|bass|fstream|tunein|streamripper/i;
+
+/**
+ * Determine whether to enable ICY metadata interleaving for a request.
+ * Checks the standard Icy-MetaData header first, then falls back to
+ * User-Agent detection for players behind HTTPS proxies that may strip
+ * the non-standard request header.
+ */
+function shouldEnableIcy(req) {
+  if (req.headers['icy-metadata'] === '1') return true;
+  const ua = req.headers['user-agent'] || '';
+  if (ICY_CAPABLE_UA.test(ua)) return true;
+  return false;
+}
+
 /**
  * Wraps an HTTP response to interleave ICY metadata blocks every
- * ICY_METAINT bytes of audio data. Players that send "Icy-MetaData: 1"
- * expect this framing; others receive raw MP3 without metadata blocks.
+ * ICY_METAINT bytes of audio data. When icyEnabled is false the
+ * response receives raw MP3 without any metadata framing.
  */
 class IcyWriter {
   constructor(res, icyEnabled) {
@@ -258,6 +274,7 @@ class IcyWriter {
     this.icyEnabled = icyEnabled;
     this.byteCount = 0;
     this.metaTitle = '';
+    this.dead = false;
   }
 
   setTitle(title) {
@@ -265,23 +282,28 @@ class IcyWriter {
   }
 
   write(data) {
-    if (!this.icyEnabled) {
-      return this.res.write(data);
-    }
-
-    let offset = 0;
-    while (offset < data.length) {
-      const bytesUntilMeta = ICY_METAINT - this.byteCount;
-      const end = Math.min(offset + bytesUntilMeta, data.length);
-      const chunk = data.slice(offset, end);
-      this.res.write(chunk);
-      this.byteCount += chunk.length;
-      offset = end;
-
-      if (this.byteCount >= ICY_METAINT) {
-        this._insertMetadata();
-        this.byteCount = 0;
+    if (this.dead) return;
+    try {
+      if (!this.icyEnabled) {
+        return this.res.write(data);
       }
+
+      let offset = 0;
+      while (offset < data.length) {
+        const bytesUntilMeta = ICY_METAINT - this.byteCount;
+        const end = Math.min(offset + bytesUntilMeta, data.length);
+        const chunk = data.slice(offset, end);
+        this.res.write(chunk);
+        this.byteCount += chunk.length;
+        offset = end;
+
+        if (this.byteCount >= ICY_METAINT) {
+          this._insertMetadata();
+          this.byteCount = 0;
+        }
+      }
+    } catch {
+      this.dead = true;
     }
   }
 
@@ -300,15 +322,23 @@ class IcyWriter {
   }
 
   end() {
-    this.res.end();
+    this.dead = true;
+    try { this.res.end(); } catch { /* already closed */ }
   }
 }
 
 /** Update ICY metadata title on all relay listeners for a room */
 function updateRelayMetadata(roomId, title) {
   const listeners = rooms.getRelayListeners(roomId);
+  let count = 0;
   for (const writer of listeners) {
-    if (writer.setTitle) writer.setTitle(title);
+    if (writer.setTitle && !writer.dead) {
+      writer.setTitle(title);
+      count++;
+    }
+  }
+  if (count > 0) {
+    logger.debug({ roomId: roomId.slice(0, 8), title: title.slice(0, 60), listeners: count }, 'ICY metadata updated');
   }
 }
 
@@ -323,13 +353,14 @@ app.get('/stream/:roomId', (req, res) => {
   }
 
   const usesMp3 = !!ffmpegPath;
-  const wantsIcyMeta = usesMp3 && req.headers['icy-metadata'] === '1';
+  const icyEnabled = usesMp3 && shouldEnableIcy(req);
 
   const headers = {
     'Content-Type': usesMp3 ? 'audio/mpeg' : 'audio/webm',
     'Connection': 'keep-alive',
     'Cache-Control': 'no-cache, no-store',
     'Access-Control-Allow-Origin': '*',
+    'X-Accel-Buffering': 'no',
   };
 
   if (usesMp3) {
@@ -338,18 +369,14 @@ app.get('/stream/:roomId', (req, res) => {
     headers['icy-pub'] = '1';
     headers['icy-br'] = '128';
     headers['icy-sr'] = '44100';
-    if (wantsIcyMeta) {
+    if (icyEnabled) {
       headers['icy-metaint'] = String(ICY_METAINT);
     }
   }
 
   res.writeHead(200, headers);
 
-  // When FFmpeg is active, wrap response in IcyWriter for ICY metadata interleaving.
-  // FFmpeg stdout callback writes MP3 data to all listeners.
-  // Without FFmpeg, raw WebM is forwarded directly (IcyWriter still wraps but
-  // metadata interleaving is disabled since the format is WebM, not MP3).
-  const writer = new IcyWriter(res, wantsIcyMeta);
+  const writer = new IcyWriter(res, icyEnabled);
 
   const meta = rooms.getMetadata(roomId);
   if (meta?.text) {
@@ -367,7 +394,14 @@ app.get('/stream/:roomId', (req, res) => {
     return;
   }
 
-  logger.info({ roomId: roomId.slice(0, 8), format: usesMp3 ? 'mp3' : 'webm', icyMeta: wantsIcyMeta }, 'Relay listener connected');
+  const ua = req.headers['user-agent'] || '';
+  logger.info({
+    roomId: roomId.slice(0, 8),
+    format: usesMp3 ? 'mp3' : 'webm',
+    icyMeta: icyEnabled,
+    icyHeader: req.headers['icy-metadata'] || 'none',
+    ua: ua.slice(0, 80),
+  }, 'Relay listener connected');
 
   req.on('close', () => {
     rooms.removeRelayListener(roomId, writer);
