@@ -126,6 +126,8 @@ export class RoomManager {
       relayListeners: new Set(),
       relayHeader: null,
       ffmpegProcess: null,
+      streamTitle: null,
+      streamDescription: null,
       createdAt: new Date().toISOString(),
       endedAt: null,
     });

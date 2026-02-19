@@ -8,7 +8,7 @@ import { StatusBar } from '@/components/StatusBar';
 import { LevelMeter } from '@/components/LevelMeter';
 import { HealthPanel } from '@/components/HealthPanel';
 import { EventLog, createLogEntry, type LogEntry } from '@/components/EventLog';
-import { Copy, Mic, MicOff, Radio, Headphones, Music, Sparkles, Zap, Plug2, Circle, Square, Keyboard, Monitor, MonitorOff, Download, SlidersHorizontal, Link, X, Clock } from 'lucide-react';
+import { Copy, Mic, MicOff, Radio, Headphones, Music, Sparkles, Zap, Plug2, Circle, Square, Keyboard, Monitor, MonitorOff, Download, SlidersHorizontal } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
 import { Slider } from '@/components/ui/slider';
 import {
@@ -35,6 +35,7 @@ import { type EffectName, CHAIN_ORDER } from '@/hooks/useMicEffects';
 import { useRecorder } from '@/hooks/useRecorder';
 import { useKeyboardShortcuts, SHORTCUT_MAP } from '@/hooks/useKeyboardShortcuts';
 import { downloadBroadcastZip } from '@/lib/zip-export';
+import { PreBroadcastModal, type BroadcastSettings } from '@/components/PreBroadcastModal';
 import {
   Dialog,
   DialogContent,
@@ -56,47 +57,6 @@ const WS_URL = import.meta.env.VITE_WS_URL || (
 );
 
 const BROADCASTER_LAYOUT_STORAGE_KEY = 'quetalcast:broadcaster-layout:v1';
-const CUSTOM_URL_PATTERN = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/;
-
-const API_BASE = import.meta.env.VITE_API_URL || '';
-
-interface SavedSlug {
-  slug: string;
-  lastUsed: string;
-  live: boolean;
-}
-
-async function fetchSavedSlugs(): Promise<SavedSlug[]> {
-  try {
-    const res = await fetch(`${API_BASE}/api/room-slugs`, { credentials: 'include' });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return Array.isArray(data.slugs) ? data.slugs : [];
-  } catch {
-    return [];
-  }
-}
-
-async function deleteServerSlug(slug: string): Promise<void> {
-  try {
-    await fetch(`${API_BASE}/api/room-slugs/${encodeURIComponent(slug)}`, {
-      method: 'DELETE',
-      credentials: 'include',
-    });
-  } catch {
-    // best-effort
-  }
-}
-
-function validateCustomUrl(value: string): string | null {
-  if (!value) return null;
-  if (value.length < 3) return 'At least 3 characters';
-  if (value.length > 40) return '40 characters max';
-  if (/--/.test(value)) return 'No consecutive hyphens';
-  if (!CUSTOM_URL_PATTERN.test(value)) return 'Lowercase letters, numbers, hyphens only';
-  return null;
-}
-
 type PersistedBroadcasterLayout = {
   qualityMode: AudioQuality;
   limiterDb: 0 | -3 | -6 | -12;
@@ -278,12 +238,9 @@ const Broadcaster = () => {
   const [qualityMode, setQualityMode] = useState<AudioQuality>('auto');
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  // Custom URL state
-  const [customUrl, setCustomUrl] = useState('');
-  const [customUrlError, setCustomUrlError] = useState<string | null>(null);
-  const [savedSlugs, setSavedSlugs] = useState<SavedSlug[]>([]);
-  const [showUrlSuggestions, setShowUrlSuggestions] = useState(false);
-  const urlInputRef = useRef<HTMLInputElement>(null);
+  // Pre-broadcast modal state
+  const [preBroadcastOpen, setPreBroadcastOpen] = useState(false);
+  const pendingBroadcastSettingsRef = useRef<BroadcastSettings | null>(null);
 
   // Integration state
   const [selectedIntegration, setSelectedIntegration] = useState<IntegrationConfig | null>(null);
@@ -344,15 +301,6 @@ const Broadcaster = () => {
       if (!valid) navigate('/login');
     });
   }, [navigate]);
-
-  // Fetch saved room slugs from server
-  const refreshSlugs = useCallback(() => {
-    fetchSavedSlugs().then(setSavedSlugs);
-  }, []);
-
-  useEffect(() => {
-    refreshSlugs();
-  }, [refreshSlugs]);
 
   // Enumerate devices
   useEffect(() => {
@@ -630,24 +578,10 @@ const Broadcaster = () => {
 
       addLog('Mic connected');
 
-      // Validate custom URL before creating room
-      const slug = customUrl.trim().toLowerCase();
-      if (slug) {
-        const validationError = validateCustomUrl(slug);
-        if (validationError) {
-          setCustomUrlError(validationError);
-          addLog(validationError, 'error');
-          setIsOnAir(false);
-          return;
-        }
-      }
+      const settings = pendingBroadcastSettingsRef.current;
+      const slug = settings?.customUrl || '';
 
-      // Always create a new room for each broadcast
-      webrtc.createRoom(slug || undefined);
-      if (slug) {
-        // Server records the slug automatically; refresh the list
-        setTimeout(refreshSlugs, 1000);
-      }
+      webrtc.createRoom(slug || undefined, settings?.streamTitle, settings?.streamDescription);
       addLog('Setting up room…');
       broadcastStartedRef.current = false;
 
@@ -657,31 +591,40 @@ const Broadcaster = () => {
       }
 
       setIsOnAir(true);
+      pendingBroadcastSettingsRef.current = null;
     } catch (e) {
       addLog('Couldn\'t start broadcast — check mic permissions', 'error');
     }
-  }, [mixer, micEffects, webrtc, selectedIntegration, addLog, micVolume, micMuted, recorder, isOnAir, customUrl]);
+  }, [mixer, micEffects, webrtc, selectedIntegration, addLog, micVolume, micMuted, recorder, isOnAir]);
 
-  const handleGoOnAir = useCallback(async () => {
-    // Only show dialog when there's actual broadcast content from a previous session,
-    // not startup logs (Connecting..., Found audio inputs, etc.)
+  const handleGoOnAir = useCallback(() => {
     const hasTrackList = trackList.length > 0;
     const hasBroadcastEnded = logs.some((e) => e.message.includes('Off air'));
     if (hasTrackList || hasBroadcastEnded) {
       setStartBroadcastDialogOpen(true);
       return;
     }
-    await doGoOnAir();
-  }, [logs, trackList.length, doGoOnAir]);
+    setPreBroadcastOpen(true);
+  }, [logs, trackList.length]);
 
-  const handleStartBroadcastContinue = useCallback(async () => {
+  const handlePreBroadcastStart = useCallback(async (settings: BroadcastSettings) => {
+    setPreBroadcastOpen(false);
+    pendingBroadcastSettingsRef.current = settings;
+    await doGoOnAir();
+  }, [doGoOnAir]);
+
+  const handlePreBroadcastSkip = useCallback(async () => {
+    setPreBroadcastOpen(false);
+    pendingBroadcastSettingsRef.current = null;
+    await doGoOnAir();
+  }, [doGoOnAir]);
+
+  const handleStartBroadcastContinue = useCallback(() => {
     setLogs([]);
     setTrackList([]);
     setStartBroadcastDialogOpen(false);
-    // Keep recording running — it continues into the new broadcast. User stops via
-    // Record button or Download ZIP in the modal when they end the next broadcast.
-    await doGoOnAir();
-  }, [doGoOnAir]);
+    setPreBroadcastOpen(true);
+  }, []);
 
   /** Continue previous broadcast — rejoin same room, keep logs & track list */
   const handleContinuePreviousBroadcast = useCallback(async () => {
@@ -1264,118 +1207,6 @@ const Broadcaster = () => {
           right={audioAnalysis.right}
           label="Input Level"
         />
-
-        {/* Custom Receive URL — only before going on air */}
-        {!isOnAir && (
-          <div className="panel !py-3 !px-4 space-y-2">
-            <div className="flex items-center gap-1.5">
-              <Link className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Receive URL</span>
-            </div>
-            <div className="relative">
-              <div className="flex items-center gap-0 rounded-md border border-border bg-input overflow-hidden focus-within:ring-1 focus-within:ring-ring">
-                <span className="text-xs font-mono text-muted-foreground/60 pl-3 shrink-0 select-none whitespace-nowrap">
-                  /receive/
-                </span>
-                <input
-                  ref={urlInputRef}
-                  value={customUrl}
-                  onChange={(e) => {
-                    const v = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
-                    setCustomUrl(v);
-                    setCustomUrlError(null);
-                  }}
-                  onFocus={() => { refreshSlugs(); setShowUrlSuggestions(true); }}
-                  onBlur={() => {
-                    // Delay to allow clicks on suggestions
-                    setTimeout(() => setShowUrlSuggestions(false), 200);
-                  }}
-                  placeholder="auto-generated"
-                  maxLength={40}
-                  spellCheck={false}
-                  autoComplete="off"
-                  className="flex-1 min-w-0 bg-transparent py-2 pr-2 text-sm font-mono text-foreground focus:outline-none placeholder:text-muted-foreground/40"
-                />
-                {customUrl && (
-                  <button
-                    onClick={() => {
-                      setCustomUrl('');
-                      setCustomUrlError(null);
-                    }}
-                    className="pr-2 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
-                    title="Clear"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-
-              {/* Suggestions dropdown */}
-              {showUrlSuggestions && savedSlugs.length > 0 && !customUrl && (
-                <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-popover border border-border rounded-md shadow-lg overflow-hidden">
-                  <div className="px-3 py-1.5 border-b border-border">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">Previously used</span>
-                  </div>
-                  {savedSlugs.map(({ slug, live }) => (
-                    <div
-                      key={slug}
-                      className={`flex items-center justify-between px-3 py-1.5 group ${live ? 'opacity-50' : 'hover:bg-secondary/80 cursor-pointer'}`}
-                    >
-                      <button
-                        className="flex items-center gap-2 flex-1 min-w-0 text-left"
-                        disabled={live}
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          if (!live) {
-                            setCustomUrl(slug);
-                            setShowUrlSuggestions(false);
-                          }
-                        }}
-                      >
-                        {live ? (
-                          <Radio className="h-3 w-3 text-destructive shrink-0 animate-pulse" />
-                        ) : (
-                          <Clock className="h-3 w-3 text-muted-foreground/40 shrink-0" />
-                        )}
-                        <span className="text-xs font-mono text-foreground truncate">{slug}</span>
-                        {live && (
-                          <span className="text-[10px] font-semibold text-destructive uppercase shrink-0">Live</span>
-                        )}
-                      </button>
-                      {!live && (
-                        <button
-                          className="opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-all shrink-0 ml-2"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            deleteServerSlug(slug).then(refreshSlugs);
-                          }}
-                          title="Remove"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {customUrlError && (
-              <p className="text-[11px] text-destructive">{customUrlError}</p>
-            )}
-            {customUrl && !customUrlError && (
-              <p className="text-[10px] text-muted-foreground/60 font-mono truncate">
-                Listeners join at: {window.location.origin}/receive/{customUrl}
-              </p>
-            )}
-            {!customUrl && (
-              <p className="text-[10px] text-muted-foreground/60">
-                Leave blank for an auto-generated ID, or type a custom slug like <span className="font-mono">elpasorocks</span> or <span className="font-mono">farmers-market</span>
-              </p>
-            )}
-          </div>
-        )}
 
         {/* Controls */}
         <div className="flex gap-3">
@@ -2038,6 +1869,13 @@ const Broadcaster = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <PreBroadcastModal
+        open={preBroadcastOpen}
+        onOpenChange={setPreBroadcastOpen}
+        onStart={handlePreBroadcastStart}
+        onSkip={handlePreBroadcastSkip}
+      />
 
       <Dialog open={savePresetOpen} onOpenChange={setSavePresetOpen}>
         <DialogContent className="sm:max-w-xs">

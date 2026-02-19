@@ -333,7 +333,8 @@ app.get('/stream/:roomId', (req, res) => {
   };
 
   if (usesMp3) {
-    headers['icy-name'] = 'QuetalCast';
+    headers['icy-name'] = room.streamTitle || 'QuetalCast';
+    headers['icy-description'] = room.streamDescription || '';
     headers['icy-genre'] = 'Various';
     headers['icy-pub'] = '1';
     headers['icy-br'] = '128';
@@ -717,6 +718,11 @@ wss.on('connection', (ws, req) => {
           break;
         }
         const roomId = createResult.roomId;
+        const room = rooms.rooms.get(roomId);
+        if (room) {
+          if (typeof msg.streamTitle === 'string') room.streamTitle = msg.streamTitle.slice(0, 100);
+          if (typeof msg.streamDescription === 'string') room.streamDescription = msg.streamDescription.slice(0, 200);
+        }
         clientRoom = roomId;
         clientRole = 'broadcaster';
         rooms.join(roomId, 'broadcaster', ws);

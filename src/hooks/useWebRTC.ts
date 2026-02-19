@@ -609,9 +609,11 @@ export function useWebRTC(
     return unsub;
   }, [signaling, role, createPCForReceiver]);
 
-  const createRoom = useCallback((customId?: string) => {
+  const createRoom = useCallback((customId?: string, streamTitle?: string, streamDescription?: string) => {
     const msg: Record<string, string> = { type: 'create-room' };
     if (customId) msg.customId = customId;
+    if (streamTitle) msg.streamTitle = streamTitle;
+    if (streamDescription) msg.streamDescription = streamDescription;
     signaling.send(msg);
   }, [signaling]);
 
