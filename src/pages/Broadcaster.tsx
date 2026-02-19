@@ -1624,21 +1624,21 @@ const Broadcaster = () => {
                             <div className="flex items-center gap-1">
                               <button
                                 onClick={() => setMicMuted((v) => !v)}
-                                className={`px-2 py-1 rounded text-[10px] font-mono ${micMuted ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'}`}
+                                className={`size-7 flex items-center justify-center rounded text-[10px] font-mono ${micMuted ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'}`}
                                 title="Mic mute"
                               >
                                 M
                               </button>
                               <button
                                 onClick={() => setMicSolo((v) => !v)}
-                                className={`px-2 py-1 rounded text-[10px] font-mono ${micSolo ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'}`}
+                                className={`size-7 flex items-center justify-center rounded text-[10px] font-mono ${micSolo ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'}`}
                                 title="Mic solo"
                               >
                                 S
                               </button>
                               <button
                                 onClick={() => setMicMonitor((v) => !v)}
-                                className={`px-1.5 py-1 rounded text-[10px] ${micMonitor ? 'bg-emerald-500/20 text-emerald-400' : 'bg-secondary text-muted-foreground'}`}
+                                className={`size-7 flex items-center justify-center rounded ${micMonitor ? 'bg-emerald-500/20 text-emerald-400' : 'bg-secondary text-muted-foreground'}`}
                                 title={micMonitor ? 'Disable mic monitor' : 'Monitor mic locally'}
                               >
                                 <Headphones className="h-3 w-3" />
@@ -1671,21 +1671,21 @@ const Broadcaster = () => {
                             <div className="flex items-center gap-1">
                               <button
                                 onClick={() => setPadsMuted((v) => !v)}
-                                className={`px-2 py-1 rounded text-[10px] font-mono ${padsMuted ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'}`}
+                                className={`size-7 flex items-center justify-center rounded text-[10px] font-mono ${padsMuted ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'}`}
                                 title="Pads mute"
                               >
                                 M
                               </button>
                               <button
                                 onClick={() => setPadsSolo((v) => !v)}
-                                className={`px-2 py-1 rounded text-[10px] font-mono ${padsSolo ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'}`}
+                                className={`size-7 flex items-center justify-center rounded text-[10px] font-mono ${padsSolo ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'}`}
                                 title="Pads solo"
                               >
                                 S
                               </button>
                               <button
                                 onClick={() => setPadsMonitor((v) => !v)}
-                                className={`px-1.5 py-1 rounded text-[10px] ${padsMonitor ? 'bg-emerald-500/20 text-emerald-400' : 'bg-secondary text-muted-foreground'}`}
+                                className={`size-7 flex items-center justify-center rounded ${padsMonitor ? 'bg-emerald-500/20 text-emerald-400' : 'bg-secondary text-muted-foreground'}`}
                                 title={padsMonitor ? 'Disable pads monitor' : 'Monitor pads locally'}
                               >
                                 <Headphones className="h-3 w-3" />
@@ -1722,7 +1722,7 @@ const Broadcaster = () => {
                               <button
                                 onClick={() => setSystemAudioMuted((v) => !v)}
                                 disabled={!systemAudioActive}
-                                className={`px-2 py-1 rounded text-[10px] font-mono ${systemAudioMuted ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'} disabled:opacity-40`}
+                                className={`size-7 flex items-center justify-center rounded text-[10px] font-mono ${systemAudioMuted ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'} disabled:opacity-40`}
                                 title="System mute"
                               >
                                 M
@@ -1730,7 +1730,7 @@ const Broadcaster = () => {
                               <button
                                 onClick={() => setSystemAudioSolo((v) => !v)}
                                 disabled={!systemAudioActive}
-                                className={`px-2 py-1 rounded text-[10px] font-mono ${systemAudioSolo ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'} disabled:opacity-40`}
+                                className={`size-7 flex items-center justify-center rounded text-[10px] font-mono ${systemAudioSolo ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'} disabled:opacity-40`}
                                 title="System solo"
                               >
                                 S
@@ -1738,7 +1738,7 @@ const Broadcaster = () => {
                               <button
                                 onClick={() => setSystemMonitor((v) => !v)}
                                 disabled={!systemAudioActive}
-                                className={`px-1.5 py-1 rounded text-[10px] ${systemMonitor ? 'bg-emerald-500/20 text-emerald-400' : 'bg-secondary text-muted-foreground'} disabled:opacity-40`}
+                                className={`size-7 flex items-center justify-center rounded ${systemMonitor ? 'bg-emerald-500/20 text-emerald-400' : 'bg-secondary text-muted-foreground'} disabled:opacity-40`}
                                 title={systemMonitor ? 'Disable system monitor' : 'Monitor system audio locally'}
                               >
                                 <Headphones className="h-3 w-3" />
