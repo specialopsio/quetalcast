@@ -32,15 +32,13 @@ export default function Changelog() {
         <div className="relative border-l border-border pl-8 space-y-10">
           {CHANGELOG.map((entry, idx) => (
             <div key={entry.version} className="relative">
-              <div className="absolute -left-8 top-1 flex items-center justify-center w-4 h-4">
-                <span
-                  className={`block rounded-full ${
-                    idx === 0
-                      ? 'w-3 h-3 bg-primary ring-4 ring-primary/20'
-                      : 'w-2.5 h-2.5 bg-muted-foreground/30'
-                  }`}
-                />
-              </div>
+              <span
+                className={`absolute top-1.5 rounded-full -translate-x-1/2 ${
+                  idx === 0
+                    ? 'w-3 h-3 bg-primary ring-4 ring-primary/20 -left-[32px]'
+                    : 'w-2.5 h-2.5 bg-muted-foreground/30 -left-[32px]'
+                }`}
+              />
 
               <div className="flex items-baseline gap-3 mb-2">
                 <span className="text-sm font-mono font-semibold text-foreground">
