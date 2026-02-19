@@ -1,12 +1,13 @@
 /**
  * Changelog entries — curated list of meaningful releases.
- * Not every commit; only final solutions that stuck.
+ * `items` = features / enhancements, `fixes` = bug fixes / minor improvements.
  */
 
 export interface ChangelogEntry {
   date: string;
   version: string;
   items: string[];
+  fixes?: string[];
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
@@ -20,10 +21,16 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Pre-broadcast settings modal with stream title, description, and custom URL picker',
       'Room slug history stored server-side with file persistence; dropdown shows live/available status',
       'Custom room IDs can be freely reused across broadcasts (blocked only while live)',
-      'Hardened server for long-running stream durability: error-resilient relay writers, FFmpeg lifecycle safety, graceful shutdown, proxy buffering bypass, and defensive resource cleanup',
       'Changelog moved to dedicated /changelog page with version timeline',
       'Headphones button matches mute/solo button size on mixer strips',
       'Version number displayed in footer',
+    ],
+    fixes: [
+      'Hardened server for long-running stream durability: error-resilient relay writers, FFmpeg lifecycle safety, graceful shutdown, proxy buffering bypass, and defensive resource cleanup',
+      'Silence keepalive now runs for the full 10-minute timeout regardless of whether stream URL listeners are connected',
+      'FFmpeg probesize increased from 32 to 4096 bytes for reliable WebM header detection',
+      'CORS now allows DELETE method for room slug management',
+      'Integration WebSocket connections now have ping keepalive to prevent proxy timeout',
     ],
   },
   {

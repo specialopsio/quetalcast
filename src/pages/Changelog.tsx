@@ -52,16 +52,36 @@ export default function Changelog() {
                 </time>
               </div>
 
-              <ul className="space-y-1.5 pl-4">
-                {entry.items.map((item, i) => (
-                  <li
-                    key={i}
-                    className="text-sm text-muted-foreground list-disc list-outside"
-                  >
-                    {item}
-                  </li>
-                ))}
-              </ul>
+              {entry.items.length > 0 && (
+                <ul className="space-y-1.5 pl-4">
+                  {entry.items.map((item, i) => (
+                    <li
+                      key={i}
+                      className="text-sm text-muted-foreground list-disc list-outside"
+                    >
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {entry.fixes && entry.fixes.length > 0 && (
+                <>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/60 mt-4 mb-1.5 pl-4">
+                    Fixes &amp; improvements
+                  </p>
+                  <ul className="space-y-1.5 pl-4">
+                    {entry.fixes.map((fix, i) => (
+                      <li
+                        key={i}
+                        className="text-sm text-muted-foreground/70 list-disc list-outside"
+                      >
+                        {fix}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </div>
           ))}
         </div>

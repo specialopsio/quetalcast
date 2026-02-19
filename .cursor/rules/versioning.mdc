@@ -5,13 +5,13 @@ alwaysApply: true
 
 # Documentation Upkeep
 
-After any change that affects user-facing behavior, features, or setup, update the relevant docs:
+After **every** change of impact — features, fixes, hardening, behavior changes — update all relevant docs **in the same commit or immediately after**. Do not wait to be asked.
 
-- **Changelog** (`src/lib/changelog.ts`) — add entries for meaningful releases
-- **README** — setup, features, usage, env vars
-- **Docs** (`src/pages/docs/`) — Broadcaster, Receiver, Integrations pages
+- **Changelog** (`src/lib/changelog.ts`) — always add entries. Features go in `items`, bug fixes and minor improvements go in `fixes`.
+- **README** (`README.md`) — update features, setup, env vars, architecture, security sections as needed.
+- **Docs** (`src/pages/docs/`) — update Broadcaster, Receiver, Integrations pages when their described behavior changes.
 
-Do not leave docs stale when you change behavior they describe.
+Do not leave docs stale when you change behavior they describe. When in doubt, update.
 
 # Version Numbering
 
@@ -35,7 +35,8 @@ This project uses **Semantic Versioning** (MAJOR.MINOR.PATCH). We are in **prere
 
 Add entries to `CHANGELOG` in `src/lib/changelog.ts`. Each entry has:
 - `date`: ISO date string (YYYY-MM-DD)
-- `version`: optional, for notable releases
-- `items`: array of human-readable change descriptions
+- `version`: version string (required)
+- `items`: array of features and enhancements
+- `fixes`: optional array of bug fixes, hardening, and minor improvements
 
-Keep changelog entries concise. One line per change. No commit hashes.
+Keep entries concise. One line per change. No commit hashes. Add to `fixes` for anything that isn't a new feature — bug fixes, stability improvements, internal hardening, CORS fixes, etc.
