@@ -32,9 +32,9 @@ export function ChangelogSheet({ triggerClassName }: ChangelogSheetProps) {
         <div className="max-w-2xl mx-auto">
           <SheetHeader className="text-left pb-4 border-b border-border">
             <SheetTitle className="text-lg font-semibold">Changelog</SheetTitle>
-            <p className="text-xs text-muted-foreground">
-              Meaningful releases from the last 30 days
-            </p>
+<p className="text-xs text-muted-foreground">
+            Project history — meaningful releases
+          </p>
           </SheetHeader>
           <div className="mt-6 space-y-8">
           {CHANGELOG.map((entry) => (

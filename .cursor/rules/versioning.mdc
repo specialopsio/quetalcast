@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Version Numbering
 
-This project uses **Semantic Versioning** (MAJOR.MINOR.PATCH). Update both `VERSION` and `package.json` version when releasing.
+This project uses **Semantic Versioning** (MAJOR.MINOR.PATCH). We are in **prerelease** (0.x.x) until the product is considered ready for 1.0. Update both `VERSION` and `package.json` version when releasing.
 
 ## When to Bump
 
@@ -13,7 +13,7 @@ This project uses **Semantic Versioning** (MAJOR.MINOR.PATCH). Update both `VERS
 |------|------|----------|
 | **PATCH** (0.9.0 → 0.9.1) | Bug fixes, typos, tiny UI tweaks, no new features | Fix crash, fix typo, adjust button size |
 | **MINOR** (0.9.0 → 0.10.0) | New features, backward compatible | New effect, new integration, new UI section |
-| **MAJOR** (0.9.0 → 1.0.0) | Breaking changes, API changes, removal of features | Remove deprecated API, change auth flow |
+| **MAJOR** (0.9.0 → 1.0.0) | Breaking changes, API changes, removal of features. Reserve for when prerelease ends. | Remove deprecated API, change auth flow |
 
 ## Files to Update
 
