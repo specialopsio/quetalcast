@@ -48,7 +48,7 @@ app.use((req, res, next) => {
     res.header('Access-Control-Allow-Credentials', 'true');
   }
   res.header('Access-Control-Allow-Headers', 'Content-Type');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
@@ -195,7 +195,7 @@ function startRoomTranscoder(room, roomId) {
   const args = [
     '-hide_banner', '-loglevel', 'warning',
     '-fflags', '+nobuffer+flush_packets',
-    '-probesize', '32',
+    '-probesize', '4096',
     '-analyzeduration', '0',
     '-f', 'webm',
     '-i', 'pipe:0',
@@ -211,8 +211,15 @@ function startRoomTranscoder(room, roomId) {
   const proc = spawn(ffmpegPath, args, { stdio: ['pipe', 'pipe', 'pipe'] });
   room.ffmpegProcess = proc;
 
+  proc.stdin.on('error', (err) => {
+    if (err.code !== 'EPIPE' && err.code !== 'ERR_STREAM_DESTROYED') {
+      logger.warn({ roomId: roomId.slice(0, 8), error: err.message }, 'FFmpeg stdin error');
+    }
+  });
+
   proc.stdout.on('data', (mp3Data) => {
     for (const writer of room.relayListeners) {
+      if (writer.dead) { room.relayListeners.delete(writer); continue; }
       try { writer.write(mp3Data); } catch { room.relayListeners.delete(writer); }
     }
   });
@@ -224,14 +231,14 @@ function startRoomTranscoder(room, roomId) {
 
   proc.on('error', (err) => {
     logger.error({ roomId: roomId.slice(0, 8), error: err.message }, 'FFmpeg process error');
-    room.ffmpegProcess = null;
+    if (room.ffmpegProcess === proc) room.ffmpegProcess = null;
   });
 
   proc.on('close', (code) => {
     if (code && code !== 0 && code !== 255) {
       logger.warn({ roomId: roomId.slice(0, 8), code }, 'FFmpeg exited with error');
     }
-    room.ffmpegProcess = null;
+    if (room.ffmpegProcess === proc) room.ffmpegProcess = null;
   });
 
   logger.info({ roomId: roomId.slice(0, 8) }, 'FFmpeg transcoder started (WebM→MP3)');
@@ -239,9 +246,12 @@ function startRoomTranscoder(room, roomId) {
 
 function stopRoomTranscoder(room) {
   if (!room.ffmpegProcess) return;
-  try { room.ffmpegProcess.stdin.end(); } catch { /* */ }
-  room.ffmpegProcess.kill('SIGTERM');
+  const proc = room.ffmpegProcess;
   room.ffmpegProcess = null;
+  try { proc.stdin.end(); } catch { /* already closed */ }
+  setTimeout(() => {
+    try { if (!proc.killed) proc.kill('SIGTERM'); } catch { /* already exited */ }
+  }, 500);
 }
 
 // ---------------------------------------------------------------------------
@@ -280,7 +290,12 @@ function startSilenceKeepalive(room, roomId) {
 
   room.silenceInterval = setInterval(() => {
     for (const writer of room.relayListeners) {
+      if (writer.dead) { room.relayListeners.delete(writer); continue; }
       try { writer.write(silentMp3Frame); } catch { room.relayListeners.delete(writer); }
+    }
+    if (room.relayListeners.size === 0) {
+      logger.info({ roomId: roomId.slice(0, 8) }, 'No relay listeners remaining — stopping silence keepalive');
+      stopSilenceKeepalive(room);
     }
   }, SILENCE_FRAME_INTERVAL_MS);
 
@@ -320,6 +335,7 @@ class IcyWriter {
     this.icyEnabled = icyEnabled;
     this.byteCount = 0;
     this.metaTitle = '';
+    this.dead = false;
   }
 
   setTitle(title) {
@@ -327,23 +343,28 @@ class IcyWriter {
   }
 
   write(data) {
-    if (!this.icyEnabled) {
-      return this.res.write(data);
-    }
-
-    let offset = 0;
-    while (offset < data.length) {
-      const bytesUntilMeta = ICY_METAINT - this.byteCount;
-      const end = Math.min(offset + bytesUntilMeta, data.length);
-      const chunk = data.slice(offset, end);
-      this.res.write(chunk);
-      this.byteCount += chunk.length;
-      offset = end;
-
-      if (this.byteCount >= ICY_METAINT) {
-        this._insertMetadata();
-        this.byteCount = 0;
+    if (this.dead) return;
+    try {
+      if (!this.icyEnabled) {
+        return this.res.write(data);
       }
+
+      let offset = 0;
+      while (offset < data.length) {
+        const bytesUntilMeta = ICY_METAINT - this.byteCount;
+        const end = Math.min(offset + bytesUntilMeta, data.length);
+        const chunk = data.slice(offset, end);
+        this.res.write(chunk);
+        this.byteCount += chunk.length;
+        offset = end;
+
+        if (this.byteCount >= ICY_METAINT) {
+          this._insertMetadata();
+          this.byteCount = 0;
+        }
+      }
+    } catch {
+      this.dead = true;
     }
   }
 
@@ -362,7 +383,9 @@ class IcyWriter {
   }
 
   end() {
-    this.res.end();
+    if (this.dead) return;
+    this.dead = true;
+    try { this.res.end(); } catch { /* already closed */ }
   }
 }
 
@@ -391,6 +414,7 @@ app.get('/stream/:roomId', (req, res) => {
     'Content-Type': usesMp3 ? 'audio/mpeg' : 'audio/webm',
     'Connection': 'keep-alive',
     'Cache-Control': 'no-cache, no-store',
+    'X-Accel-Buffering': 'no',
     'Access-Control-Allow-Origin': '*',
   };
 
@@ -432,10 +456,15 @@ app.get('/stream/:roomId', (req, res) => {
 
   logger.info({ roomId: roomId.slice(0, 8), format: usesMp3 ? 'mp3' : 'webm', icyMeta: wantsIcyMeta }, 'Relay listener connected');
 
-  req.on('close', () => {
+  const cleanupListener = () => {
+    if (writer.dead) return;
+    writer.dead = true;
     rooms.removeRelayListener(roomId, writer);
     logger.info({ roomId: roomId.slice(0, 8) }, 'Relay listener disconnected');
-  });
+  };
+  req.on('close', cleanupListener);
+  req.on('error', cleanupListener);
+  res.on('error', cleanupListener);
 });
 
 // Fix #1: Admin routes — require authentication
@@ -631,6 +660,18 @@ const pingInterval = setInterval(() => {
 }, WS_PING_INTERVAL);
 wss.on('close', () => clearInterval(pingInterval));
 
+const integrationPingInterval = setInterval(() => {
+  for (const ws of integrationWss.clients) {
+    if (ws.isAlive === false) {
+      ws.terminate();
+      continue;
+    }
+    ws.isAlive = false;
+    ws.ping();
+  }
+}, WS_PING_INTERVAL);
+integrationWss.on('close', () => clearInterval(integrationPingInterval));
+
 // WebSocket rate limiting
 const wsJoinCounts = new Map();
 const WS_JOIN_LIMIT = 20;
@@ -723,36 +764,30 @@ wss.on('connection', (ws, req) => {
 
   logger.info({ ip, authed: isAuthed }, 'WebSocket connected');
 
-  let binaryCount = 0;
+    let binaryCount = 0;
   ws.on('message', (raw, isBinary) => {
-    // Binary messages from broadcaster = relay WebM audio data
-    // With FFmpeg: WebM→MP3 transcoding, MP3 output goes to /stream/:roomId listeners
-    // Without FFmpeg: raw WebM forwarded directly to listeners
     if (isBinary && clientRoom && clientRole === 'broadcaster') {
       binaryCount++;
       const data = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
       const room = rooms.rooms.get(clientRoom);
 
       if (room) {
-        // Store first chunk as WebM header
-        if (binaryCount === 1) {
-          room.relayHeader = data;
-        }
-
         if (ffmpegPath) {
-          // FFmpeg transcoding path: WebM→MP3
+          // FFmpeg transcoding: always restart transcoder on first chunk of a
+          // new connection so it receives a fresh WebM header for probing.
           if (!room.ffmpegProcess) {
             startRoomTranscoder(room, clientRoom);
           }
           if (room.ffmpegProcess?.stdin.writable) {
-            room.ffmpegProcess.stdin.write(data);
+            try { room.ffmpegProcess.stdin.write(data); } catch { /* EPIPE handled by stdin error handler */ }
           }
         } else {
-          // Fallback: forward raw WebM to listeners (works in VLC/browsers)
+          // WebM fallback: store first chunk as init segment for late-joining listeners
           if (binaryCount === 1) {
-            // Send WebM header to any existing listeners
+            room.relayHeader = data;
           }
           for (const writer of room.relayListeners) {
+            if (writer.dead) { room.relayListeners.delete(writer); continue; }
             try {
               if (writer.res) writer.res.write(data);
               else writer.write(data);
@@ -1423,3 +1458,36 @@ integrationWss.on('connection', (ws, req) => {
 server.listen(PORT, () => {
   logger.info({ port: PORT, origin: ALLOWED_ORIGIN, tls: REQUIRE_TLS }, 'Signaling server started');
 });
+
+function gracefulShutdown(signal) {
+  logger.info({ signal }, 'Shutting down gracefully…');
+
+  for (const [roomId, room] of rooms.rooms) {
+    stopSilenceKeepalive(room);
+    stopRoomTranscoder(room);
+    for (const writer of room.relayListeners) {
+      try { writer.end(); } catch { /* ignore */ }
+    }
+    room.relayListeners.clear();
+  }
+
+  for (const ws of wss.clients) {
+    ws.close(1001, 'Server shutting down');
+  }
+  for (const ws of integrationWss.clients) {
+    ws.close(1001, 'Server shutting down');
+  }
+
+  server.close(() => {
+    logger.info('HTTP server closed');
+    process.exit(0);
+  });
+
+  setTimeout(() => {
+    logger.warn('Forced shutdown after timeout');
+    process.exit(1);
+  }, 5000);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));

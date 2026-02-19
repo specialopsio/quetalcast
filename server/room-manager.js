@@ -80,6 +80,15 @@ export class RoomManager {
       if (room.endedAt && room.endedAt < cutoff) {
         if (room.silenceInterval) clearInterval(room.silenceInterval);
         if (room.silenceTimeout) clearTimeout(room.silenceTimeout);
+        if (room.ffmpegProcess) {
+          try { room.ffmpegProcess.stdin.end(); } catch { /* */ }
+          try { room.ffmpegProcess.kill('SIGTERM'); } catch { /* */ }
+          room.ffmpegProcess = null;
+        }
+        for (const writer of room.relayListeners) {
+          try { writer.end(); } catch { /* */ }
+        }
+        room.relayListeners.clear();
         this.rooms.delete(id);
         this.logger.info({ roomId: id.slice(0, 8) }, 'Room expired (24h TTL)');
       }
@@ -110,7 +119,13 @@ export class RoomManager {
         if (isLive) {
           return { ok: false, error: 'That room is currently live — try again when it ends', code: 'ROOM_ID_TAKEN' };
         }
-        // Room exists but isn't live — reclaim it for reuse
+        // Room exists but isn't live — clean up any lingering resources and reclaim
+        if (existing.silenceInterval) clearInterval(existing.silenceInterval);
+        if (existing.silenceTimeout) clearTimeout(existing.silenceTimeout);
+        for (const writer of existing.relayListeners) {
+          try { writer.end(); } catch { /* ignore */ }
+        }
+        existing.relayListeners.clear();
         this.rooms.delete(customId);
       }
     }
