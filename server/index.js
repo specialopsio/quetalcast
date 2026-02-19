@@ -293,10 +293,6 @@ function startSilenceKeepalive(room, roomId) {
       if (writer.dead) { room.relayListeners.delete(writer); continue; }
       try { writer.write(silentMp3Frame); } catch { room.relayListeners.delete(writer); }
     }
-    if (room.relayListeners.size === 0) {
-      logger.info({ roomId: roomId.slice(0, 8) }, 'No relay listeners remaining — stopping silence keepalive');
-      stopSilenceKeepalive(room);
-    }
   }, SILENCE_FRAME_INTERVAL_MS);
 
   room.silenceTimeout = setTimeout(() => {
