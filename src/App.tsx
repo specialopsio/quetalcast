@@ -13,6 +13,7 @@ import DocsOverview from "./pages/docs/Overview";
 import DocsBroadcaster from "./pages/docs/Broadcaster";
 import DocsReceiver from "./pages/docs/Receiver";
 import DocsIntegrations from "./pages/docs/Integrations";
+import Changelog from "./pages/Changelog";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ const App = () => (
           <Route path="/receive" element={<Receiver />} />
           <Route path="/receive/:roomId" element={<Receiver />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/changelog" element={<Changelog />} />
           <Route path="/docs" element={<DocsLayout />}>
             <Route index element={<DocsOverview />} />
             <Route path="broadcaster" element={<DocsBroadcaster />} />

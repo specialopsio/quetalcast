@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
-import { BookOpen } from 'lucide-react';
-import { ChangelogSheet } from '@/components/ChangelogSheet';
+import { BookOpen, History } from 'lucide-react';
 
 const APP_VERSION = __APP_VERSION__;
 
@@ -28,7 +27,13 @@ export function Footer() {
           Docs
         </Link>
         <span className="text-muted-foreground/30">|</span>
-        <ChangelogSheet />
+        <Link
+          to="/changelog"
+          className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground hover:underline underline-offset-2 transition-colors"
+        >
+          <History className="h-3 w-3" />
+          Changelog
+        </Link>
         <span className="text-muted-foreground/30">|</span>
         <span className="font-mono text-muted-foreground/40">v{APP_VERSION}</span>
       </div>

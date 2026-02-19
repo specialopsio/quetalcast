@@ -5,7 +5,7 @@
 
 export interface ChangelogEntry {
   date: string;
-  version?: string;
+  version: string;
   items: string[];
 }
 
@@ -23,6 +23,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: '2026-02-16',
+    version: '0.9.0',
     items: [
       'Built-in HTTP audio relay — every broadcast gets a VLC/RadioDJ stream URL',
       'Per-channel headphone monitor buttons on mixer strips',
@@ -33,6 +34,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: '2026-02-12',
+    version: '0.8.0',
     items: [
       'Mixer strip redesign: channel strips with level, mute, solo, pan, and LED meters',
       'Broadcaster layout persistence (volume, effects, sound pads, mixer state)',
@@ -46,6 +48,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: '2026-02-11',
+    version: '0.7.0',
     items: [
       'Track list with Deezer search, album artwork, and metadata',
       'Broadcaster integrations for streaming to external platforms',
@@ -61,6 +64,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: '2026-02-10',
+    version: '0.6.0',
     items: [
       'Mixer controls: mic volume, mute, listen, cue mode',
       'Soundboard with audio mixing into broadcast',
