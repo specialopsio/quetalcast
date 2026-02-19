@@ -94,6 +94,12 @@ export default function DocsIntegrations() {
           players stay connected. When the broadcaster returns and resumes, live audio replaces
           the silence seamlessly.
         </p>
+        <p className="mt-2">
+          The relay is hardened for long-running streams: individual listener failures are isolated
+          so one disconnected player can't disrupt others, FFmpeg transcoding restarts cleanly on
+          reconnect, and the server performs graceful shutdown during deploys to avoid orphaned
+          processes.
+        </p>
       </section>
 
       <section>

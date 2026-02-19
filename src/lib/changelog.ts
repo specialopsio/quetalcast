@@ -20,6 +20,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Pre-broadcast settings modal with stream title, description, and custom URL picker',
       'Room slug history stored server-side with file persistence; dropdown shows live/available status',
       'Custom room IDs can be freely reused across broadcasts (blocked only while live)',
+      'Hardened server for long-running stream durability: error-resilient relay writers, FFmpeg lifecycle safety, graceful shutdown, proxy buffering bypass, and defensive resource cleanup',
       'Changelog moved to dedicated /changelog page with version timeline',
       'Headphones button matches mute/solo button size on mixer strips',
       'Version number displayed in footer',
