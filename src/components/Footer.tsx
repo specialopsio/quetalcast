@@ -1,10 +1,11 @@
 import { Link } from 'react-router-dom';
 import { BookOpen } from 'lucide-react';
+import { ChangelogSheet } from '@/components/ChangelogSheet';
 
 export function Footer() {
   return (
     <footer className="py-4 px-4 text-center text-xs text-muted-foreground/60 flex flex-col items-center gap-3">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap justify-center">
         <span>
           Built by{' '}
           <a
@@ -24,6 +25,8 @@ export function Footer() {
           <BookOpen className="h-3 w-3" />
           Docs
         </Link>
+        <span className="text-muted-foreground/30">|</span>
+        <ChangelogSheet />
       </div>
       <a
         href="https://github.com/specialopsio/quetalcast"
