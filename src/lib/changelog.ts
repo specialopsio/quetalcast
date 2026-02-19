@@ -13,7 +13,7 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-02-19',
-    version: '0.10.0',
+    version: '0.5.0',
     items: [
       'Stream relay now serves MP3 via server-side FFmpeg transcoding (WebM→MP3) with Icecast-compatible ICY headers for universal player support',
       'Pre-broadcast settings modal: set stream title, description, and custom URL before going on air — title and description persist in localStorage',
@@ -41,7 +41,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: '2026-02-16',
-    version: '0.9.0',
+    version: '0.4.0',
     items: [
       'Built-in HTTP audio relay: every broadcast gets a /stream/:roomId URL for VLC, RadioDJ, and other media players',
       'Per-channel headphone monitor buttons on mixer strips — hear or silence any channel locally without affecting listeners',
@@ -59,7 +59,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: '2026-02-13',
-    version: '0.8.3',
+    version: '0.3.3',
     items: [],
     fixes: [
       'internet-radio.com (Centova Cast) streaming compatibility improvements',
@@ -67,7 +67,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: '2026-02-12',
-    version: '0.8.2',
+    version: '0.3.2',
     items: [
       'Mixer strip redesign: channel strips with level sliders, mute, solo, pan knobs, and LED signal meters',
       'Physical fader-style slider thumb on mixer strips',
@@ -84,7 +84,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: '2026-02-12',
-    version: '0.8.1',
+    version: '0.3.1',
     items: [
       'internet-radio.com (Centova Cast) setup notes in docs and README',
     ],
@@ -97,7 +97,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: '2026-02-12',
-    version: '0.8.0',
+    version: '0.3.0',
     items: [
       'System audio capture: route desktop or application audio into the broadcast via screen share',
       'Auto-identify songs via AcoustID/Chromaprint audio fingerprinting',
@@ -115,7 +115,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: '2026-02-11',
-    version: '0.7.4',
+    version: '0.2.4',
     items: [
       'Track list with Deezer-powered search, album artwork, and rich metadata (album, year, ISRC, BPM, label, contributors)',
       'Track detail modal with full metadata on click',
@@ -130,7 +130,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: '2026-02-11',
-    version: '0.7.3',
+    version: '0.2.3',
     items: [
       'Broadcaster integrations: stream to Icecast, Shoutcast, or Radio.co via server-side relay',
       'Configurable stream quality: bitrate (128/192/256/320 kbps) and channels (stereo/mono)',
@@ -145,7 +145,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: '2026-02-11',
-    version: '0.7.2',
+    version: '0.2.2',
     items: [
       'TURN server support: Metered.ca dynamic credentials or static TURN config',
       'WebSocket heartbeat (25s ping) to prevent proxy timeout',
@@ -163,7 +163,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: '2026-02-11',
-    version: '0.7.1',
+    version: '0.2.1',
     items: [
       'Audio quality presets: High (510 kbps stereo Opus CBR), Auto (adaptive), Low (32 kbps mono)',
       'Security hardening: authenticated WebSocket broadcaster actions, locked broadcaster slot',
@@ -177,7 +177,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: '2026-02-11',
-    version: '0.7.0',
+    version: '0.2.0',
     items: [
       'Stereo VU meter with calibrated dBFS scale, separate L/R channels, and peak hold',
       'Output limiter with selectable ceiling (0, -3, -6, -12 dB) and brickwall clipper',
@@ -187,7 +187,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: '2026-02-11',
-    version: '0.6.1',
+    version: '0.1.1',
     items: [
       'Footer with SpecialOPS credit and Help modal',
       'Receiver retry link on errored connection page',
@@ -203,7 +203,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: '2026-02-10',
-    version: '0.6.0',
+    version: '0.1.0',
     items: [
       'Initial release: WebRTC audio broadcasting from one broadcaster to listeners',
       'Soundboard: 5x2 pad grid with MP3 loading, loop toggle, per-pad volume (up to 300%), and broadcast mixing',
