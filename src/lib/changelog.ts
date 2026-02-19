@@ -15,8 +15,12 @@ export const CHANGELOG: ChangelogEntry[] = [
     version: '0.10.0',
     items: [
       'Stream URL now serves MP3 via server-side FFmpeg transcoding (WebM→MP3) with Icecast-compatible ICY headers',
+      'Silence keepalive: relay stream stays alive for up to 10 minutes when broadcaster disconnects so VLC/RadioDJ don\'t drop',
+      'Broadcast recovery: if the browser closes unexpectedly, reopening prompts to resume the previous stream',
+      'Pre-broadcast settings modal with stream title, description, and custom URL picker',
       'Room slug history stored server-side with file persistence; dropdown shows live/available status',
       'Custom room IDs can be freely reused across broadcasts (blocked only while live)',
+      'Changelog moved to dedicated /changelog page with version timeline',
       'Headphones button matches mute/solo button size on mixer strips',
       'Version number displayed in footer',
     ],

@@ -97,16 +97,56 @@ export default function DocsBroadcaster() {
       <section>
         <h2 className="text-lg font-semibold text-foreground mb-3">Going on air</h2>
         <p>
-          Press <strong>Go On Air</strong> to start. A timer shows how long you've been live. The
-          room ID appears in the status bar and in the URL (<code>?room=...</code>). Use{" "}
-          <strong>Copy Receiver Link</strong> in the top right to share. Each new broadcast creates
-          a new room; the room ID is hidden when you go off air.
+          Press <strong>Go On Air</strong> to open the broadcast settings modal. Here you can set:
+        </p>
+        <ul className="list-disc list-inside mt-2 space-y-1 pl-1">
+          <li>
+            <strong>Stream Title</strong> — Shown as the station name in VLC, RadioDJ, and other
+            media players (sent as the <code>icy-name</code> header).
+          </li>
+          <li>
+            <strong>Description</strong> — Included in stream headers for directories and players.
+          </li>
+          <li>
+            <strong>Receive URL</strong> — Custom slug or auto-generated. Previously used slugs
+            appear as suggestions with live/available status.
+          </li>
+        </ul>
+        <p className="mt-2">
+          Click <strong>Save &amp; Start</strong> to apply settings and go live, or{" "}
+          <strong>Skip</strong> to start immediately with defaults. Title and description are
+          remembered in localStorage for next time.
+        </p>
+        <p className="mt-2">
+          Once on air, a timer shows how long you've been live. The room ID appears in the status
+          bar and in the URL (<code>?room=...</code>). Use <strong>Copy Receiver Link</strong> in
+          the top right to share.
         </p>
         <p className="mt-2">
           If you have a previous broadcast (track list or logs including "Off air"), a dialog
           appears first: download logs and track list as a ZIP (including MP3 if recording was
           active), copy the room link (24h access), continue the previous broadcast (rejoin same
           room, keep logs and track list), or start a new broadcast.
+        </p>
+      </section>
+
+      <section>
+        <h2 className="text-lg font-semibold text-foreground mb-3">Broadcast recovery</h2>
+        <p>
+          If you accidentally close your browser, lose your internet connection, or your computer
+          restarts, your broadcast isn't immediately lost. The server keeps the stream alive by
+          feeding silent audio to any connected media players (VLC, RadioDJ, etc.) for up to{" "}
+          <strong>10 minutes</strong>.
+        </p>
+        <p className="mt-2">
+          When you reopen the broadcaster page, you'll see a prompt asking if you want to resume
+          your previous broadcast. Click <strong>Resume Broadcast</strong> to reconnect — your
+          mic goes live again and the silence is replaced with your audio. Media player listeners
+          stay connected the whole time.
+        </p>
+        <p className="mt-2">
+          If you choose <strong>Start Fresh</strong> instead, the previous broadcast is ended and
+          you can begin a new one.
         </p>
       </section>
 

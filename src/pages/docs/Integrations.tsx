@@ -88,6 +88,12 @@ export default function DocsIntegrations() {
           the relay falls back to serving raw WebM/Opus (works in VLC and browsers but not
           traditional radio software).
         </p>
+        <p className="mt-2">
+          If the broadcaster disconnects unexpectedly (browser crash, network issue), the server
+          automatically feeds silent MP3 frames for up to <strong>10 minutes</strong> so media
+          players stay connected. When the broadcaster returns and resumes, live audio replaces
+          the silence seamlessly.
+        </p>
       </section>
 
       <section>
