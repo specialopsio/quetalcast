@@ -57,6 +57,8 @@ const WS_URL = import.meta.env.VITE_WS_URL || (
 );
 
 const BROADCASTER_LAYOUT_STORAGE_KEY = 'quetalcast:broadcaster-layout:v1';
+const ACTIVE_BROADCAST_KEY = 'quetalcast:active-broadcast';
+const API_BASE = import.meta.env.VITE_API_URL || '';
 type PersistedBroadcasterLayout = {
   qualityMode: AudioQuality;
   limiterDb: 0 | -3 | -6 | -12;
@@ -242,6 +244,10 @@ const Broadcaster = () => {
   const [preBroadcastOpen, setPreBroadcastOpen] = useState(false);
   const pendingBroadcastSettingsRef = useRef<BroadcastSettings | null>(null);
 
+  // Broadcast recovery state
+  const [recoveryRoomId, setRecoveryRoomId] = useState<string | null>(null);
+  const [recoveryDialogOpen, setRecoveryDialogOpen] = useState(false);
+
   // Integration state
   const [selectedIntegration, setSelectedIntegration] = useState<IntegrationConfig | null>(null);
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
@@ -301,6 +307,23 @@ const Broadcaster = () => {
       if (!valid) navigate('/login');
     });
   }, [navigate]);
+
+  // Check for recoverable broadcast on mount
+  useEffect(() => {
+    const saved = localStorage.getItem(ACTIVE_BROADCAST_KEY);
+    if (!saved) return;
+    fetch(`${API_BASE}/api/room-status/${encodeURIComponent(saved)}`, { credentials: 'include' })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.exists && data.recoverable) {
+          setRecoveryRoomId(saved);
+          setRecoveryDialogOpen(true);
+        } else {
+          localStorage.removeItem(ACTIVE_BROADCAST_KEY);
+        }
+      })
+      .catch(() => localStorage.removeItem(ACTIVE_BROADCAST_KEY));
+  }, []);
 
   // Enumerate devices
   useEffect(() => {
@@ -519,7 +542,7 @@ const Broadcaster = () => {
     }
   }, [webrtc.status, addLog]);
 
-  // Update URL with room ID when broadcast starts; clear when new broadcast creates new room
+  // Update URL with room ID when broadcast starts; persist to localStorage for recovery
   useEffect(() => {
     if (webrtc.roomId) {
       setSearchParams((prev) => {
@@ -527,6 +550,7 @@ const Broadcaster = () => {
         next.set('room', webrtc.roomId!);
         return next;
       }, { replace: true });
+      if (isOnAir) localStorage.setItem(ACTIVE_BROADCAST_KEY, webrtc.roomId);
     } else {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
@@ -535,7 +559,7 @@ const Broadcaster = () => {
         return next;
       }, { replace: true });
     }
-  }, [webrtc.roomId, setSearchParams]);
+  }, [webrtc.roomId, isOnAir, setSearchParams]);
 
   const broadcastStartedRef = useRef(false);
   const isOnAirRef = useRef(isOnAir);
@@ -669,6 +693,50 @@ const Broadcaster = () => {
     }
   }, [mixer, micEffects, webrtc, selectedDevice, selectedIntegration, addLog, micVolume, micMuted]);
 
+  const handleRecoverBroadcast = useCallback(async () => {
+    if (!recoveryRoomId) return;
+    setRecoveryDialogOpen(false);
+    try {
+      const constraints: MediaStreamConstraints = {
+        audio: {
+          deviceId: selectedDevice ? { exact: selectedDevice } : undefined,
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          sampleRate: { ideal: 48000 },
+        },
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      setLocalStream(stream);
+      mixer.connectMic(stream);
+      const nodes = mixer.getNodes();
+      if (nodes) {
+        await micEffects.insertIntoChain(nodes.ctx, nodes.micGain, nodes.micVolumeGain);
+      }
+      mixer.setMicVolume(micVolume / 100);
+      if (micMuted) mixer.setMicMuted(true);
+      addLog('Mic connected');
+      addLog('Recovering previous broadcast…');
+      webrtc.joinRoomAsBroadcaster(recoveryRoomId);
+      broadcastStartedRef.current = false;
+      if (selectedIntegration) {
+        const integrationInfo = getIntegration(selectedIntegration.integrationId);
+        addLog(`Connecting to ${integrationInfo?.name || 'integration'}…`);
+      }
+      setIsOnAir(true);
+    } catch (e) {
+      addLog('Couldn\'t recover broadcast — check mic permissions', 'error');
+      localStorage.removeItem(ACTIVE_BROADCAST_KEY);
+    }
+    setRecoveryRoomId(null);
+  }, [recoveryRoomId, mixer, micEffects, webrtc, selectedDevice, selectedIntegration, addLog, micVolume, micMuted]);
+
+  const handleDismissRecovery = useCallback(() => {
+    setRecoveryDialogOpen(false);
+    setRecoveryRoomId(null);
+    localStorage.removeItem(ACTIVE_BROADCAST_KEY);
+  }, []);
+
   // Start broadcast once room is ready and we have a mixed stream (native mode)
   useEffect(() => {
     if (isOnAir && !selectedIntegration && mixer.mixedStream && webrtc.roomId && !broadcastStartedRef.current) {
@@ -771,6 +839,7 @@ const Broadcaster = () => {
     relayStream.stopRelay();
 
     setIsOnAir(false);
+    localStorage.removeItem(ACTIVE_BROADCAST_KEY);
     addLog('Off air');
   };
 
@@ -1876,6 +1945,32 @@ const Broadcaster = () => {
         onStart={handlePreBroadcastStart}
         onSkip={handlePreBroadcastSkip}
       />
+
+      {/* Broadcast recovery dialog */}
+      <Dialog open={recoveryDialogOpen} onOpenChange={(open) => { if (!open) handleDismissRecovery(); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Resume Broadcast?</DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground leading-relaxed">
+              It looks like your previous broadcast (<span className="font-mono text-foreground">{recoveryRoomId?.slice(0, 12)}</span>) is still active. Stream listeners are hearing silence while waiting for you to return.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2 mt-4">
+            <button
+              onClick={handleDismissRecovery}
+              className="flex-1 px-4 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors"
+            >
+              Start Fresh
+            </button>
+            <button
+              onClick={handleRecoverBroadcast}
+              className="flex-1 px-4 py-2.5 rounded-md text-sm font-semibold bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
+            >
+              Resume Broadcast
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={savePresetOpen} onOpenChange={setSavePresetOpen}>
         <DialogContent className="sm:max-w-xs">

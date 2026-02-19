@@ -78,6 +78,8 @@ export class RoomManager {
     const cutoff = new Date(Date.now() - ROOM_TTL_MS).toISOString();
     for (const [id, room] of this.rooms) {
       if (room.endedAt && room.endedAt < cutoff) {
+        if (room.silenceInterval) clearInterval(room.silenceInterval);
+        if (room.silenceTimeout) clearTimeout(room.silenceTimeout);
         this.rooms.delete(id);
         this.logger.info({ roomId: id.slice(0, 8) }, 'Room expired (24h TTL)');
       }
@@ -128,6 +130,8 @@ export class RoomManager {
       ffmpegProcess: null,
       streamTitle: null,
       streamDescription: null,
+      silenceInterval: null,
+      silenceTimeout: null,
       createdAt: new Date().toISOString(),
       endedAt: null,
     });

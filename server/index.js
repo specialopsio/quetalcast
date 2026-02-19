@@ -244,6 +244,68 @@ function stopRoomTranscoder(room) {
   room.ffmpegProcess = null;
 }
 
+// ---------------------------------------------------------------------------
+// Silence keepalive — when the broadcaster disconnects unexpectedly, feed
+// silent MP3 frames to relay listeners so VLC/RadioDJ don't drop the stream.
+// After SILENCE_TIMEOUT_MS without a broadcaster rejoining, tear down for real.
+// ---------------------------------------------------------------------------
+const SILENCE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+const SILENCE_FRAME_INTERVAL_MS = 250;
+
+let silentMp3Frame = null;
+
+function generateSilentMp3Frame() {
+  if (silentMp3Frame) return Promise.resolve();
+  if (!ffmpegPath) return Promise.resolve();
+  return new Promise((resolve) => {
+    const proc = spawn(ffmpegPath, [
+      '-hide_banner', '-loglevel', 'error',
+      '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo',
+      '-t', '0.5',
+      '-f', 'mp3', '-codec:a', 'libmp3lame', '-b:a', '128k',
+      'pipe:1',
+    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const chunks = [];
+    proc.stdout.on('data', (d) => chunks.push(d));
+    proc.on('close', () => {
+      if (chunks.length) silentMp3Frame = Buffer.concat(chunks);
+      resolve();
+    });
+    proc.on('error', () => resolve());
+  });
+}
+
+function startSilenceKeepalive(room, roomId) {
+  if (room.silenceInterval || !silentMp3Frame) return;
+
+  room.silenceInterval = setInterval(() => {
+    for (const writer of room.relayListeners) {
+      try { writer.write(silentMp3Frame); } catch { room.relayListeners.delete(writer); }
+    }
+  }, SILENCE_FRAME_INTERVAL_MS);
+
+  room.silenceTimeout = setTimeout(() => {
+    logger.info({ roomId: roomId.slice(0, 8) }, 'Silence keepalive expired — tearing down relay');
+    stopSilenceKeepalive(room);
+    for (const writer of room.relayListeners) {
+      try { writer.end(); } catch { /* ignore */ }
+    }
+    room.relayListeners.clear();
+  }, SILENCE_TIMEOUT_MS);
+
+  logger.info({ roomId: roomId.slice(0, 8) }, 'Silence keepalive started (10m timeout)');
+}
+
+function stopSilenceKeepalive(room) {
+  if (room.silenceInterval) { clearInterval(room.silenceInterval); room.silenceInterval = null; }
+  if (room.silenceTimeout) { clearTimeout(room.silenceTimeout); room.silenceTimeout = null; }
+}
+
+// Pre-generate the silent MP3 frame at startup
+generateSilentMp3Frame().then(() => {
+  if (silentMp3Frame) logger.info({ bytes: silentMp3Frame.length }, 'Silent MP3 frame generated for keepalive');
+});
+
 // ICY metadata constants for Icecast-compatible streaming
 const ICY_METAINT = 16384;
 
@@ -391,6 +453,15 @@ app.delete('/api/room-slugs/:slug', requireAuth, (req, res) => {
   if (!slug) return res.status(400).json({ ok: false });
   rooms.removeSlug(slug);
   res.json({ ok: true });
+});
+
+// Check if a room is recoverable (exists and can accept a broadcaster rejoin)
+app.get('/api/room-status/:roomId', requireAuth, (req, res) => {
+  const { roomId } = req.params;
+  const room = rooms.rooms.get(roomId);
+  if (!room) return res.json({ exists: false });
+  const hasBroadcaster = room.broadcaster && room.broadcaster.readyState === 1;
+  res.json({ exists: true, recoverable: !hasBroadcaster, hasListeners: room.relayListeners.size > 0 });
 });
 
 // Integration test — verify streaming credentials without starting a stream
@@ -817,9 +888,13 @@ wss.on('connection', (ws, req) => {
             ws.send(JSON.stringify({ type: 'stream-url', url: integrationInfoForReceiver.localStreamUrl }));
           }
         } else {
-          // Broadcaster joining an existing room
+          // Broadcaster joining an existing room (possibly recovering from disconnect)
+          const joinRoom = rooms.rooms.get(roomId);
+          if (joinRoom) {
+            stopSilenceKeepalive(joinRoom);
+            joinRoom.endedAt = null;
+          }
           ws.send(JSON.stringify({ type: 'joined', roomId, role }));
-          // Notify all existing receivers
           const receiverIds = rooms.getReceiverIds(roomId);
           for (const rid of receiverIds) {
             const rws = rooms.getReceiver(roomId, rid);
@@ -828,6 +903,7 @@ wss.on('connection', (ws, req) => {
               ws.send(JSON.stringify({ type: 'peer-joined', role: 'receiver', receiverId: rid }));
             }
           }
+          logger.info({ roomId: roomId.slice(0, 8) }, 'Broadcaster rejoined — silence keepalive cancelled');
         }
 
         logger.info({ roomId: roomId.slice(0, 8), role, ip }, 'Joined room');
@@ -900,11 +976,20 @@ wss.on('connection', (ws, req) => {
       case 'leave': {
         if (clientRoom && clientRole) {
           if (clientRole === 'broadcaster') {
-            // Clean up FFmpeg transcoder
             const leaveRoom = rooms.rooms.get(clientRoom);
             if (leaveRoom) {
               stopRoomTranscoder(leaveRoom);
+              stopSilenceKeepalive(leaveRoom);
               leaveRoom.relayHeader = null;
+              for (const writer of leaveRoom.relayListeners) {
+                try { writer.end(); } catch { /* ignore */ }
+              }
+              leaveRoom.relayListeners.clear();
+              const relayInfo = rooms.getIntegrationInfo(clientRoom);
+              if (relayInfo && relayInfo.localStreamUrl) {
+                if (relayInfo.type) { delete relayInfo.localStreamUrl; }
+                else { rooms.setIntegrationInfo(clientRoom, null); }
+              }
             }
             const receiverIds = rooms.getReceiverIds(clientRoom);
             for (const rid of receiverIds) {
@@ -1124,31 +1209,23 @@ wss.on('connection', (ws, req) => {
   ws.on('close', (code, reason) => {
     if (clientRoom && clientRole) {
       if (clientRole === 'broadcaster') {
-        // Kill FFmpeg transcoder
         const dcRoom = rooms.rooms.get(clientRoom);
         if (dcRoom) {
           stopRoomTranscoder(dcRoom);
           dcRoom.relayHeader = null;
-        }
-        // Clean up relay stream listeners (IcyWriter wrappers)
-        const relayListeners = rooms.getRelayListeners(clientRoom);
-        for (const writer of relayListeners) {
-          try { writer.end(); } catch { /* ignore */ }
-        }
-        // Clear local stream URL from integration info
-        const relayInfo = rooms.getIntegrationInfo(clientRoom);
-        if (relayInfo && relayInfo.localStreamUrl) {
-          if (relayInfo.type) {
-            delete relayInfo.localStreamUrl;
-          } else {
-            rooms.setIntegrationInfo(clientRoom, null);
+
+          if (dcRoom.relayListeners.size > 0 && silentMp3Frame) {
+            startSilenceKeepalive(dcRoom, clientRoom);
           }
         }
 
         const receiverIds = rooms.getReceiverIds(clientRoom);
         for (const rid of receiverIds) {
           const rws = rooms.getReceiver(clientRoom, rid);
-          if (rws) rws.send(JSON.stringify({ type: 'peer-left', role: 'broadcaster' }));
+          if (rws) {
+            rws.send(JSON.stringify({ type: 'peer-left', role: 'broadcaster' }));
+            rws.send(JSON.stringify({ type: 'broadcaster-disconnected' }));
+          }
         }
         const bcasterName = rooms.removeChatParticipant(clientRoom, 'broadcaster');
         if (bcasterName) {
