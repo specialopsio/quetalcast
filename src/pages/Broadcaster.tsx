@@ -1316,70 +1316,6 @@ const Broadcaster = () => {
                   </span>
                 </AccordionTrigger>
                 <AccordionContent className="px-4 pb-4">
-            <div className="flex justify-end">
-              {/* Mute, Listen, CUE, Limit */}
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={handleToggleMute}
-                  disabled={!isOnAir}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                    !isOnAir ? 'opacity-50 cursor-not-allowed' : ''
-                  } ${
-                    micMuted
-                      ? 'bg-destructive/20 text-destructive'
-                      : 'bg-secondary text-muted-foreground hover:text-foreground'
-                  }`}
-                  title={micMuted ? 'Unmute all channels' : 'Mute all channels'}
-                >
-                  <MicOff className="h-3.5 w-3.5" />
-                  {micMuted ? 'Muted' : 'Mute'}
-                </button>
-                <button
-                  onClick={handleToggleListen}
-                  disabled={!isOnAir}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                    !isOnAir ? 'opacity-50 cursor-not-allowed' : ''
-                  } ${
-                    listening
-                      ? 'bg-primary/20 text-primary'
-                      : 'bg-secondary text-muted-foreground hover:text-foreground'
-                  }`}
-                  title={listening ? 'Stop listening' : 'Listen to broadcast'}
-                >
-                  <Headphones className="h-3.5 w-3.5" />
-                  Listen
-                </button>
-                <button
-                  onClick={handleToggleCue}
-                  disabled={!isOnAir}
-                  className={`px-3 py-1.5 rounded-md text-xs font-mono font-bold uppercase tracking-wider transition-all ${
-                    !isOnAir ? 'opacity-50 cursor-not-allowed' : ''
-                  } ${
-                    cueMode
-                      ? 'bg-accent/20 text-accent'
-                      : 'bg-secondary text-muted-foreground hover:text-foreground'
-                  }`}
-                  title={cueMode ? 'Cue mode on — sounds are local only' : 'Enable cue mode'}
-                >
-                  CUE
-                </button>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Limit</span>
-                  <Select value={String(limiterDb)} onValueChange={handleLimiterChange}>
-                    <SelectTrigger className="w-[92px] h-7 bg-secondary border-border text-xs font-mono">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="0" className="text-xs font-mono">0 dB</SelectItem>
-                      <SelectItem value="-3" className="text-xs font-mono">-3 dB</SelectItem>
-                      <SelectItem value="-6" className="text-xs font-mono">-6 dB</SelectItem>
-                      <SelectItem value="-12" className="text-xs font-mono">-12 dB</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
             {/* Input Source */}
             <div className="mt-3 pt-3 border-t border-border">
               <div className="flex flex-col gap-0.5 mb-2">
@@ -1528,6 +1464,71 @@ const Broadcaster = () => {
                     <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mixer Board</span>
                   </AccordionTrigger>
                   <AccordionContent className="pt-2 space-y-3">
+                    {/* Global Controls */}
+                    <div className="flex items-center justify-between pb-2 border-b border-border/50">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">Global Controls</span>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={handleToggleMute}
+                          disabled={!isOnAir}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                            !isOnAir ? 'opacity-50 cursor-not-allowed' : ''
+                          } ${
+                            micMuted
+                              ? 'bg-destructive/20 text-destructive'
+                              : 'bg-secondary text-muted-foreground hover:text-foreground'
+                          }`}
+                          title={micMuted ? 'Unmute all channels' : 'Mute all channels'}
+                        >
+                          <MicOff className="h-3.5 w-3.5" />
+                          {micMuted ? 'Muted' : 'Mute'}
+                        </button>
+                        <button
+                          onClick={handleToggleListen}
+                          disabled={!isOnAir}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                            !isOnAir ? 'opacity-50 cursor-not-allowed' : ''
+                          } ${
+                            listening
+                              ? 'bg-primary/20 text-primary'
+                              : 'bg-secondary text-muted-foreground hover:text-foreground'
+                          }`}
+                          title={listening ? 'Stop listening' : 'Listen to broadcast'}
+                        >
+                          <Headphones className="h-3.5 w-3.5" />
+                          Listen
+                        </button>
+                        <button
+                          onClick={handleToggleCue}
+                          disabled={!isOnAir}
+                          className={`px-3 py-1.5 rounded-md text-xs font-mono font-bold uppercase tracking-wider transition-all ${
+                            !isOnAir ? 'opacity-50 cursor-not-allowed' : ''
+                          } ${
+                            cueMode
+                              ? 'bg-accent/20 text-accent'
+                              : 'bg-secondary text-muted-foreground hover:text-foreground'
+                          }`}
+                          title={cueMode ? 'Cue mode on — sounds are local only' : 'Enable cue mode'}
+                        >
+                          CUE
+                        </button>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Limit</span>
+                          <Select value={String(limiterDb)} onValueChange={handleLimiterChange}>
+                            <SelectTrigger className="w-[92px] h-7 bg-secondary border-border text-xs font-mono">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="0" className="text-xs font-mono">0 dB</SelectItem>
+                              <SelectItem value="-3" className="text-xs font-mono">-3 dB</SelectItem>
+                              <SelectItem value="-6" className="text-xs font-mono">-6 dB</SelectItem>
+                              <SelectItem value="-12" className="text-xs font-mono">-12 dB</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+
                     {/* Mic strip */}
                     <div className="rounded-md border border-border/70 p-2.5 space-y-2 bg-gradient-to-b from-background to-background/60">
                       <div className="flex items-center gap-3">

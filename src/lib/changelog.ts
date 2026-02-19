@@ -37,6 +37,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Stream listener abrupt disconnects handled via error events on req and res',
       'relayHeader only stored in WebM fallback mode to prevent overwrite on broadcaster rejoin',
       'Headphones button matches mute/solo button size on mixer strips',
+      'Global controls (Mute, Listen, CUE, Limit) moved from top of Audio Controls to Mixer Board header for better grouping',
     ],
   },
   {
