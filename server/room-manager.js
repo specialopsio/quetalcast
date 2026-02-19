@@ -124,6 +124,8 @@ export class RoomManager {
       chatParticipants: new Map(),
       integrationInfo: null,
       relayListeners: new Set(),
+      relayHeader: null,
+      ffmpegProcess: null,
       createdAt: new Date().toISOString(),
       endedAt: null,
     });

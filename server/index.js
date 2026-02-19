@@ -3,6 +3,7 @@ import http from 'http';
 import { WebSocketServer } from 'ws';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
+import { spawn, execFileSync } from 'child_process';
 import { createLogger } from './logger.js';
 import { RoomManager } from './room-manager.js';
 import { SessionManager } from './auth.js';
@@ -161,6 +162,88 @@ app.get('/api/ice-config', async (req, res) => {
   res.json({ iceServers });
 });
 
+// ---------------------------------------------------------------------------
+// FFmpeg transcoding — converts WebM/Opus relay data to MP3 for listeners
+// ---------------------------------------------------------------------------
+
+// Resolve once at startup (top-level await — file is ESM)
+let ffmpegPath;
+try {
+  // Try ffmpeg-static
+  const mod = await import('ffmpeg-static').catch(() => null);
+  ffmpegPath = mod?.default || null;
+} catch { /* */ }
+if (!ffmpegPath) {
+  try {
+    execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' });
+    ffmpegPath = 'ffmpeg';
+  } catch { /* */ }
+}
+if (ffmpegPath) {
+  logger.info({ ffmpegPath }, 'FFmpeg found — relay transcoding enabled');
+} else {
+  logger.warn('FFmpeg not found — relay stream will serve raw WebM (install ffmpeg for MP3 support)');
+}
+
+/**
+ * Spawns an FFmpeg process that reads WebM/Opus from stdin and writes MP3
+ * to stdout. MP3 output chunks are distributed to all relay listeners.
+ */
+function startRoomTranscoder(room, roomId) {
+  if (room.ffmpegProcess || !ffmpegPath) return;
+
+  const args = [
+    '-hide_banner', '-loglevel', 'warning',
+    '-fflags', '+nobuffer+flush_packets',
+    '-probesize', '32',
+    '-analyzeduration', '0',
+    '-f', 'webm',
+    '-i', 'pipe:0',
+    '-f', 'mp3',
+    '-codec:a', 'libmp3lame',
+    '-b:a', '128k',
+    '-ar', '44100',
+    '-ac', '2',
+    '-flush_packets', '1',
+    'pipe:1',
+  ];
+
+  const proc = spawn(ffmpegPath, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+  room.ffmpegProcess = proc;
+
+  proc.stdout.on('data', (mp3Data) => {
+    for (const writer of room.relayListeners) {
+      try { writer.write(mp3Data); } catch { room.relayListeners.delete(writer); }
+    }
+  });
+
+  proc.stderr.on('data', (data) => {
+    const msg = data.toString().trim();
+    if (msg) logger.debug({ roomId: roomId.slice(0, 8) }, `FFmpeg: ${msg}`);
+  });
+
+  proc.on('error', (err) => {
+    logger.error({ roomId: roomId.slice(0, 8), error: err.message }, 'FFmpeg process error');
+    room.ffmpegProcess = null;
+  });
+
+  proc.on('close', (code) => {
+    if (code && code !== 0 && code !== 255) {
+      logger.warn({ roomId: roomId.slice(0, 8), code }, 'FFmpeg exited with error');
+    }
+    room.ffmpegProcess = null;
+  });
+
+  logger.info({ roomId: roomId.slice(0, 8) }, 'FFmpeg transcoder started (WebM→MP3)');
+}
+
+function stopRoomTranscoder(room) {
+  if (!room.ffmpegProcess) return;
+  try { room.ffmpegProcess.stdin.end(); } catch { /* */ }
+  room.ffmpegProcess.kill('SIGTERM');
+  room.ffmpegProcess = null;
+}
+
 // ICY metadata constants for Icecast-compatible streaming
 const ICY_METAINT = 16384;
 
@@ -229,7 +312,8 @@ function updateRelayMetadata(roomId, title) {
   }
 }
 
-// HTTP audio relay — serves MP3 audio as an Icecast-compatible stream
+// HTTP audio relay — serves MP3 audio (via FFmpeg) as an Icecast-compatible stream
+// Falls back to raw WebM if FFmpeg is not available
 app.get('/stream/:roomId', (req, res) => {
   const { roomId } = req.params;
   const room = rooms.rooms.get(roomId);
@@ -238,32 +322,43 @@ app.get('/stream/:roomId', (req, res) => {
     return res.status(404).send('Room not found');
   }
 
-  const wantsIcyMeta = req.headers['icy-metadata'] === '1';
+  const usesMp3 = !!ffmpegPath;
+  const wantsIcyMeta = usesMp3 && req.headers['icy-metadata'] === '1';
 
   const headers = {
-    'Content-Type': 'audio/mpeg',
+    'Content-Type': usesMp3 ? 'audio/mpeg' : 'audio/webm',
     'Connection': 'keep-alive',
     'Cache-Control': 'no-cache, no-store',
     'Access-Control-Allow-Origin': '*',
-    'icy-name': 'QuetalCast',
-    'icy-genre': 'Various',
-    'icy-pub': '1',
-    'icy-br': '128',
-    'icy-sr': '44100',
   };
 
-  if (wantsIcyMeta) {
-    headers['icy-metaint'] = String(ICY_METAINT);
+  if (usesMp3) {
+    headers['icy-name'] = 'QuetalCast';
+    headers['icy-genre'] = 'Various';
+    headers['icy-pub'] = '1';
+    headers['icy-br'] = '128';
+    headers['icy-sr'] = '44100';
+    if (wantsIcyMeta) {
+      headers['icy-metaint'] = String(ICY_METAINT);
+    }
   }
 
   res.writeHead(200, headers);
 
+  // When FFmpeg is active, wrap response in IcyWriter for ICY metadata interleaving.
+  // FFmpeg stdout callback writes MP3 data to all listeners.
+  // Without FFmpeg, raw WebM is forwarded directly (IcyWriter still wraps but
+  // metadata interleaving is disabled since the format is WebM, not MP3).
   const writer = new IcyWriter(res, wantsIcyMeta);
 
-  // Set initial metadata if the room already has a "now playing" title
   const meta = rooms.getMetadata(roomId);
   if (meta?.text) {
     writer.setTitle(meta.text);
+  }
+
+  // In WebM fallback mode, send the init segment so the player can start decoding
+  if (!usesMp3 && room.relayHeader) {
+    res.write(room.relayHeader);
   }
 
   const added = rooms.addRelayListener(roomId, writer);
@@ -272,7 +367,7 @@ app.get('/stream/:roomId', (req, res) => {
     return;
   }
 
-  logger.info({ roomId: roomId.slice(0, 8), icyMeta: wantsIcyMeta }, 'Relay listener connected');
+  logger.info({ roomId: roomId.slice(0, 8), format: usesMp3 ? 'mp3' : 'webm', icyMeta: wantsIcyMeta }, 'Relay listener connected');
 
   req.on('close', () => {
     rooms.removeRelayListener(roomId, writer);
@@ -558,19 +653,45 @@ wss.on('connection', (ws, req) => {
 
   let binaryCount = 0;
   ws.on('message', (raw, isBinary) => {
-    // Binary messages from broadcaster = relay MP3 audio data for /stream/:roomId
+    // Binary messages from broadcaster = relay WebM audio data
+    // With FFmpeg: WebM→MP3 transcoding, MP3 output goes to /stream/:roomId listeners
+    // Without FFmpeg: raw WebM forwarded directly to listeners
     if (isBinary && clientRoom && clientRole === 'broadcaster') {
       binaryCount++;
       const data = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
+      const room = rooms.rooms.get(clientRoom);
+
+      if (room) {
+        // Store first chunk as WebM header
+        if (binaryCount === 1) {
+          room.relayHeader = data;
+        }
+
+        if (ffmpegPath) {
+          // FFmpeg transcoding path: WebM→MP3
+          if (!room.ffmpegProcess) {
+            startRoomTranscoder(room, clientRoom);
+          }
+          if (room.ffmpegProcess?.stdin.writable) {
+            room.ffmpegProcess.stdin.write(data);
+          }
+        } else {
+          // Fallback: forward raw WebM to listeners (works in VLC/browsers)
+          if (binaryCount === 1) {
+            // Send WebM header to any existing listeners
+          }
+          for (const writer of room.relayListeners) {
+            try {
+              if (writer.res) writer.res.write(data);
+              else writer.write(data);
+            } catch { room.relayListeners.delete(writer); }
+          }
+        }
+      }
 
       if (binaryCount === 1 || binaryCount % 500 === 0) {
         const listeners = rooms.getRelayListeners(clientRoom);
-        logger.info({ roomId: clientRoom.slice(0, 8), binaryCount, bytes: data.length, listeners: listeners.size }, 'Relay MP3 data');
-      }
-
-      const listeners = rooms.getRelayListeners(clientRoom);
-      for (const writer of listeners) {
-        try { writer.write(data); } catch { rooms.removeRelayListener(clientRoom, writer); }
+        logger.info({ roomId: clientRoom.slice(0, 8), binaryCount, bytes: data.length, listeners: listeners.size, transcoding: !!ffmpegPath }, 'Relay audio data');
       }
       return;
     }
@@ -773,6 +894,12 @@ wss.on('connection', (ws, req) => {
       case 'leave': {
         if (clientRoom && clientRole) {
           if (clientRole === 'broadcaster') {
+            // Clean up FFmpeg transcoder
+            const leaveRoom = rooms.rooms.get(clientRoom);
+            if (leaveRoom) {
+              stopRoomTranscoder(leaveRoom);
+              leaveRoom.relayHeader = null;
+            }
             const receiverIds = rooms.getReceiverIds(clientRoom);
             for (const rid of receiverIds) {
               const rws = rooms.getReceiver(clientRoom, rid);
@@ -991,6 +1118,12 @@ wss.on('connection', (ws, req) => {
   ws.on('close', (code, reason) => {
     if (clientRoom && clientRole) {
       if (clientRole === 'broadcaster') {
+        // Kill FFmpeg transcoder
+        const dcRoom = rooms.rooms.get(clientRoom);
+        if (dcRoom) {
+          stopRoomTranscoder(dcRoom);
+          dcRoom.relayHeader = null;
+        }
         // Clean up relay stream listeners (IcyWriter wrappers)
         const relayListeners = rooms.getRelayListeners(clientRoom);
         for (const writer of relayListeners) {
