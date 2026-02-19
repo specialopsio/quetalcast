@@ -67,7 +67,7 @@ export default function Changelog() {
 
               {entry.fixes && entry.fixes.length > 0 && (
                 <>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/60 mt-4 mb-1.5 pl-4">
+                  <p className={`text-xs font-semibold uppercase tracking-wider text-muted-foreground/60 mb-1.5 pl-4 ${entry.items.length > 0 ? 'mt-4' : ''}`}>
                     Fixes &amp; improvements
                   </p>
                   <ul className="space-y-1.5 pl-4">
